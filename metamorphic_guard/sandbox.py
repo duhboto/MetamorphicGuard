@@ -5,12 +5,11 @@ Sandbox execution with resource limits and isolation.
 import ast
 import os
 import resource
-import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict, Optional
 
 
 def run_in_sandbox(
@@ -23,33 +22,36 @@ def run_in_sandbox(
     """
     Execute the requested function inside an isolated subprocess.
 
-    Returns a dictionary containing execution metadata and either the parsed result
-    (when successful) or contextual error information (when the sandboxed run fails).
+    Returns execution metadata along with either the parsed result (on success) or
+    structured error information (on failure).
     """
     start_time = time.time()
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
+        workspace_dir = temp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
 
-        # Copy the target file into the sandbox directory
-        import shutil  # Local import to avoid making the module importable by candidates
+        sandbox_target = _prepare_workspace(Path(file_path), workspace_dir)
+        bootstrap_path = _write_bootstrap(
+            temp_path,
+            workspace_dir,
+            sandbox_target,
+            func_name,
+            args,
+        )
 
-        target_file = Path(file_path)
-        sandbox_target = temp_path / target_file.name
-        shutil.copy2(target_file, sandbox_target)
-
-        bootstrap_file = _write_bootstrap(temp_path, sandbox_target, func_name, args)
-
-        # Prepare a clean environment for the subprocess
         env = os.environ.copy()
         env.pop("PYTHONPATH", None)
         env["PYTHONIOENCODING"] = "utf-8"
         env["NO_NETWORK"] = "1"
 
         try:
+            import subprocess  # Local import keeps sandbox namespace tighter
+
             process = subprocess.Popen(
-                [sys.executable, "-I", str(bootstrap_file)],
-                cwd=temp_path,
+                [sys.executable, "-I", str(bootstrap_path)],
+                cwd=workspace_dir,
                 env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -113,13 +115,15 @@ def run_in_sandbox(
 
 def _write_bootstrap(
     temp_path: Path,
+    workspace_dir: Path,
     sandbox_target: Path,
     func_name: str,
     args: tuple,
 ) -> Path:
-    """Create the bootstrap script that imports and executes the target safely."""
+    """Emit the bootstrap script used to execute the target safely."""
     from textwrap import dedent
 
+    workspace_repr = repr(str(workspace_dir))
     target_repr = repr(str(sandbox_target))
     args_repr = repr(args)
     func_name_repr = repr(func_name)
@@ -130,12 +134,18 @@ def _write_bootstrap(
         import importlib.util
         import sys
 
+        sys.path.insert(0, {workspace_repr})
+
 
         def _deny_socket(*_args, **_kwargs):
             raise RuntimeError("Network access denied in sandbox")
 
 
-        # Pre-import socket modules (if available) so we can stub network primitives.
+        def _deny_process(*_args, **_kwargs):
+            raise RuntimeError("Process creation denied in sandbox")
+
+
+        # Harden socket module.
         try:
             import socket as _socket_module  # noqa: WPS433 - confined to sandbox
         except ImportError:
@@ -167,14 +177,72 @@ def _write_bootstrap(
                     setattr(_c_socket_module, _attr, _deny_socket)
 
 
-        _BANNED = {{"socket", "_socket"}}
+        # Harden os helpers that can spawn processes.
+        import os as _os_module
+
+        for _attr in (
+            "system",
+            "popen",
+            "popen2",
+            "popen3",
+            "popen4",
+            "spawnl",
+            "spawnle",
+            "spawnlp",
+            "spawnlpe",
+            "spawnv",
+            "spawnve",
+            "spawnvp",
+            "spawnvpe",
+        ):
+            if hasattr(_os_module, _attr):
+                setattr(_os_module, _attr, _deny_process)
+
+        try:
+            import subprocess as _subprocess_module  # noqa: WPS433 - confined to sandbox
+        except ImportError:
+            _subprocess_module = None
+
+        if _subprocess_module is not None:
+            for _attr in ("Popen", "call", "check_call", "check_output", "run"):
+                if hasattr(_subprocess_module, _attr):
+                    setattr(_subprocess_module, _attr, _deny_process)
+
+
+        _BANNED = {{
+            "socket",
+            "_socket",
+            "subprocess",
+            "_subprocess",
+            "multiprocessing",
+        }}
         _ORIG_IMPORT = builtins.__import__
 
 
         def _sandbox_import(name, *args, **kwargs):
             if name in _BANNED:
-                raise ImportError("Network access denied in sandbox")
-            return _ORIG_IMPORT(name, *args, **kwargs)
+                raise ImportError("Network or process access denied in sandbox")
+            module = _ORIG_IMPORT(name, *args, **kwargs)
+            if name == "os":
+                # Ensure patched helpers survive reloads.
+                for attr in (
+                    "system",
+                    "popen",
+                    "popen2",
+                    "popen3",
+                    "popen4",
+                    "spawnl",
+                    "spawnle",
+                    "spawnlp",
+                    "spawnlpe",
+                    "spawnv",
+                    "spawnve",
+                    "spawnvp",
+                    "spawnvpe",
+                ):
+                    if hasattr(module, attr):
+                        setattr(module, attr, _deny_process)
+            return module
 
 
         builtins.__import__ = _sandbox_import
@@ -213,6 +281,75 @@ def _write_bootstrap(
     return bootstrap_file
 
 
+def _prepare_workspace(source_path: Path, workspace_dir: Path) -> Path:
+    """Copy the relevant source tree into the sandbox and return the module path."""
+    import shutil
+
+    if source_path.is_dir():
+        dest_dir = workspace_dir / source_path.name
+        shutil.copytree(source_path, dest_dir, dirs_exist_ok=True)
+        candidate = dest_dir / "__init__.py"
+        if candidate.exists():
+            return candidate
+        raise FileNotFoundError(f"No __init__.py found in package directory {source_path}")
+
+    package_root = _determine_package_root(source_path)
+    if package_root is None:
+        parent = source_path.parent
+        if parent == Path(".") or parent == parent.parent:
+            dest = workspace_dir / source_path.name
+            dest.write_bytes(source_path.read_bytes())
+            return dest
+
+        import tempfile
+
+        try:
+            tmp_root = Path(tempfile.gettempdir()).resolve()
+        except FileNotFoundError:  # pragma: no cover - extremely unlikely
+            tmp_root = None
+
+        if tmp_root is not None and parent.resolve() == tmp_root:
+            dest = workspace_dir / source_path.name
+            dest.write_bytes(source_path.read_bytes())
+            return dest
+
+        dest_parent = workspace_dir / parent.name
+        dest_parent.mkdir(parents=True, exist_ok=True)
+
+        for entry in parent.iterdir():
+            if entry == source_path:
+                continue
+            if entry.suffix == ".py" and entry.is_file():
+                shutil.copy2(entry, dest_parent / entry.name)
+            elif entry.is_dir() and (entry / "__init__.py").exists():
+                shutil.copytree(entry, dest_parent / entry.name, dirs_exist_ok=True)
+
+        dest_file = dest_parent / source_path.name
+        shutil.copy2(source_path, dest_file)
+        return dest_file
+
+    dest_root = workspace_dir / package_root.name
+    shutil.copytree(package_root, dest_root, dirs_exist_ok=True)
+    return dest_root / source_path.relative_to(package_root)
+
+
+def _determine_package_root(source_path: Path) -> Optional[Path]:
+    """Return the highest package directory containing the source file, if any."""
+    current = source_path.parent
+    package_root: Optional[Path] = None
+
+    while current != current.parent and (current / "__init__.py").exists():
+        package_root = current
+        current = current.parent
+        if not (current / "__init__.py").exists():
+            break
+
+    if package_root is None and (source_path.parent / "__init__.py").exists():
+        package_root = source_path.parent
+
+    return package_root
+
+
 def _parse_success(stdout: str) -> Optional[Any]:
     """Extract the literal value from the sandbox stdout, if present."""
     lines = [line.strip() for line in stdout.splitlines() if line.strip()]
@@ -238,7 +375,6 @@ def _set_resource_limits(timeout_s: float, mem_mb: int) -> None:
         resource.setrlimit(resource.RLIMIT_NPROC, (32, 32))
         resource.setrlimit(resource.RLIMIT_NOFILE, (16, 16))
     except (OSError, ValueError):
-        # On platforms where rlimits are unsupported we fail open but continue executing.
         pass
 
 
@@ -260,4 +396,3 @@ def _result(
         "duration_ms": duration_ms,
         "error": error,
     }
-

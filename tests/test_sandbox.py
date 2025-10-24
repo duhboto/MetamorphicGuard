@@ -73,7 +73,8 @@ def solve(x):
 
         assert result["success"] is False
         combined_output = (result["stdout"] or "") + (result["stderr"] or "")
-        assert "network access denied" in combined_output.lower()
+        lowered = combined_output.lower()
+        assert "network access denied" in lowered or "network or process access denied" in lowered
     finally:
         os.unlink(test_file)
 

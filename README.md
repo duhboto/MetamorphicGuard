@@ -22,13 +22,19 @@ pip install -e .
 ### Basic Usage
 
 ```bash
-mg --task top_k --baseline examples/top_k_baseline.py --candidate examples/top_k_improved.py
+metamorphic-guard --task top_k \
+  --baseline examples/top_k_baseline.py \
+  --candidate examples/top_k_improved.py
 ```
+
+> Tip: If the shorter `metamorphic-guard` alias collides with a system binary,
+> use `python -m metamorphic_guard.cli` or the alternative console script
+> `metaguard`.
 
 ### Command Line Options
 
 ```bash
-mg --help
+metamorphic-guard --help
 ```
 
 **Required Options:**
@@ -93,6 +99,7 @@ def solve(*args):
 - All candidate code runs in isolated subprocesses
 - Resource limits: CPU time, memory usage
 - Network access is disabled by stubbing socket primitives and import hooks
+- Subprocess creation (`os.system`, `subprocess.Popen`, etc.) is denied inside the sandbox
 - Timeout enforcement per test case
 - Deterministic execution with fixed seeds
 
