@@ -180,7 +180,7 @@ def _write_bootstrap(
         # Harden os helpers that can spawn processes.
         import os as _os_module
 
-        for _attr in (
+        _PROCESS_ATTRS = (
             "system",
             "popen",
             "popen2",
@@ -194,7 +194,20 @@ def _write_bootstrap(
             "spawnve",
             "spawnvp",
             "spawnvpe",
-        ):
+            "fork",
+            "forkpty",
+            "fspawn",
+            "execv",
+            "execve",
+            "execl",
+            "execle",
+            "execlp",
+            "execlpe",
+            "execvp",
+            "execvpe",
+        )
+
+        for _attr in _PROCESS_ATTRS:
             if hasattr(_os_module, _attr):
                 setattr(_os_module, _attr, _deny_process)
 
@@ -215,6 +228,7 @@ def _write_bootstrap(
             "subprocess",
             "_subprocess",
             "multiprocessing",
+            "importlib",
         }}
         _ORIG_IMPORT = builtins.__import__
 
@@ -224,24 +238,11 @@ def _write_bootstrap(
                 raise ImportError("Network or process access denied in sandbox")
             module = _ORIG_IMPORT(name, *args, **kwargs)
             if name == "os":
-                # Ensure patched helpers survive reloads.
-                for attr in (
-                    "system",
-                    "popen",
-                    "popen2",
-                    "popen3",
-                    "popen4",
-                    "spawnl",
-                    "spawnle",
-                    "spawnlp",
-                    "spawnlpe",
-                    "spawnv",
-                    "spawnve",
-                    "spawnvp",
-                    "spawnvpe",
-                ):
+                for attr in _PROCESS_ATTRS:
                     if hasattr(module, attr):
                         setattr(module, attr, _deny_process)
+            elif name == "importlib":
+                raise ImportError("importlib is disabled in sandbox")
             return module
 
 
@@ -284,6 +285,7 @@ def _write_bootstrap(
 def _prepare_workspace(source_path: Path, workspace_dir: Path) -> Path:
     """Copy the relevant source tree into the sandbox and return the module path."""
     import shutil
+    import tempfile
 
     if source_path.is_dir():
         dest_dir = workspace_dir / source_path.name
@@ -301,8 +303,6 @@ def _prepare_workspace(source_path: Path, workspace_dir: Path) -> Path:
             dest.write_bytes(source_path.read_bytes())
             return dest
 
-        import tempfile
-
         try:
             tmp_root = Path(tempfile.gettempdir()).resolve()
         except FileNotFoundError:  # pragma: no cover - extremely unlikely
@@ -317,12 +317,13 @@ def _prepare_workspace(source_path: Path, workspace_dir: Path) -> Path:
         dest_parent.mkdir(parents=True, exist_ok=True)
 
         for entry in parent.iterdir():
+            target = dest_parent / entry.name
             if entry == source_path:
                 continue
-            if entry.suffix == ".py" and entry.is_file():
-                shutil.copy2(entry, dest_parent / entry.name)
-            elif entry.is_dir() and (entry / "__init__.py").exists():
-                shutil.copytree(entry, dest_parent / entry.name, dirs_exist_ok=True)
+            if entry.is_file():
+                shutil.copy2(entry, target)
+            elif entry.is_dir():
+                shutil.copytree(entry, target, dirs_exist_ok=True)
 
         dest_file = dest_parent / source_path.name
         shutil.copy2(source_path, dest_file)
@@ -396,3 +397,4 @@ def _result(
         "duration_ms": duration_ms,
         "error": error,
     }
+
