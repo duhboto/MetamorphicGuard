@@ -4,7 +4,6 @@ Tests for sandbox execution with resource limits and isolation.
 
 import os
 import tempfile
-import pytest
 from metamorphic_guard.sandbox import run_in_sandbox
 
 
@@ -71,9 +70,10 @@ def solve(x):
     
     try:
         result = run_in_sandbox(test_file, "solve", (42,), timeout_s=1.0, mem_mb=100)
-        
-        assert result["success"] is True
-        assert "network_denied" in result["result"]
+
+        assert result["success"] is False
+        combined_output = (result["stdout"] or "") + (result["stderr"] or "")
+        assert "network access denied" in combined_output.lower()
     finally:
         os.unlink(test_file)
 

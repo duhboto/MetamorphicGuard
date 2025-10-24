@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "metamorphic-guard"
+version = "1.0.0"
+description = "A Python library for comparing program versions using metamorphic testing"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Engineer Alpha" }]
+dependencies = [
+    "click>=8.0.0",
+    "pytest>=7.0.0",
+    "jsonschema>=4.0.0",
+    "numpy>=1.21.0",
+]
+
+[project.scripts]
+metamorphic-guard = "metamorphic_guard.cli:main"
+mg = "metamorphic_guard.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/duhboto/MetamorphicGuard"

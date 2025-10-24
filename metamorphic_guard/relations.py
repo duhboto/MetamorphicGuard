@@ -23,8 +23,9 @@ def add_noise_below_min(L: List[int], k: int) -> Tuple[List[int], int]:
     """
     if not L:
         return L, k
-    
+
     min_val = min(L)
     noise = [min_val - 1 - i for i in range(5)]  # Add 5 values below min
     L_with_noise = L + noise
-    return L_with_noise, k
+    adjusted_k = min(k, len(L))
+    return L_with_noise, adjusted_k

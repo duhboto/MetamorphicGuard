@@ -22,13 +22,13 @@ pip install -e .
 ### Basic Usage
 
 ```bash
-metamorphic-guard --task top_k --baseline examples/top_k_baseline.py --candidate examples/top_k_improved.py
+mg --task top_k --baseline examples/top_k_baseline.py --candidate examples/top_k_improved.py
 ```
 
 ### Command Line Options
 
 ```bash
-metamorphic-guard --help
+mg --help
 ```
 
 **Required Options:**
@@ -44,6 +44,8 @@ metamorphic-guard --help
 - `--alpha`: Significance level for confidence intervals (default: 0.05)
 - `--improve-delta`: Minimum improvement threshold (default: 0.02)
 - `--violation-cap`: Maximum violations to report (default: 25)
+- `--parallel`: Number of worker processes used to drive the sandbox (default: 1)
+- `--bootstrap-samples`: Resamples used for percentile bootstrap CI (default: 1000)
 
 ## Example Implementations
 
@@ -90,7 +92,7 @@ def solve(*args):
 
 - All candidate code runs in isolated subprocesses
 - Resource limits: CPU time, memory usage
-- Network access is blocked
+- Network access is disabled by stubbing socket primitives and import hooks
 - Timeout enforcement per test case
 - Deterministic execution with fixed seeds
 
@@ -108,7 +110,9 @@ The system generates JSON reports in `reports/report_<timestamp>.json`:
     "mem_mb": 512,
     "alpha": 0.05,
     "improve_delta": 0.02,
-    "violation_cap": 25
+    "violation_cap": 25,
+    "parallel": 1,
+    "bootstrap_samples": 1000
   },
   "hashes": {
     "baseline": "sha256...",
