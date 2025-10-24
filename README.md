@@ -1,6 +1,6 @@
-# Metamorphic Guard v1
+# Metamorphic Guard
 
-A Python library for comparing program versions using metamorphic testing, property-based testing, and statistical confidence intervals to make adoption decisions.
+A Python library that compares two program versions—*baseline* and *candidate*—by running property and metamorphic tests, computing confidence intervals on pass-rate differences, and deciding whether to adopt the candidate.
 
 ## Overview
 
@@ -157,60 +157,5 @@ Run specific test categories:
 ```bash
 pytest tests/test_sandbox.py    # Sandbox isolation tests
 pytest tests/test_harness.py    # Evaluation tests
-pytest tests/test_gate.py      # Adoption logic tests
-pytest tests/test_cli.py        # CLI integration tests
+pytest tests/test_gate.py       # Adoption logic tests
 ```
-
-## Architecture
-
-### Core Modules
-
-- **`cli.py`**: Command-line interface
-- **`harness.py`**: Test execution and bootstrap CI calculation
-- **`gate.py`**: Adoption decision logic
-- **`sandbox.py`**: Isolated execution with resource limits
-- **`specs.py`**: Task specification framework
-- **`generators.py`**: Input generation for test cases
-- **`relations.py`**: Metamorphic relation transformations
-- **`stability.py`**: Equivalence checking utilities
-- **`util.py`**: File operations and report generation
-
-### Extension Points
-
-- **New Tasks**: Register using `@task("name")` decorator
-- **Custom Properties**: Define in task specification
-- **Metamorphic Relations**: Add transformation functions
-- **Equivalence Functions**: Custom comparison logic
-
-## Development
-
-### Adding New Tasks
-
-1. Create input generator in `generators.py`
-2. Define metamorphic relations in `relations.py`
-3. Register task in `__init__.py`:
-
-```python
-@task("my_task")
-def my_task_spec() -> Spec:
-    return Spec(
-        gen_inputs=my_input_generator,
-        properties=[...],
-        relations=[...],
-        equivalence=my_equivalence_function
-    )
-```
-
-### Running Examples
-
-```bash
-# Test baseline vs improved (should accept)
-metamorphic-guard --task top_k --baseline examples/top_k_baseline.py --candidate examples/top_k_improved.py --n 50
-
-# Test baseline vs bad (should reject)
-metamorphic-guard --task top_k --baseline examples/top_k_baseline.py --candidate examples/top_k_bad.py --n 50
-```
-
-## License
-
-MIT License - see LICENSE file for details.
