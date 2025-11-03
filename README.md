@@ -1,8 +1,6 @@
 # Metamorphic Guard
 
-[![PyPI](https://img.shields.io/pypi/v/metamorphic-guard.svg)](https://pypi.org/project/metamorphic-guard/)
-[![Python](https://img.shields.io/pypi/pyversions/metamorphic-guard.svg)](https://pypi.org/project/metamorphic-guard/)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![PyPI](https://img.shields.io/pypi/v/metamorphic-guard.svg)](https://pypi.org/project/metamorphic-guard/) [![Python](https://img.shields.io/pypi/pyversions/metamorphic-guard.svg)](https://pypi.org/project/metamorphic-guard/) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT) [![Build](https://github.com/duhboto/MetamorphicGuard/actions/workflows/test.yml/badge.svg)](https://github.com/duhboto/MetamorphicGuard/actions/workflows/test.yml)
 
 A Python library that compares two program versions—*baseline* and *candidate*—by running property and metamorphic tests, computing confidence intervals on pass-rate differences, and deciding whether to adopt the candidate.
 
