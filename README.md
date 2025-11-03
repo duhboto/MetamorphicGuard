@@ -157,6 +157,14 @@ A candidate is adopted if **all** conditions are met:
 
 ## Testing
 
+Install development dependencies first:
+
+```bash
+pip install -e .[dev]
+# or
+pip install -r requirements-dev.txt
+```
+
 Run the test suite:
 
 ```bash

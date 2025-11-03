@@ -11,8 +11,6 @@ requires-python = ">=3.10"
 authors = [{ name = "Engineer Alpha" }]
 dependencies = [
     "click>=8.0.0",
-    "pytest>=7.0.0",
-    "jsonschema>=4.0.0",
 ]
 
 [project.scripts]
@@ -21,3 +19,8 @@ metaguard = "metamorphic_guard.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/duhboto/MetamorphicGuard"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]

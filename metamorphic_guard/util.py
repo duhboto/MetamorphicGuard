@@ -4,18 +4,38 @@ Utility functions for file operations and report generation.
 
 import hashlib
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 
 
 def sha256_file(path: str) -> str:
-    """Compute SHA256 hash of a file."""
+    """Compute a deterministic SHA256 hash for a file or directory tree."""
     hash_sha256 = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hash_sha256.update(chunk)
-    return hash_sha256.hexdigest()
+    target = Path(path)
+
+    if target.is_file():
+        with target.open("rb") as file_obj:
+            for chunk in iter(lambda: file_obj.read(4096), b""):
+                hash_sha256.update(chunk)
+        return hash_sha256.hexdigest()
+
+    if target.is_dir():
+        hash_sha256.update(b"dir")
+
+        entries = sorted(
+            (p for p in target.rglob("*") if p.is_file()),
+            key=lambda p: p.relative_to(target).as_posix(),
+        )
+
+        for entry in entries:
+            rel_path = entry.relative_to(target).as_posix().encode("utf-8")
+            hash_sha256.update(rel_path)
+            with entry.open("rb") as file_obj:
+                for chunk in iter(lambda: file_obj.read(4096), b""):
+                    hash_sha256.update(chunk)
+        return hash_sha256.hexdigest()
+
+    raise FileNotFoundError(f"Path not found: {path}")
 
 
 def write_report(payload: dict) -> str:

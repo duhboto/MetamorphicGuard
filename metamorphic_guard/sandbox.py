@@ -4,12 +4,16 @@ Sandbox execution with resource limits and isolation.
 
 import ast
 import os
-import resource
 import sys
 import tempfile
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+try:
+    import resource  # type: ignore
+except ImportError:  # pragma: no cover - resource is POSIX-only
+    resource = None  # type: ignore[assignment]
 
 
 def run_in_sandbox(
@@ -366,6 +370,9 @@ def _parse_success(stdout: str) -> Optional[Any]:
 
 def _set_resource_limits(timeout_s: float, mem_mb: int) -> None:
     """Apply CPU, memory, and file descriptor limits to the sandbox process."""
+    if resource is None:
+        return
+
     try:
         cpu_limit = max(1, int(timeout_s * 2))
         resource.setrlimit(resource.RLIMIT_CPU, (cpu_limit, cpu_limit))
@@ -397,4 +404,3 @@ def _result(
         "duration_ms": duration_ms,
         "error": error,
     }
-
