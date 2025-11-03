@@ -6,6 +6,34 @@
 
 A Python library that compares two program versions—*baseline* and *candidate*—by running property and metamorphic tests, computing confidence intervals on pass-rate differences, and deciding whether to adopt the candidate.
 
+```
+                 +-------------------+
+ search queries  |  Property & MR    |  candidate results
+  ─────────────▶ |  test harness     | ────────────────▶ adoption gate
+                 +---------┬---------+
+                           │
+                           ▼
+                 +-------------------+
+                 |  Bootstrap stats  |
+                 |  Δ pass-rate CI   |
+                 +---------┬---------+
+                           │
+                           ▼
+            ranking-guard evaluate --candidate implementations/candidate_heap.py
+```
+
+Sample CLI decision:
+
+```bash
+$ ranking-guard evaluate --candidate implementations/candidate_heap.py
+Candidate     implementations/candidate_heap.py
+Adopt?        ✅ Yes
+Reason        meets_gate
+Δ Pass Rate   0.0125
+Δ 95% CI      [0.0040, 0.0210]
+Report        reports/report_2025-11-02T12-00-00.json
+```
+
 ## Overview
 
 Metamorphic Guard evaluates candidate implementations against baseline versions by:
