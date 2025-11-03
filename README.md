@@ -1,5 +1,9 @@
 # Metamorphic Guard
 
+[![PyPI](https://img.shields.io/pypi/v/metamorphic-guard.svg)](https://pypi.org/project/metamorphic-guard/)
+[![Python](https://img.shields.io/pypi/pyversions/metamorphic-guard.svg)](https://pypi.org/project/metamorphic-guard/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
 A Python library that compares two program versions—*baseline* and *candidate*—by running property and metamorphic tests, computing confidence intervals on pass-rate differences, and deciding whether to adopt the candidate.
 
 ## Overview
@@ -10,6 +14,15 @@ Metamorphic Guard evaluates candidate implementations against baseline versions 
 2. **Metamorphic Testing**: Checking that input transformations produce equivalent outputs
 3. **Statistical Analysis**: Computing bootstrap confidence intervals on pass-rate differences
 4. **Adoption Gating**: Making data-driven decisions about whether to adopt candidates
+
+## Reference Projects in This Repository
+
+Metamorphic Guard ships with two companion projects that demonstrate how teams can fold the library into their delivery workflows and produce auditable evidence:
+
+- **Ranking Guard Project** (`ranking_guard_project/`): A realistic release gate for search ranking algorithms. It compares a production baseline to new candidates, enforces metamorphic relations, and surfaces adoption decisions that teams can wire into CI/CD or release dashboards. The bundled CLI (`ranking-guard evaluate ...`) saves JSON reports under `reports/` so stakeholders can review the statistical lift before promoting changes.
+- **Minimal Demo** (`demo_project/`): A concise script that runs the same evaluation logic programmatically. It is ideal for teams who want to experiment in a notebook, wire Metamorphic Guard into existing automation, or share a lightweight proof-of-concept with stakeholders.
+
+Together these examples highlight how the project supports the broader IT community: they provide reproducible workflows, confidence intervals that quantify risk, and machine-readable reports that serve as proof when auditing model or algorithm upgrades.
 
 ## Installation
 
@@ -178,3 +191,11 @@ pytest tests/test_sandbox.py    # Sandbox isolation tests
 pytest tests/test_harness.py    # Evaluation tests
 pytest tests/test_gate.py       # Adoption logic tests
 ```
+
+## Contributing
+
+We welcome contributions that extend Metamorphic Guard or its companion demos.
+
+- Open issues or propose feature ideas via GitHub discussions or pull requests. Describe the use case and attach any relevant reports generated under `reports/`.
+- Run `pytest tests/` locally before submitting a PR to ensure the gate, harness, and sandbox integrations stay green.
+- Explore the reference projects for inspiration: scripts in `examples/` show minimal usage, `demo_project/src/run_demo.py` offers a scripted walkthrough, and `ranking_guard_project/` demonstrates a production-style release gate.
