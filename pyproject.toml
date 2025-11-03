@@ -19,7 +19,7 @@ metaguard = "metamorphic_guard.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/duhboto/MetamorphicGuard"
-Bug Tracker = "https://github.com/duhboto/MetamorphicGuard/issues"
+"Bug Tracker" = "https://github.com/duhboto/MetamorphicGuard/issues"
 Documentation = "https://pypi.org/project/metamorphic-guard/"
 
 [project.optional-dependencies]
