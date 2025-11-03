@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fairness-guard-project"
+version = "0.1.0"
+description = "Fairness guardrail project that stress-tests credit approval models with Metamorphic Guard."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "metamorphic-guard>=1.0.1",
+    "click>=8.0.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+fairness-guard = "fairness_guard.cli:main"

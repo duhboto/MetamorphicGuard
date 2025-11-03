@@ -43,9 +43,10 @@ Metamorphic Guard evaluates candidate implementations against baseline versions 
 
 ## Reference Projects in This Repository
 
-Metamorphic Guard ships with two companion projects that demonstrate how teams can fold the library into their delivery workflows and produce auditable evidence:
+Metamorphic Guard ships with three companion projects that demonstrate how teams can fold the library into their delivery workflows and produce auditable evidence:
 
 - **Ranking Guard Project** (`ranking_guard_project/`): A realistic release gate for search ranking algorithms. It compares a production baseline to new candidates, enforces metamorphic relations, and surfaces adoption decisions that teams can wire into CI/CD or release dashboards. The bundled CLI (`ranking-guard evaluate ...`) saves JSON reports under `reports/` so stakeholders can review the statistical lift before promoting changes.
+- **Fairness Guard Project** (`fairness_guard_project/`): A responsibility-focused workflow for credit approval models. It uses a fairness-aware task specification with parity checks and transformation invariants to catch regressions before they reach borrowers. The CLI (`fairness-guard evaluate ...`) exports JSON evidence, including observed fairness gaps and group approval rates, that can populate governance dashboards or compliance reviews.
 - **Minimal Demo** (`demo_project/`): A concise script that runs the same evaluation logic programmatically. It is ideal for teams who want to experiment in a notebook, wire Metamorphic Guard into existing automation, or share a lightweight proof-of-concept with stakeholders.
 
 Together these examples highlight how the project supports the broader IT community: they provide reproducible workflows, confidence intervals that quantify risk, and machine-readable reports that serve as proof when auditing model or algorithm upgrades.

@@ -1,0 +1,64 @@
+name: Fairness Guard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  fairness-guard:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install -e fairness_guard_project
+
+      - name: Run Fairness Guard evaluations
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import sys
+
+          from fairness_guard import evaluate_candidate
+
+
+          failures: list[str] = []
+
+          fair_candidate = evaluate_candidate(
+              Path("fairness_guard_project/implementations/candidate_fair.py"),
+              test_cases=200,
+              seed=123,
+              parallel=1,
+          )
+          if not fair_candidate.adopted:
+              failures.append("Expected candidate_fair.py to be adopted.")
+          if not fair_candidate.candidate_metrics.group_approval_rates:
+              failures.append("candidate_fair.py produced no group approval metrics.")
+
+          biased_candidate = evaluate_candidate(
+              Path("fairness_guard_project/implementations/candidate_biased.py"),
+              test_cases=200,
+              seed=123,
+              parallel=1,
+          )
+          if biased_candidate.adopted:
+              failures.append("Expected candidate_biased.py to be rejected.")
+
+          if failures:
+              for message in failures:
+                  print(message, file=sys.stderr)
+              sys.exit(1)
+
+          print("Fairness Guard checks passed.")
+          PY
