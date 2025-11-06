@@ -42,6 +42,20 @@ from .util import write_report
     show_default=True,
     help="Bootstrap resamples for confidence interval estimation",
 )
+@click.option(
+    "--ci-method",
+    type=click.Choice(["bootstrap", "newcombe", "wilson"], case_sensitive=False),
+    default="bootstrap",
+    show_default=True,
+    help="Method for the pass-rate delta confidence interval",
+)
+@click.option(
+    "--rr-ci-method",
+    type=click.Choice(["log"], case_sensitive=False),
+    default="log",
+    show_default=True,
+    help="Method for relative risk confidence interval",
+)
 def main(
     task: str,
     baseline: str,
@@ -55,6 +69,8 @@ def main(
     violation_cap: int,
     parallel: int,
     bootstrap_samples: int,
+    ci_method: str,
+    rr_ci_method: str,
 ) -> None:
     """Compare baseline and candidate implementations using metamorphic testing."""
 
@@ -72,6 +88,8 @@ def main(
         click.echo(f"Candidate: {candidate}")
         click.echo(f"Test cases: {n}, Seed: {seed}")
         click.echo(f"Parallel workers: {parallel}")
+        click.echo(f"CI method: {ci_method}")
+        click.echo(f"RR CI method: {rr_ci_method}")
 
         result = run_eval(
             task_name=task,
@@ -86,6 +104,8 @@ def main(
             parallel=parallel,
             improve_delta=improve_delta,
             bootstrap_samples=bootstrap_samples,
+            ci_method=ci_method,
+            rr_ci_method=rr_ci_method,
         )
 
         decision = decide_adopt(result, improve_delta)
@@ -117,6 +137,9 @@ def main(
         click.echo("IMPROVEMENT:")
         click.echo(f"  Delta: {result['delta_pass_rate']:.3f}")
         click.echo(f"  95% CI: [{result['delta_ci'][0]:.3f}, {result['delta_ci'][1]:.3f}]")
+        click.echo(f"  Relative risk: {result['relative_risk']:.3f}")
+        rr_ci = result["relative_risk_ci"]
+        click.echo(f"  RR 95% CI: [{rr_ci[0]:.3f}, {rr_ci[1]:.3f}]")
         click.echo()
         click.echo("DECISION:")
         click.echo(f"  Adopt: {decision['adopt']}")

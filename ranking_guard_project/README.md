@@ -44,5 +44,13 @@ ranking-guard evaluate --candidate implementations/candidate_heap.py
 ranking-guard evaluate --candidate implementations/candidate_buggy.py
 ```
 
+Useful flags:
+
+- `--ci-method` to choose between `bootstrap`, `newcombe`, or `wilson` intervals for the
+  pass-rate delta.
+- `--rr-ci-method` to report relative risk confidence bounds.
+- `--improve-delta` to enforce a minimum improvement threshold.
+- `--parallel` to tune sandbox worker concurrency.
+
 Reports are saved under `reports/` in the repository root so they can be fed
 into dashboards or pull-request bots.

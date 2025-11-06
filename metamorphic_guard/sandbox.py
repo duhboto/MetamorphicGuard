@@ -49,6 +49,7 @@ def run_in_sandbox(
         env.pop("PYTHONPATH", None)
         env["PYTHONIOENCODING"] = "utf-8"
         env["NO_NETWORK"] = "1"
+        env["PYTHONNOUSERSITE"] = "1"
 
         try:
             import subprocess  # Local import keeps sandbox namespace tighter
@@ -232,7 +233,13 @@ def _write_bootstrap(
             "subprocess",
             "_subprocess",
             "multiprocessing",
+            "multiprocessing.util",
+            "multiprocessing.spawn",
+            "multiprocessing.popen_spawn_posix",
             "importlib",
+            "ctypes",
+            "_ctypes",
+            "cffi",
         }}
         _ORIG_IMPORT = builtins.__import__
 
@@ -247,6 +254,10 @@ def _write_bootstrap(
                         setattr(module, attr, _deny_process)
             elif name == "importlib":
                 raise ImportError("importlib is disabled in sandbox")
+            elif name.startswith("multiprocessing"):
+                raise ImportError("multiprocessing is disabled in sandbox")
+            elif name in {"ctypes", "_ctypes", "cffi"}:
+                raise ImportError("native FFI access denied in sandbox")
             return module
 
 

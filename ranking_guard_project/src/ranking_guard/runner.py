@@ -24,6 +24,9 @@ class EvaluationOutcome:
     delta_pass_rate: float
     ci_lower: float
     ci_upper: float
+    relative_risk: float
+    rr_ci_lower: float
+    rr_ci_upper: float
 
 
 def evaluate_candidate(
@@ -39,6 +42,8 @@ def evaluate_candidate(
     violation_cap: int = 25,
     parallel: int = 1,
     bootstrap_samples: int = 500,
+    ci_method: str = "bootstrap",
+    rr_ci_method: str = "log",
 ) -> EvaluationOutcome:
     """
     Run the Metamorphic Guard evaluation and return a structured summary.
@@ -63,6 +68,8 @@ def evaluate_candidate(
         parallel=parallel,
         improve_delta=improve_delta,
         bootstrap_samples=bootstrap_samples,
+        ci_method=ci_method,
+        rr_ci_method=rr_ci_method,
     )
 
     decision = decide_adopt(
@@ -74,6 +81,7 @@ def evaluate_candidate(
     report = Path(write_report(result))
 
     delta_ci = result["delta_ci"]
+    rr_ci = result["relative_risk_ci"]
     return EvaluationOutcome(
         candidate_path=Path(candidate_path),
         adopted=decision["adopt"],
@@ -82,5 +90,7 @@ def evaluate_candidate(
         delta_pass_rate=result["delta_pass_rate"],
         ci_lower=float(delta_ci[0]),
         ci_upper=float(delta_ci[1]),
+        relative_risk=float(result["relative_risk"]),
+        rr_ci_lower=float(rr_ci[0]),
+        rr_ci_upper=float(rr_ci[1]),
     )
-

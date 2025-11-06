@@ -5,11 +5,16 @@ Test harness for running evaluations and computing bootstrap confidence interval
 import math
 import random
 from concurrent.futures import ThreadPoolExecutor
+from statistics import NormalDist
 from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple
 
 from .sandbox import run_in_sandbox
 from .specs import Spec, get_task
-from .util import sha256_file
+from .util import (
+    compute_spec_fingerprint,
+    get_environment_fingerprint,
+    sha256_file,
+)
 
 
 def run_eval(
@@ -25,6 +30,8 @@ def run_eval(
     parallel: int | None = None,
     improve_delta: float = 0.02,
     bootstrap_samples: int = 1000,
+    ci_method: str = "bootstrap",
+    rr_ci_method: str = "log",
 ) -> Dict[str, Any]:
     """
     Run evaluation comparing baseline and candidate implementations.
@@ -77,16 +84,24 @@ def run_eval(
         ),
     )
 
-    delta_ci = _compute_bootstrap_ci(
-        baseline_metrics["pass_indicators"],
-        candidate_metrics["pass_indicators"],
+    delta_ci = _compute_delta_ci(
+        baseline_metrics,
+        candidate_metrics,
         alpha=alpha,
         seed=seed,
         samples=bootstrap_samples,
+        method=ci_method,
     )
 
     baseline_hash = sha256_file(baseline_path)
     candidate_hash = sha256_file(candidate_path)
+    spec_fingerprint = compute_spec_fingerprint(spec)
+    rr_value, rr_ci = _compute_relative_risk(
+        baseline_metrics,
+        candidate_metrics,
+        alpha=alpha,
+        method=rr_ci_method,
+    )
 
     result = {
         "task": task_name,
@@ -100,11 +115,14 @@ def run_eval(
             "violation_cap": violation_cap,
             "parallel": worker_count,
             "bootstrap_samples": bootstrap_samples,
+            "ci_method": ci_method,
+            "rr_ci_method": rr_ci_method,
         },
         "hashes": {
             "baseline": baseline_hash,
             "candidate": candidate_hash,
         },
+        "spec_fingerprint": spec_fingerprint,
         "baseline": {
             "passes": baseline_metrics["passes"],
             "total": baseline_metrics["total"],
@@ -119,6 +137,9 @@ def run_eval(
         },
         "delta_pass_rate": candidate_metrics["pass_rate"] - baseline_metrics["pass_rate"],
         "delta_ci": delta_ci,
+        "relative_risk": rr_value,
+        "relative_risk_ci": rr_ci,
+        "environment": get_environment_fingerprint(),
     }
 
     return result
@@ -286,6 +307,36 @@ def _evaluate_results(
     }
 
 
+def _compute_delta_ci(
+    baseline_metrics: Dict[str, Any],
+    candidate_metrics: Dict[str, Any],
+    *,
+    alpha: float,
+    seed: int,
+    samples: int,
+    method: str,
+) -> List[float]:
+    """Compute the pass-rate delta confidence interval using the requested method."""
+    method = method.lower()
+    if method == "bootstrap":
+        return _compute_bootstrap_ci(
+            baseline_metrics["pass_indicators"],
+            candidate_metrics["pass_indicators"],
+            alpha=alpha,
+            seed=seed,
+            samples=samples,
+        )
+    if method in {"newcombe", "wilson"}:
+        return _compute_newcombe_ci(
+            baseline_metrics["passes"],
+            baseline_metrics["total"],
+            candidate_metrics["passes"],
+            candidate_metrics["total"],
+            alpha=alpha,
+        )
+    raise ValueError(f"Unsupported CI method: {method}")
+
+
 def _compute_bootstrap_ci(
     baseline_indicators: Sequence[int],
     candidate_indicators: Sequence[int],
@@ -296,7 +347,7 @@ def _compute_bootstrap_ci(
 ) -> List[float]:
     """Compute a percentile bootstrap confidence interval for the pass-rate delta."""
     n = len(baseline_indicators)
-    if n == 0:
+    if n == 0 or len(candidate_indicators) != n:
         return [0.0, 0.0]
 
     rng = random.Random(seed)
@@ -315,6 +366,83 @@ def _compute_bootstrap_ci(
     ci_lower = _percentile(deltas, lower_quantile)
     ci_upper = _percentile(deltas, upper_quantile)
     return [float(ci_lower), float(ci_upper)]
+
+
+def _compute_newcombe_ci(
+    baseline_passes: int,
+    baseline_total: int,
+    candidate_passes: int,
+    candidate_total: int,
+    *,
+    alpha: float,
+) -> List[float]:
+    """Compute the score CI for difference in proportions using Newcombe's method."""
+    if baseline_total == 0 or candidate_total == 0:
+        return [0.0, 0.0]
+
+    lower_b, upper_b = _wilson_interval(baseline_passes, baseline_total, alpha)
+    lower_c, upper_c = _wilson_interval(candidate_passes, candidate_total, alpha)
+
+    delta_lower = lower_c - upper_b
+    delta_upper = upper_c - lower_b
+    return [float(delta_lower), float(delta_upper)]
+
+
+def _wilson_interval(successes: int, total: int, alpha: float) -> Tuple[float, float]:
+    if total == 0:
+        return (0.0, 0.0)
+
+    z = NormalDist().inv_cdf(1 - alpha / 2)
+    phat = successes / total
+    denom = 1 + (z ** 2) / total
+    center = phat + (z ** 2) / (2 * total)
+    margin = z * math.sqrt((phat * (1 - phat) + (z ** 2) / (4 * total)) / total)
+    lower = (center - margin) / denom
+    upper = (center + margin) / denom
+    return (max(0.0, lower), min(1.0, upper))
+
+
+def _compute_relative_risk(
+    baseline_metrics: Dict[str, Any],
+    candidate_metrics: Dict[str, Any],
+    *,
+    alpha: float,
+    method: str,
+) -> Tuple[float, List[float]]:
+    """Compute relative risk (candidate/baseline pass rate) with confidence interval."""
+    p_b = baseline_metrics.get("pass_rate")
+    if p_b is None:
+        total_b = baseline_metrics.get("total", 0)
+        p_b = baseline_metrics.get("passes", 0) / total_b if total_b else 0.0
+
+    p_c = candidate_metrics.get("pass_rate")
+    if p_c is None:
+        total_c = candidate_metrics.get("total", 0)
+        p_c = candidate_metrics.get("passes", 0) / total_c if total_c else 0.0
+
+    if p_b == 0:
+        return float("inf"), [float("inf"), float("inf")]
+
+    rr = p_c / p_b
+    method = method.lower()
+    if method != "log":
+        raise ValueError(f"Unsupported relative risk CI method: {method}")
+
+    # Katz log method
+    total_b = max(1, baseline_metrics.get("total", 0))
+    total_c = max(1, candidate_metrics.get("total", 0))
+    successes_b = max(1, baseline_metrics.get("passes", 0))
+    successes_c = max(1, candidate_metrics.get("passes", 0))
+    failures_b = max(1, total_b - successes_b)
+    failures_c = max(1, total_c - successes_c)
+
+    ln_rr = math.log(rr) if rr > 0 else float("-inf")
+    se = math.sqrt((1 / successes_c) - (1 / total_c) +
+                   (1 / successes_b) - (1 / total_b))
+    z = NormalDist().inv_cdf(1 - alpha / 2)
+    lower = math.exp(ln_rr - z * se)
+    upper = math.exp(ln_rr + z * se)
+    return rr, [float(lower), float(upper)]
 
 
 def _percentile(values: Sequence[float], q: float) -> float:

@@ -3,9 +3,13 @@ Utility functions for file operations and report generation.
 """
 
 import hashlib
+import inspect
 import json
+import platform
+import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Callable
 
 
 def sha256_file(path: str) -> str:
@@ -53,3 +57,58 @@ def write_report(payload: dict) -> str:
         json.dump(payload, f, indent=2)
     
     return str(filepath)
+
+
+def hash_callable(func: Callable[..., Any]) -> str:
+    """Return a stable hash for the source of a callable."""
+    try:
+        source = inspect.getsource(func)
+    except (OSError, TypeError):
+        # Fallback to repr when source is unavailable (builtins, lambdas in REPL, etc.).
+        source = repr(func)
+    normalized = source.strip().encode("utf-8", "ignore")
+    return hashlib.sha256(normalized).hexdigest()
+
+
+def compute_spec_fingerprint(spec: Any) -> dict[str, Any]:
+    """Compute hashes for the critical components of a task spec."""
+
+    properties = [
+        {
+            "description": prop.description,
+            "mode": prop.mode,
+            "hash": hash_callable(prop.check),
+        }
+        for prop in spec.properties
+    ]
+
+    relations = [
+        {
+            "name": relation.name,
+            "expect": relation.expect,
+            "hash": hash_callable(relation.transform),
+        }
+        for relation in spec.relations
+    ]
+
+    return {
+        "gen_inputs": hash_callable(spec.gen_inputs),
+        "properties": properties,
+        "relations": relations,
+        "equivalence": hash_callable(spec.equivalence),
+        "formatters": {
+            "fmt_in": hash_callable(spec.fmt_in),
+            "fmt_out": hash_callable(spec.fmt_out),
+        },
+    }
+
+
+def get_environment_fingerprint() -> dict[str, str]:
+    """Capture runtime environment metadata for audit trails."""
+
+    return {
+        "python_version": platform.python_version(),
+        "implementation": platform.python_implementation(),
+        "platform": platform.platform(),
+        "executable": sys.executable,
+    }

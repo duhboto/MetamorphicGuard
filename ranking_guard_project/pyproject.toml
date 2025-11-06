@@ -9,11 +9,10 @@ description = "Practical use-case project that gates ranking algorithm releases 
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "metamorphic-guard>=1.0.1",
+    "metamorphic-guard>=1.1.0",
     "click>=8.0.0",
     "rich>=13.0.0",
 ]
 
 [project.scripts]
 ranking-guard = "ranking_guard.cli:main"
-

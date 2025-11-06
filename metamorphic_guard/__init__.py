@@ -7,7 +7,7 @@ from .generators import gen_top_k_inputs
 from .relations import permute_input, add_noise_below_min
 from .stability import multiset_equal
 
-__version__ = "1.0.1"
+__version__ = "1.1.0"
 
 
 @task("top_k")

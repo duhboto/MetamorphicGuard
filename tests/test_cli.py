@@ -1,11 +1,14 @@
-"""
-Tests for CLI functionality.
-"""
+"""Tests for CLI functionality."""
 
+import json
 import os
+import re
 import tempfile
+from pathlib import Path
+
 import pytest
 from click.testing import CliRunner
+
 from metamorphic_guard.cli import main
 
 
@@ -88,14 +91,24 @@ def solve(L, k):
             '--candidate', candidate_file,
             '--n', '10',
             '--seed', '42',
-            '--improve-delta', '0.0'  # Accept any improvement
+            '--improve-delta', '0.0'
         ])
-        
+
         # Should succeed (exit code 0 for acceptance)
         assert result.exit_code == 0
         assert "EVALUATION SUMMARY" in result.output
         assert "Report saved to:" in result.output
-        
+
+        match = re.search(r"Report saved to: (.+)", result.output)
+        assert match, "Report path not found in CLI output"
+        report_path = Path(match.group(1).strip())
+        report_data = json.loads(Path(report_path).read_text())
+        assert report_data["config"]["ci_method"] == "bootstrap"
+        assert "spec_fingerprint" in report_data
+        assert "environment" in report_data
+        assert "relative_risk" in report_data
+        assert "relative_risk_ci" in report_data
+
     finally:
         os.unlink(baseline_file)
         os.unlink(candidate_file)

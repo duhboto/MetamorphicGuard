@@ -4,7 +4,12 @@ Tests for harness evaluation and bootstrap CI calculation.
 
 import pytest
 
-from metamorphic_guard.harness import _compute_bootstrap_ci, _evaluate_results
+from metamorphic_guard.harness import (
+    _compute_bootstrap_ci,
+    _compute_delta_ci,
+    _compute_relative_risk,
+    _evaluate_results,
+)
 from metamorphic_guard.specs import MetamorphicRelation, Property, Spec
 from metamorphic_guard.stability import multiset_equal
 
@@ -146,3 +151,36 @@ def test_metamorphic_relation_violations_detected():
     assert metrics["passes"] == 0
     assert metrics["pass_indicators"] == [0]
     assert metrics["mr_violations"], "Expected metamorphic relation violation to be recorded"
+def test_newcombe_ci_difference():
+    baseline_metrics = {
+        "passes": 60,
+        "total": 100,
+        "pass_indicators": [1] * 60 + [0] * 40,
+    }
+    candidate_metrics = {
+        "passes": 90,
+        "total": 100,
+        "pass_indicators": [1] * 90 + [0] * 10,
+    }
+
+    ci = _compute_delta_ci(
+        baseline_metrics,
+        candidate_metrics,
+        alpha=0.05,
+        seed=123,
+        samples=500,
+        method="newcombe",
+    )
+
+    assert ci[0] < ci[1]
+    assert ci[0] > 0
+
+    rr, rr_ci = _compute_relative_risk(
+        baseline_metrics,
+        candidate_metrics,
+        alpha=0.05,
+        method="log",
+    )
+
+    assert rr > 1
+    assert rr_ci[0] < rr_ci[1]

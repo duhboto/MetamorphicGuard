@@ -51,6 +51,20 @@ def main() -> None:
     show_default=True,
     help="Minimum candidate pass rate.",
 )
+@click.option(
+    "--ci-method",
+    default="bootstrap",
+    type=click.Choice(["bootstrap", "newcombe", "wilson"], case_sensitive=False),
+    show_default=True,
+    help="Method for pass-rate delta confidence intervals.",
+)
+@click.option(
+    "--rr-ci-method",
+    default="log",
+    type=click.Choice(["log"], case_sensitive=False),
+    show_default=True,
+    help="Method for relative risk confidence intervals.",
+)
 def evaluate_command(
     candidate_path: Path,
     baseline_path: Path | None,
@@ -60,6 +74,8 @@ def evaluate_command(
     mem_mb: int,
     improve_delta: float,
     min_pass_rate: float,
+    ci_method: str,
+    rr_ci_method: str,
 ) -> None:
     """Evaluate a candidate ranking algorithm and print the adoption decision."""
     outcome = evaluate_candidate(
@@ -71,6 +87,8 @@ def evaluate_command(
         mem_mb=mem_mb,
         improve_delta=improve_delta,
         min_pass_rate=min_pass_rate,
+        ci_method=ci_method,
+        rr_ci_method=rr_ci_method,
     )
 
     table = Table(title="Ranking Guard Result", box=box.SIMPLE_HEAVY)
@@ -82,6 +100,8 @@ def evaluate_command(
     table.add_row("Reason", outcome.reason)
     table.add_row("Δ Pass Rate", f"{outcome.delta_pass_rate:.4f}")
     table.add_row("Δ 95% CI", f"[{outcome.ci_lower:.4f}, {outcome.ci_upper:.4f}]")
+    table.add_row("Relative Risk", f"{outcome.relative_risk:.4f}")
+    table.add_row("RR 95% CI", f"[{outcome.rr_ci_lower:.4f}, {outcome.rr_ci_upper:.4f}]")
     table.add_row("Report", str(outcome.report_path))
 
     console.print(table)

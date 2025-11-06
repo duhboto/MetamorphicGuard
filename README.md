@@ -92,6 +92,9 @@ metamorphic-guard --help
 - `--violation-cap`: Maximum violations to report (default: 25)
 - `--parallel`: Number of worker processes used to drive the sandbox (default: 1)
 - `--bootstrap-samples`: Resamples used for percentile bootstrap CI (default: 1000)
+- `--ci-method`: Confidence interval method for pass-rate delta (`bootstrap`, `newcombe`, `wilson`)
+- `--rr-ci-method`: Confidence interval method for relative risk (`log`)
+- `--ci-method`: Confidence interval method for pass-rate delta (`bootstrap` or `newcombe`)
 
 ## Example Implementations
 
@@ -119,6 +122,28 @@ The `top_k` task finds the k largest elements from a list:
 1. **Permute Input**: Shuffling the input list should produce equivalent results
 2. **Add Noise Below Min**: Adding small values below the minimum should not affect results
 
+### Designing Effective Properties & Relations
+
+Metamorphic Guard is only as strong as the properties and relations you write. When
+modeling real ranking or pricing systems:
+
+- **Separate invariants and tolerances** – keep hard invariants in `mode="hard"`
+  properties and express tolerance-based expectations (e.g., floating point) as
+  soft checks where near-misses are acceptable.
+- **Explore symmetry & monotonicity** – swapping equivalent features, shuffling
+  inputs, or scaling features by positive constants are high-signal relations for
+  recommender systems.
+- **Inject dominated noise** – append low-utility items to ensure the top results
+  remain stable under additional clutter.
+- **Idempotence & projection** – running the algorithm twice should yield the same
+  output for deterministic tasks; encode this where appropriate.
+- **Control randomness** – expose seed parameters and re-run stochastic algorithms
+  with fixed seeds inside your relations for reproducibility.
+
+Each report now includes hashes for the generator function, properties, metamorphic
+relations, and formatter callables (`spec_fingerprint`). This makes it possible to
+prove precisely which oracles were active during a run.
+
 ## Implementation Requirements
 
 ### Candidate Function Contract
@@ -140,8 +165,14 @@ def solve(*args):
 - Resource limits: CPU time, memory usage
 - Network access is disabled by stubbing socket primitives and import hooks
 - Subprocess creation (`os.system`, `subprocess.Popen`, etc.) is denied inside the sandbox
+- Native FFI (`ctypes`, `cffi`), multiprocessing forks, and user site-packages are blocked at import time
 - Timeout enforcement per test case
 - Deterministic execution with fixed seeds
+
+> **Deployment tip:** For untrusted code, run the sandbox worker inside an OS-level
+> container or VM (e.g., Docker with seccomp/AppArmor or Firejail) and drop Linux
+> capabilities. The built-in guardrails reduce attack surface, but pairing them with
+> kernel isolation provides a stronger security boundary.
 
 ## Output Format
 
@@ -159,11 +190,24 @@ The system generates JSON reports in `reports/report_<timestamp>.json`:
     "improve_delta": 0.02,
     "violation_cap": 25,
     "parallel": 1,
-    "bootstrap_samples": 1000
+    "bootstrap_samples": 1000,
+    "ci_method": "bootstrap",
+    "rr_ci_method": "log"
   },
   "hashes": {
     "baseline": "sha256...",
     "candidate": "sha256..."
+  },
+  "spec_fingerprint": {
+    "gen_inputs": "sha256...",
+    "properties": [
+      { "description": "Output length equals min(k, len(L))", "mode": "hard", "hash": "sha256..." }
+    ],
+    "relations": [
+      { "name": "permute_input", "expect": "equal", "hash": "sha256..." }
+    ],
+    "equivalence": "sha256...",
+    "formatters": { "fmt_in": "sha256...", "fmt_out": "sha256..." }
   },
   "baseline": {
     "passes": 388,
@@ -179,9 +223,17 @@ The system generates JSON reports in `reports/report_<timestamp>.json`:
   },
   "delta_pass_rate": 0.02,
   "delta_ci": [0.015, 0.035],
+  "relative_risk": 1.021,
+  "relative_risk_ci": [0.998, 1.045],
   "decision": {
     "adopt": true,
     "reason": "meets_gate"
+  },
+  "environment": {
+    "python_version": "3.11.8",
+    "implementation": "CPython",
+    "platform": "macOS-14-arm64-arm-64bit",
+    "executable": "/usr/bin/python3"
   }
 }
 ```

@@ -114,3 +114,65 @@ def other_function(x):
         assert result["error"] is not None
     finally:
         os.unlink(test_file)
+
+
+def test_sandbox_blocks_ctypes():
+    """Sandbox should prohibit ctypes usage."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        f.write('''
+def solve(x):
+    import ctypes
+    return ctypes.c_int(42).value
+''')
+        test_file = f.name
+
+    try:
+        result = run_in_sandbox(test_file, "solve", (0,), timeout_s=1.0, mem_mb=100)
+        assert result["success"] is False
+        combined = (result["stderr"] or "") + (result["stdout"] or "")
+        assert "access denied" in combined.lower()
+    finally:
+        os.unlink(test_file)
+
+
+def test_sandbox_blocks_fork():
+    """Sandbox should block attempts to fork new processes."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        f.write('''
+import os
+
+def solve(x):
+    os.fork()
+    return x
+''')
+        test_file = f.name
+
+    try:
+        result = run_in_sandbox(test_file, "solve", (1,), timeout_s=1.0, mem_mb=100)
+        assert result["success"] is False
+        combined = (result["stderr"] or "") + (result["stdout"] or "")
+        assert "denied" in combined.lower() or "fork" in combined.lower()
+    finally:
+        os.unlink(test_file)
+
+
+def test_sandbox_handles_recursion_exhaustion():
+    """Sandbox should surface recursion errors cleanly."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        f.write('''
+import sys
+
+def solve(x):
+    def recurse(n):
+        return n + recurse(n + 1)
+    return recurse(0)
+''')
+        test_file = f.name
+
+    try:
+        result = run_in_sandbox(test_file, "solve", (1,), timeout_s=1.0, mem_mb=50)
+        assert result["success"] is False
+        combined = (result["stderr"] or "") + (result["stdout"] or "")
+        assert "recursion" in combined.lower()
+    finally:
+        os.unlink(test_file)

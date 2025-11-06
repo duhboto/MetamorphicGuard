@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="metamorphic_guard",
-    version="1.0.1",
+    version="1.1.0",
     description="A Python library for comparing program versions using metamorphic testing",
     author="Engineer Alpha",
     packages=find_packages(),
