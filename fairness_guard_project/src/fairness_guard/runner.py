@@ -66,6 +66,9 @@ def evaluate_candidate(
     violation_cap: int = 25,
     parallel: int = 1,
     bootstrap_samples: int = 500,
+    report_dir: Optional[Path] = None,
+    executor: Optional[str] = None,
+    executor_config: Optional[Dict[str, object]] = None,
 ) -> EvaluationOutcome:
     """
     Run the Metamorphic Guard evaluation for credit fairness policies.
@@ -89,6 +92,8 @@ def evaluate_candidate(
         parallel=parallel,
         improve_delta=improve_delta,
         bootstrap_samples=bootstrap_samples,
+        executor=executor,
+        executor_config=executor_config,
     )
 
     test_inputs = _load_test_inputs(test_cases, seed)
@@ -107,7 +112,7 @@ def evaluate_candidate(
     result["decision"] = decision
     result["baseline"]["fairness_metrics"] = baseline_metrics.to_dict()
     result["candidate"]["fairness_metrics"] = candidate_metrics.to_dict()
-    report = Path(write_report(result))
+    report = Path(write_report(result, directory=report_dir))
 
     delta_ci = result["delta_ci"]
     return EvaluationOutcome(

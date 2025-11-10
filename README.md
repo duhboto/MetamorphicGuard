@@ -95,6 +95,15 @@ metamorphic-guard --help
 - `--ci-method`: Confidence interval method for pass-rate delta (`bootstrap`, `newcombe`, `wilson`)
 - `--rr-ci-method`: Confidence interval method for relative risk (`log`)
 - `--ci-method`: Confidence interval method for pass-rate delta (`bootstrap` or `newcombe`)
+- `--report-dir`: Destination directory for JSON reports (defaults to auto-discovery)
+- `--executor`: Sandbox backend (`local`, `docker`, or `module:callable`)
+- `--executor-config`: JSON object with executor-specific settings (e.g. CPU, image)
+- `--config`: Path to a TOML file providing defaults for the above options
+- `--export-violations`: Emit a JSON summary of property/MR failures to a given path
+- `--html-report`: Write an interactive-ready HTML summary alongside the JSON report
+- `--dispatcher`: Execution dispatcher (`local` threads or experimental `queue`)
+- `--queue-config`: JSON configuration for queue-backed dispatchers (experimental)
+- `--monitor`: Enable built-in monitors such as `latency`
 
 ## Example Implementations
 
@@ -144,6 +153,36 @@ Each report now includes hashes for the generator function, properties, metamorp
 relations, and formatter callables (`spec_fingerprint`). This makes it possible to
 prove precisely which oracles were active during a run.
 
+### Config Files
+
+Store frequently used defaults in a TOML file and pass it via `--config`:
+
+```toml
+task = "top_k"
+baseline = "examples/top_k_baseline.py"
+candidate = "examples/top_k_improved.py"
+n = 600
+seed = 1337
+executor = "docker"
+executor_config = { image = "python:3.11-slim", cpus = 2, memory_mb = 1024 }
+```
+
+Run with:
+
+```bash
+metamorphic-guard --config metaguard.toml --report-dir reports/
+```
+
+CLI arguments still override config values when provided.
+
+### Monitors & Alerts
+
+Monitors provide higher-order statistical invariants beyond per-test properties.
+Enable them via `--monitor latency` to capture latency distributions and flag
+regressions, or specify multiple monitors as needed. Monitor output is written
+under the `monitors` key in the JSON report and surfaced in the optional HTML
+report. Custom monitors can be supplied programmatically via the Python API.
+
 ## Implementation Requirements
 
 ### Candidate Function Contract
@@ -168,11 +207,81 @@ def solve(*args):
 - Native FFI (`ctypes`, `cffi`), multiprocessing forks, and user site-packages are blocked at import time
 - Timeout enforcement per test case
 - Deterministic execution with fixed seeds
+- Optional executors: set `--executor` / `METAMORPHIC_GUARD_EXECUTOR` to run evaluations inside Docker (`docker`) or a custom plugin (`package.module:callable`). Pass JSON tunables via `--executor-config` / `METAMORPHIC_GUARD_EXECUTOR_CONFIG` and override the Docker image with `METAMORPHIC_GUARD_DOCKER_IMAGE`.
+
+Example Docker run:
+
+```bash
+metamorphic-guard \
+  --task top_k \
+  --baseline examples/top_k_baseline.py \
+  --candidate examples/top_k_improved.py \
+  --executor docker \
+  --executor-config '{"image":"python:3.11-slim","cpus":1.5,"memory_mb":768}'
+```
 
 > **Deployment tip:** For untrusted code, run the sandbox worker inside an OS-level
 > container or VM (e.g., Docker with seccomp/AppArmor or Firejail) and drop Linux
 > capabilities. The built-in guardrails reduce attack surface, but pairing them with
 > kernel isolation provides a stronger security boundary.
+
+### Distributed Execution (Preview)
+
+The queue dispatcher (`--dispatcher queue`) enables distributed execution. In-memory
+queues are available for local experimentation, while a Redis-backed adapter lets
+you scale out with remote workers:
+
+```bash
+metamorphic-guard --dispatcher queue \
+  --queue-config '{"backend":"redis","url":"redis://localhost:6379/0"}' \
+  --monitor latency \
+  --task top_k --baseline baseline.py --candidate candidate.py --improve-delta 0.0
+
+# On worker machines
+metamorphic-guard-worker --backend redis --queue-config '{"url":"redis://localhost:6379/0"}'
+```
+
+Workers fetch tasks, run sandboxed evaluations, and stream results back to the
+coordinator. Memory backend workers remain in-process and are best suited for tests.
+
+### Plugin Ecosystem
+
+Metamorphic Guard supports external extensions via Python entry points:
+
+- `metamorphic_guard.monitors`: register additional monitor factories
+- `metamorphic_guard.dispatchers`: provide custom dispatcher implementations
+
+Example `pyproject.toml` snippet:
+
+```toml
+[project.entry-points."metamorphic_guard.monitors"]
+latency99 = "my_package.monitors:Latency99Monitor"
+```
+
+Once installed, the new monitor can be referenced on the CLI:
+
+```bash
+metamorphic-guard --monitor latency99
+```
+
+Programmatic APIs (`metamorphic_guard.monitoring.resolve_monitors`) also pick up
+registered plugins, enabling teams to share bespoke invariants, dispatchers, and
+workflows across services.
+
+### Observability & Artifacts
+
+- Set `METAMORPHIC_GUARD_LOG_JSON=1` to stream structured JSON logs (start/complete events,
+  worker task telemetry) to stdout for ingestion by log pipelines.
+- Enable Prometheus counters by exporting `METAMORPHIC_GUARD_PROMETHEUS=1` and register the
+  exposed registry (`metamorphic_guard.observability.prometheus_registry()`) with your HTTP exporter.
+- Persist failing case artifacts either by providing `METAMORPHIC_GUARD_FAILED_DIR` or letting the
+  harness default to `reports/failed_cases/`; these JSON snapshots capture violations and config for debugging.
+
+### Quick Start Wizard & Cookbook
+
+- Run `metamorphic-guard init` to scaffold a `metamorphic_guard.toml` configuration (supports distributed
+  queue defaults and monitor presets).
+- Explore `docs/cookbook.md` for recipes covering distributed evaluations, advanced monitors, and CI pipelines.
 
 ## Output Format
 
@@ -229,6 +338,24 @@ The system generates JSON reports in `reports/report_<timestamp>.json`:
     "adopt": true,
     "reason": "meets_gate"
   },
+  "job_metadata": {
+    "hostname": "build-agent-01",
+    "python_version": "3.11.8",
+    "git_commit": "d1e5f8...",
+    "git_dirty": false
+  },
+  "monitors": {
+    "LatencyMonitor": {
+      "id": "LatencyMonitor",
+      "type": "latency",
+      "percentile": 0.95,
+      "summary": {
+        "baseline": {"count": 400, "mean_ms": 1.21, "p95_ms": 1.89},
+        "candidate": {"count": 400, "mean_ms": 1.05, "p95_ms": 1.61}
+      },
+      "alerts": []
+    }
+  },
   "environment": {
     "python_version": "3.11.8",
     "implementation": "CPython",
@@ -237,6 +364,9 @@ The system generates JSON reports in `reports/report_<timestamp>.json`:
   }
 }
 ```
+
+> Set `METAMORPHIC_GUARD_REPORT_DIR=/custom/path` (or pass `directory=` to
+> `write_report`) to control where artifacts land when running outside the repo.
 
 ## Adoption Policy
 

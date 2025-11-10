@@ -3,12 +3,18 @@ Sandbox execution with resource limits and isolation.
 """
 
 import ast
+import hashlib
+import importlib
+import json
 import os
+import shutil
 import sys
 import tempfile
+import threading
 import time
+import uuid
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 try:
     import resource  # type: ignore
@@ -16,12 +22,71 @@ except ImportError:  # pragma: no cover - resource is POSIX-only
     resource = None  # type: ignore[assignment]
 
 
+_CACHE_ROOT = Path(tempfile.gettempdir()) / "metamorphic_guard_cache"
+_CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+_SNAPSHOT_CACHE: Dict[str, tuple[Path, bool]] = {}
+_SNAPSHOT_LOCK = threading.Lock()
+
 def run_in_sandbox(
     file_path: str,
     func_name: str,
     args: tuple,
     timeout_s: float = 2.0,
     mem_mb: int = 512,
+    *,
+    executor: Optional[str] = None,
+    executor_config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Execute the requested function inside an isolated sandbox.
+
+    An alternative executor can be selected via the `executor` argument, the
+    `METAMORPHIC_GUARD_EXECUTOR` environment variable, or by registering a custom
+    callable. Built-in options include:
+
+    * `local`  (default): fork/exec on the host with resource limits.
+    * `docker`: launch inside a Docker container with network disabled.
+    * `<module>:<callable>`: import and invoke an external plugin.
+    """
+
+    backend = _resolve_executor_name(executor)
+    config = executor_config if executor_config is not None else _load_executor_config()
+
+    if backend == "local":
+        return _run_local_sandbox(
+            file_path,
+            func_name,
+            args,
+            timeout_s,
+            mem_mb,
+            config=config,
+        )
+    if backend == "docker":
+        return _run_docker_sandbox(
+            file_path,
+            func_name,
+            args,
+            timeout_s,
+            mem_mb,
+            config=config,
+        )
+
+    executor_callable = _load_executor_callable(backend)
+    call_kwargs: Dict[str, Any] = {}
+    if config is not None:
+        call_kwargs["config"] = config
+
+    return executor_callable(file_path, func_name, args, timeout_s, mem_mb, **call_kwargs)
+
+
+def _run_local_sandbox(
+    file_path: str,
+    func_name: str,
+    args: tuple,
+    timeout_s: float = 2.0,
+    mem_mb: int = 512,
+    *,
+    config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Execute the requested function inside an isolated subprocess.
@@ -29,6 +94,8 @@ def run_in_sandbox(
     Returns execution metadata along with either the parsed result (on success) or
     structured error information (on failure).
     """
+    del config
+
     start_time = time.time()
 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -54,6 +121,8 @@ def run_in_sandbox(
         try:
             import subprocess  # Local import keeps sandbox namespace tighter
 
+            preexec_fn = _make_preexec_fn(timeout_s, mem_mb)
+
             process = subprocess.Popen(
                 [sys.executable, "-I", str(bootstrap_path)],
                 cwd=workspace_dir,
@@ -61,7 +130,8 @@ def run_in_sandbox(
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                preexec_fn=lambda: _set_resource_limits(timeout_s, mem_mb),
+                preexec_fn=preexec_fn,
+                start_new_session=preexec_fn is None,
             )
 
             try:
@@ -116,6 +186,288 @@ def run_in_sandbox(
                 stderr="",
                 error=f"Execution failed: {exc}",
             )
+
+
+def _run_docker_sandbox(
+    file_path: str,
+    func_name: str,
+    args: tuple,
+    timeout_s: float = 2.0,
+    mem_mb: int = 512,
+    *,
+    config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    start_time = time.time()
+    docker_config = config or {}
+
+    image = (
+        docker_config.get("image")
+        or os.environ.get("METAMORPHIC_GUARD_DOCKER_IMAGE")
+        or "python:3.11-slim"
+    )
+    workdir = str(docker_config.get("workdir", "/sandbox"))
+    raw_flags = docker_config.get("flags", [])
+    if isinstance(raw_flags, (list, tuple)):
+        extra_flags = [str(flag) for flag in raw_flags]
+    elif raw_flags:
+        extra_flags = [str(raw_flags)]
+    else:
+        extra_flags = []
+    network_mode = docker_config.get("network", "none")
+    cpus = docker_config.get("cpus")
+    pids_limit = int(docker_config.get("pids_limit", 64))
+    memory_mb = int(docker_config.get("memory_mb", mem_mb))
+    memory_limit_mb = max(memory_mb, mem_mb, 32)
+    env_overrides = docker_config.get("env", {})
+
+    banned_modules = os.environ.get("METAMORPHIC_GUARD_BANNED")
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        workspace_dir = temp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+
+        sandbox_target = _prepare_workspace(Path(file_path), workspace_dir)
+        bootstrap_path = _write_bootstrap(
+            temp_path,
+            workspace_dir,
+            sandbox_target,
+            func_name,
+            args,
+        )
+
+        container_bootstrap = f"{workdir}/bootstrap.py"
+        volume_spec = f"{temp_path}:{workdir}:ro"
+
+        env_vars = {
+            "NO_NETWORK": "1",
+            "PYTHONNOUSERSITE": "1",
+        }
+        if banned_modules:
+            env_vars["METAMORPHIC_GUARD_BANNED"] = banned_modules
+        if isinstance(env_overrides, dict):
+            for key, value in env_overrides.items():
+                if value is None:
+                    continue
+                env_vars[str(key)] = str(value)
+
+        container_name = f"metaguard-{uuid.uuid4().hex[:12]}"
+
+        command = [
+            "docker",
+            "run",
+            "--rm",
+            "--name",
+            container_name,
+            "--network",
+            str(network_mode),
+            "--memory",
+            f"{memory_limit_mb}m",
+            "--pids-limit",
+            str(pids_limit),
+            "-v",
+            volume_spec,
+        ]
+
+        if cpus is not None:
+            command.extend(["--cpus", str(cpus)])
+        else:
+            command.extend(["--cpus", "1"])
+
+        security_opts = docker_config.get("security_opt")
+        if isinstance(security_opts, (list, tuple)):
+            for opt in security_opts:
+                command.extend(["--security-opt", str(opt)])
+
+        for key, value in env_vars.items():
+            command.extend(["-e", f"{key}={value}"])
+
+        command.extend(extra_flags)
+        command.extend([str(image), "python", "-I", container_bootstrap])
+
+        import subprocess
+
+        try:
+            completed = subprocess.run(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=timeout_s,
+            )
+        except subprocess.TimeoutExpired:
+            _force_remove_container(container_name)
+            duration_ms = (time.time() - start_time) * 1000
+            return _result(
+                success=False,
+                duration_ms=duration_ms,
+                stdout="",
+                stderr="",
+                error=f"Process timed out after {timeout_s}s",
+            )
+        except FileNotFoundError:
+            duration_ms = (time.time() - start_time) * 1000
+            return _result(
+                success=False,
+                duration_ms=duration_ms,
+                stdout="",
+                stderr="",
+                error="Docker executable not found",
+            )
+
+        duration_ms = (time.time() - start_time) * 1000
+
+        if completed.returncode != 0:
+            return _result(
+                success=False,
+                duration_ms=duration_ms,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+                error=f"Process exited with code {completed.returncode}",
+            )
+
+        parsed = _parse_success(completed.stdout)
+        if parsed is None:
+            return _result(
+                success=False,
+                duration_ms=duration_ms,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+                error="No success marker found in output",
+            )
+
+        return _result(
+            success=True,
+            duration_ms=duration_ms,
+            stdout=completed.stdout,
+            stderr=completed.stderr,
+            result=parsed,
+        )
+
+
+def _resolve_executor_name(explicit: Optional[str]) -> str:
+    if explicit and explicit.strip():
+        return explicit.strip()
+    env_value = os.environ.get("METAMORPHIC_GUARD_EXECUTOR")
+    if env_value and env_value.strip():
+        return env_value.strip()
+    return "local"
+
+
+def _load_executor_config() -> Optional[Dict[str, Any]]:
+    raw = os.environ.get("METAMORPHIC_GUARD_EXECUTOR_CONFIG")
+    if not raw:
+        return None
+    try:
+        config = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return config if isinstance(config, dict) else None
+
+
+def _load_executor_callable(path: str) -> Callable[..., Dict[str, Any]]:
+    if not path:
+        raise ValueError("Executor path cannot be empty.")
+
+    module_name: Optional[str]
+    attr_name: str
+    if ":" in path:
+        module_name, attr_name = path.split(":", 1)
+    else:
+        module_name, _, attr_name = path.rpartition(".")
+        if not module_name:
+            raise ValueError(
+                f"Executor '{path}' must be in 'module:callable' or dotted form."
+            )
+
+    module = importlib.import_module(module_name)
+    target = getattr(module, attr_name)
+
+    if isinstance(target, type):
+        target = target()
+
+    if hasattr(target, "run") and callable(target.run):
+        return target.run  # type: ignore[return-value]
+
+    if callable(target):
+        return target  # type: ignore[return-value]
+
+    raise TypeError(f"Executor '{path}' is not callable.")
+
+
+def _force_remove_container(name: str) -> None:
+    if not name:
+        return
+    import subprocess
+
+    try:
+        subprocess.run(
+            ["docker", "rm", "-f", name],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    except FileNotFoundError:
+        # Docker not installed; nothing to clean up.
+        return
+
+
+def _snapshot_source(source: Path) -> tuple[Path, bool]:
+    """Return a cached snapshot path and whether it represents a directory."""
+    resolved = source.resolve()
+    try:
+        mtime = resolved.stat().st_mtime_ns
+    except FileNotFoundError as exc:  # pragma: no cover - source removed mid-run
+        raise FileNotFoundError(f"Source path not found: {resolved}") from exc
+
+    key_material = f"{resolved}:{mtime}".encode("utf-8")
+    digest = hashlib.sha256(key_material).hexdigest()
+
+    with _SNAPSHOT_LOCK:
+        cached = _SNAPSHOT_CACHE.get(digest)
+        if cached and cached[0].exists():
+            return cached
+
+        snapshot_base = _CACHE_ROOT / digest
+        if snapshot_base.exists():
+            shutil.rmtree(snapshot_base)
+        snapshot_base.mkdir(parents=True, exist_ok=True)
+
+        if resolved.is_dir():
+            target = snapshot_base / resolved.name
+            shutil.copytree(resolved, target, dirs_exist_ok=True)
+            result = (target, True)
+        else:
+            target = snapshot_base / resolved.name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(resolved, target)
+            result = (target, False)
+
+        _SNAPSHOT_CACHE[digest] = result
+        return result
+
+
+def _clone_snapshot_dir(snapshot: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        shutil.rmtree(destination)
+    shutil.copytree(snapshot, destination, copy_function=_link_or_copy)
+
+
+def _clone_snapshot_file(snapshot: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        destination.unlink()
+    _link_or_copy(snapshot, destination)
+
+
+def _link_or_copy(src: str | Path, dst: str | Path) -> None:
+    src_path = os.fspath(src)
+    dst_path = os.fspath(dst)
+    try:
+        os.link(src_path, dst_path)
+    except OSError:
+        shutil.copy2(src_path, dst_path)
 
 
 def _write_bootstrap(
@@ -227,7 +579,7 @@ def _write_bootstrap(
                     setattr(_subprocess_module, _attr, _deny_process)
 
 
-        _BANNED = {{
+        _DEFAULT_BANNED = {{
             "socket",
             "_socket",
             "subprocess",
@@ -236,24 +588,35 @@ def _write_bootstrap(
             "multiprocessing.util",
             "multiprocessing.spawn",
             "multiprocessing.popen_spawn_posix",
-            "importlib",
             "ctypes",
             "_ctypes",
             "cffi",
         }}
+        _EXTRA_BANNED_RAW = _os_module.environ.get("METAMORPHIC_GUARD_BANNED", "")
+        _EXTRA_BANNED = {{
+            item.strip()
+            for item in _EXTRA_BANNED_RAW.split(",")
+            if item.strip()
+        }}
+        _BANNED = _DEFAULT_BANNED.union(_EXTRA_BANNED)
         _ORIG_IMPORT = builtins.__import__
 
 
+        def _is_banned(module_name: str) -> bool:
+            return any(
+                module_name == banned or module_name.startswith(f"{{banned}}.")
+                for banned in _BANNED
+            )
+
+
         def _sandbox_import(name, *args, **kwargs):
-            if name in _BANNED:
+            if _is_banned(name):
                 raise ImportError("Network or process access denied in sandbox")
             module = _ORIG_IMPORT(name, *args, **kwargs)
             if name == "os":
                 for attr in _PROCESS_ATTRS:
                     if hasattr(module, attr):
                         setattr(module, attr, _deny_process)
-            elif name == "importlib":
-                raise ImportError("importlib is disabled in sandbox")
             elif name.startswith("multiprocessing"):
                 raise ImportError("multiprocessing is disabled in sandbox")
             elif name in {"ctypes", "_ctypes", "cffi"}:
@@ -299,12 +662,13 @@ def _write_bootstrap(
 
 def _prepare_workspace(source_path: Path, workspace_dir: Path) -> Path:
     """Copy the relevant source tree into the sandbox and return the module path."""
-    import shutil
-    import tempfile
 
     if source_path.is_dir():
+        snapshot, is_dir = _snapshot_source(source_path)
+        if not is_dir:
+            raise FileNotFoundError(f"Expected directory for {source_path}")
         dest_dir = workspace_dir / source_path.name
-        shutil.copytree(source_path, dest_dir, dirs_exist_ok=True)
+        _clone_snapshot_dir(snapshot, dest_dir)
         candidate = dest_dir / "__init__.py"
         if candidate.exists():
             return candidate
@@ -314,8 +678,11 @@ def _prepare_workspace(source_path: Path, workspace_dir: Path) -> Path:
     if package_root is None:
         parent = source_path.parent
         if parent == Path(".") or parent == parent.parent:
+            snapshot, is_dir = _snapshot_source(source_path)
+            if is_dir:
+                raise FileNotFoundError(f"Unexpected package directory at {source_path}")
             dest = workspace_dir / source_path.name
-            dest.write_bytes(source_path.read_bytes())
+            _clone_snapshot_file(snapshot, dest)
             return dest
 
         try:
@@ -324,28 +691,25 @@ def _prepare_workspace(source_path: Path, workspace_dir: Path) -> Path:
             tmp_root = None
 
         if tmp_root is not None and parent.resolve() == tmp_root:
+            snapshot, is_dir = _snapshot_source(source_path)
+            if is_dir:
+                raise FileNotFoundError(f"Unexpected package directory at {source_path}")
             dest = workspace_dir / source_path.name
-            dest.write_bytes(source_path.read_bytes())
+            _clone_snapshot_file(snapshot, dest)
             return dest
 
         dest_parent = workspace_dir / parent.name
-        dest_parent.mkdir(parents=True, exist_ok=True)
-
-        for entry in parent.iterdir():
-            target = dest_parent / entry.name
-            if entry == source_path:
-                continue
-            if entry.is_file():
-                shutil.copy2(entry, target)
-            elif entry.is_dir():
-                shutil.copytree(entry, target, dirs_exist_ok=True)
-
-        dest_file = dest_parent / source_path.name
-        shutil.copy2(source_path, dest_file)
-        return dest_file
+        snapshot_parent, is_dir = _snapshot_source(parent)
+        if not is_dir:
+            raise FileNotFoundError(f"Expected directory for {parent}")
+        _clone_snapshot_dir(snapshot_parent, dest_parent)
+        return dest_parent / source_path.name
 
     dest_root = workspace_dir / package_root.name
-    shutil.copytree(package_root, dest_root, dirs_exist_ok=True)
+    snapshot_root, is_dir = _snapshot_source(package_root)
+    if not is_dir:
+        raise FileNotFoundError(f"Expected package directory for {package_root}")
+    _clone_snapshot_dir(snapshot_root, dest_root)
     return dest_root / source_path.relative_to(package_root)
 
 
@@ -395,6 +759,22 @@ def _set_resource_limits(timeout_s: float, mem_mb: int) -> None:
         resource.setrlimit(resource.RLIMIT_NOFILE, (16, 16))
     except (OSError, ValueError):
         pass
+
+
+def _make_preexec_fn(timeout_s: float, mem_mb: int):
+    """
+    Build a POSIX-only pre-exec function for applying resource limits.
+
+    Windows does not allow preexec_fn, so we return None in that case and
+    rely on communicate() timeouts plus process groups for cleanup.
+    """
+    if resource is None or os.name == "nt":
+        return None
+
+    def _apply_limits() -> None:
+        _set_resource_limits(timeout_s, mem_mb)
+
+    return _apply_limits
 
 
 def _result(

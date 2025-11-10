@@ -3,16 +3,30 @@ Metamorphic relations for input transformations.
 """
 
 import random
-from typing import List, Tuple
+from random import Random
+from typing import List, Optional, Tuple
 
 
-def permute_input(L: List[int], k: int) -> Tuple[List[int], int]:
+def permute_input(L: List[int], k: int, *, rng: Optional[Random] = None) -> Tuple[List[int], int]:
     """
     Permute the input list while keeping k the same.
     The output should be equivalent (same multiset of results).
     """
+    if len(L) <= 1:
+        return L, k
+
+    # Use the caller-provided RNG when available; fall back to a deterministic
+    # derivation so legacy code remains reproducible.
+    if rng is None:
+        import hashlib
+
+        seed_material = f"{tuple(L)}|{k}".encode("utf-8")
+        digest = hashlib.sha256(seed_material).digest()
+        seed = int.from_bytes(digest[:8], "big")
+        rng = Random(seed)
+
     L_permuted = L.copy()
-    random.shuffle(L_permuted)
+    rng.shuffle(L_permuted)
     return L_permuted, k
 
 

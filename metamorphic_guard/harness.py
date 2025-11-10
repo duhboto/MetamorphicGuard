@@ -2,9 +2,9 @@
 Test harness for running evaluations and computing bootstrap confidence intervals.
 """
 
+import hashlib
 import math
 import random
-from concurrent.futures import ThreadPoolExecutor
 from statistics import NormalDist
 from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple
 
@@ -13,8 +13,13 @@ from .specs import Spec, get_task
 from .util import (
     compute_spec_fingerprint,
     get_environment_fingerprint,
+    collect_job_metadata,
     sha256_file,
+    write_failed_artifacts,
 )
+from .dispatch import Dispatcher, ensure_dispatcher
+from .monitoring import Monitor, MonitorContext
+from .observability import increment_metric, log_event
 
 
 def run_eval(
@@ -32,6 +37,11 @@ def run_eval(
     bootstrap_samples: int = 1000,
     ci_method: str = "bootstrap",
     rr_ci_method: str = "log",
+    executor: str | None = None,
+    executor_config: Dict[str, Any] | None = None,
+    dispatcher: Dispatcher | str | None = None,
+    queue_config: Dict[str, Any] | None = None,
+    monitors: Sequence[Monitor] | None = None,
 ) -> Dict[str, Any]:
     """
     Run evaluation comparing baseline and candidate implementations.
@@ -42,19 +52,60 @@ def run_eval(
     test_inputs = spec.gen_inputs(n, seed)
 
     worker_count = max(1, parallel or 1)
-    baseline_results = _execute_suite(
-        baseline_path,
-        test_inputs,
-        timeout_s=timeout_s,
-        mem_mb=mem_mb,
-        workers=worker_count,
+    dispatcher_obj = ensure_dispatcher(dispatcher, worker_count, queue_config)
+
+    monitor_objs = list(monitors or [])
+    if monitor_objs:
+        context = MonitorContext(task=task_name, total_cases=n)
+        for monitor in monitor_objs:
+            monitor.start(context)
+
+    log_event(
+        "run_eval_start",
+        task=task_name,
+        total_cases=n,
+        dispatcher=getattr(dispatcher_obj, "kind", "local"),
+        executor=executor,
     )
-    candidate_results = _execute_suite(
-        candidate_path,
-        test_inputs,
-        timeout_s=timeout_s,
-        mem_mb=mem_mb,
-        workers=worker_count,
+
+    def make_runner(file_path: str) -> Callable[[int, Tuple[Any, ...]], Dict[str, Any]]:
+        def _run_case(index: int, call_args: Tuple[Any, ...]) -> Dict[str, Any]:
+            return run_in_sandbox(
+                file_path,
+                "solve",
+                call_args,
+                timeout_s,
+                mem_mb,
+                executor=executor,
+                executor_config=executor_config,
+            )
+        return _run_case
+
+    baseline_results = dispatcher_obj.execute(
+        test_inputs=test_inputs,
+        run_case=make_runner(baseline_path),
+        role="baseline",
+        monitors=monitor_objs,
+        call_spec=_build_call_spec(
+            baseline_path,
+            timeout_s=timeout_s,
+            mem_mb=mem_mb,
+            executor=executor,
+            executor_config=executor_config,
+        ),
+    )
+    candidate_results = dispatcher_obj.execute(
+        test_inputs=test_inputs,
+        run_case=make_runner(candidate_path),
+        role="candidate",
+        monitors=monitor_objs,
+        call_spec=_build_call_spec(
+            candidate_path,
+            timeout_s=timeout_s,
+            mem_mb=mem_mb,
+            executor=executor,
+            executor_config=executor_config,
+        ),
     )
 
     baseline_metrics = _evaluate_results(
@@ -62,12 +113,16 @@ def run_eval(
         spec,
         test_inputs,
         violation_cap,
+        role="baseline",
+        seed=seed,
         rerun=lambda call_args: run_in_sandbox(
             baseline_path,
             "solve",
             call_args,
             timeout_s,
             mem_mb,
+            executor=executor,
+            executor_config=executor_config,
         ),
     )
     candidate_metrics = _evaluate_results(
@@ -75,12 +130,16 @@ def run_eval(
         spec,
         test_inputs,
         violation_cap,
+        role="candidate",
+        seed=seed,
         rerun=lambda call_args: run_in_sandbox(
             candidate_path,
             "solve",
             call_args,
             timeout_s,
             mem_mb,
+            executor=executor,
+            executor_config=executor_config,
         ),
     )
 
@@ -117,6 +176,10 @@ def run_eval(
             "bootstrap_samples": bootstrap_samples,
             "ci_method": ci_method,
             "rr_ci_method": rr_ci_method,
+            "executor": executor,
+            "executor_config": executor_config,
+            "dispatcher": getattr(dispatcher_obj, "kind", "local"),
+            "queue_config": queue_config,
         },
         "hashes": {
             "baseline": baseline_hash,
@@ -127,6 +190,8 @@ def run_eval(
             "passes": baseline_metrics["passes"],
             "total": baseline_metrics["total"],
             "pass_rate": baseline_metrics["pass_rate"],
+            "prop_violations": baseline_metrics["prop_violations"],
+            "mr_violations": baseline_metrics["mr_violations"],
         },
         "candidate": {
             "passes": candidate_metrics["passes"],
@@ -140,39 +205,33 @@ def run_eval(
         "relative_risk": rr_value,
         "relative_risk_ci": rr_ci,
         "environment": get_environment_fingerprint(),
+        "job_metadata": collect_job_metadata(),
     }
 
+    if monitor_objs:
+        result["config"]["monitors"] = [monitor.identifier() for monitor in monitor_objs]
+        result["monitors"] = {
+            monitor.identifier(): monitor.finalize() for monitor in monitor_objs
+        }
+
+    log_event(
+        "run_eval_complete",
+        task=task_name,
+        decision=result.get("decision"),
+        candidate_passes=result["candidate"]["passes"],
+        candidate_total=result["candidate"]["total"],
+        delta=result["delta_pass_rate"],
+    )
+
+    decision = result.get("decision") or {}
+    if (
+        not decision.get("adopt", True)
+        or result["candidate"].get("prop_violations")
+        or result["candidate"].get("mr_violations")
+    ):
+        write_failed_artifacts(result)
+
     return result
-
-
-def _execute_suite(
-    file_path: str,
-    test_inputs: Sequence[Tuple[Any, ...]],
-    *,
-    timeout_s: float,
-    mem_mb: int,
-    workers: int,
-) -> List[Dict[str, Any]]:
-    """Run the candidate/baseline across the generated inputs."""
-    if workers <= 1:
-        return [
-            run_in_sandbox(file_path, "solve", args, timeout_s, mem_mb)
-            for args in test_inputs
-        ]
-
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = [
-            executor.submit(
-                run_in_sandbox,
-                file_path,
-                "solve",
-                args,
-                timeout_s,
-                mem_mb,
-            )
-            for args in test_inputs
-        ]
-    return [future.result() for future in futures]
 
 
 def _evaluate_results(
@@ -180,6 +239,9 @@ def _evaluate_results(
     spec: Spec,
     test_inputs: Sequence[Tuple[Any, ...]],
     violation_cap: int,
+    *,
+    role: str,
+    seed: int,
     rerun: Callable[[Tuple[Any, ...]], Dict[str, Any]],
 ) -> Dict[str, Any]:
     """Evaluate results against properties and metamorphic relations."""
@@ -188,10 +250,12 @@ def _evaluate_results(
     prop_violations: list[Dict[str, Any]] = []
     mr_violations: list[Dict[str, Any]] = []
     pass_indicators: list[int] = []
+    rerun_cache: Dict[str, Dict[str, Any]] = {}
 
     for idx, (result, args) in enumerate(zip(results, test_inputs)):
         if not result["success"]:
             pass_indicators.append(0)
+            increment_metric(role, "failure")
             if len(prop_violations) < violation_cap:
                 prop_violations.append(
                     {
@@ -236,12 +300,19 @@ def _evaluate_results(
 
         if not prop_passed:
             pass_indicators.append(0)
+            increment_metric(role, "failure")
             continue
 
         mr_passed = True
-        for relation in spec.relations:
+        for relation_index, relation in enumerate(spec.relations):
+            relation_rng = None
+            if relation.accepts_rng:
+                relation_rng = _relation_rng(seed, idx, relation_index, relation.name)
             try:
-                transformed_args = relation.transform(*args)
+                if relation.accepts_rng:
+                    transformed_args = relation.transform(*args, rng=relation_rng)
+                else:
+                    transformed_args = relation.transform(*args)
             except Exception as exc:
                 mr_passed = False
                 if len(mr_violations) < violation_cap:
@@ -256,7 +327,12 @@ def _evaluate_results(
                     )
                 break
 
-            relation_result = rerun(transformed_args)
+            cache_key = _relation_cache_key(relation_index, transformed_args)
+            if cache_key in rerun_cache:
+                relation_result = rerun_cache[cache_key]
+            else:
+                relation_result = rerun(transformed_args)
+                rerun_cache[cache_key] = relation_result
             if not relation_result["success"]:
                 mr_passed = False
                 if len(mr_violations) < violation_cap:
@@ -294,8 +370,10 @@ def _evaluate_results(
         if mr_passed:
             passes += 1
             pass_indicators.append(1)
+            increment_metric(role, "success")
         else:
             pass_indicators.append(0)
+            increment_metric(role, "failure")
 
     return {
         "passes": passes,
@@ -305,6 +383,50 @@ def _evaluate_results(
         "mr_violations": mr_violations,
         "pass_indicators": pass_indicators,
     }
+
+
+def _relation_rng(
+    seed: int,
+    case_index: int,
+    relation_index: int,
+    relation_name: str,
+) -> random.Random:
+    """
+    Build a deterministic RNG for a relation invocation.
+
+    The construction uses a stable hash so results are reproducible across Python
+    invocations regardless of PYTHONHASHSEED.
+    """
+    payload = f"{seed}:{case_index}:{relation_index}:{relation_name}".encode("utf-8")
+    digest = hashlib.sha256(payload).digest()
+    seed_int = int.from_bytes(digest[:8], "big")
+    return random.Random(seed_int)
+
+
+def _relation_cache_key(relation_index: int, args: Tuple[Any, ...]) -> str:
+    """Build a stable cache key for relation reruns."""
+    return f"{relation_index}:{repr(args)}"
+
+
+def _build_call_spec(
+    file_path: str,
+    *,
+    timeout_s: float,
+    mem_mb: int,
+    executor: str | None,
+    executor_config: Dict[str, Any] | None,
+) -> Dict[str, Any]:
+    spec: Dict[str, Any] = {
+        "file_path": file_path,
+        "func_name": "solve",
+        "timeout_s": timeout_s,
+        "mem_mb": mem_mb,
+    }
+    if executor is not None:
+        spec["executor"] = executor
+    if executor_config is not None:
+        spec["executor_config"] = executor_config
+    return spec
 
 
 def _compute_delta_ci(

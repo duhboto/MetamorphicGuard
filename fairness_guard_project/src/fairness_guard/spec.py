@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from metamorphic_guard import MetamorphicRelation, Property, Spec, task
 
@@ -108,14 +108,26 @@ def _property_fairness_gap(output: Dict[str, bool], applicants: List[Applicant],
     return gap <= constraints["fairness_gap"] + 1e-6
 
 
-def _shuffle_applicants(applicants: List[Applicant], constraints: Constraints) -> TaskInput:
+def _shuffle_applicants(
+    applicants: List[Applicant],
+    constraints: Constraints,
+    *,
+    rng: Optional[random.Random] = None,
+) -> TaskInput:
     shuffled = [dict(app) for app in applicants]
-    random.Random(len(applicants)).shuffle(shuffled)
+    local_rng = rng or random.Random(len(applicants))
+    local_rng.shuffle(shuffled)
     return shuffled, constraints
 
 
-def _scale_currency(applicants: List[Applicant], constraints: Constraints) -> TaskInput:
-    factor = random.choice([0.5, 1.5, 2.0])
+def _scale_currency(
+    applicants: List[Applicant],
+    constraints: Constraints,
+    *,
+    rng: Optional[random.Random] = None,
+) -> TaskInput:
+    local_rng = rng or random.Random(len(applicants) + 17)
+    factor = local_rng.choice([0.5, 1.5, 2.0])
     scaled = []
     for app in applicants:
         clone = dict(app)
@@ -125,12 +137,18 @@ def _scale_currency(applicants: List[Applicant], constraints: Constraints) -> Ta
     return scaled, constraints
 
 
-def _inject_uninformative_feature(applicants: List[Applicant], constraints: Constraints) -> TaskInput:
-    rng = random.Random(int(sum(float(app["credit_score"]) for app in applicants)))
+def _inject_uninformative_feature(
+    applicants: List[Applicant],
+    constraints: Constraints,
+    *,
+    rng: Optional[random.Random] = None,
+) -> TaskInput:
+    base_seed = int(sum(float(app["credit_score"]) for app in applicants))
+    local_rng = rng or random.Random(base_seed)
     augmented = []
     for app in applicants:
         clone = dict(app)
-        clone["marketing_score"] = rng.uniform(-1.0, 1.0)
+        clone["marketing_score"] = local_rng.uniform(-1.0, 1.0)
         augmented.append(clone)
     return augmented, constraints
 
@@ -177,16 +195,19 @@ def credit_fairness_spec() -> Spec:
                 name="shuffle_applicants",
                 transform=_shuffle_applicants,
                 expect="equal",
+                accepts_rng=True,
             ),
             MetamorphicRelation(
                 name="scale_currency",
                 transform=_scale_currency,
                 expect="equal",
+                accepts_rng=True,
             ),
             MetamorphicRelation(
                 name="inject_uninformative_feature",
                 transform=_inject_uninformative_feature,
                 expect="equal",
+                accepts_rng=True,
             ),
         ],
         equivalence=_mapping_equal,

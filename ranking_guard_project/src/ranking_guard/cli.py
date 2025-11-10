@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import click
@@ -65,6 +66,24 @@ def main() -> None:
     show_default=True,
     help="Method for relative risk confidence intervals.",
 )
+@click.option(
+    "--report-dir",
+    default=None,
+    type=click.Path(file_okay=False, writable=True, path_type=Path),
+    help="Directory for JSON evaluation reports.",
+)
+@click.option(
+    "--executor",
+    default=None,
+    type=str,
+    help="Sandbox executor backend (e.g. 'docker').",
+)
+@click.option(
+    "--executor-config",
+    default=None,
+    type=str,
+    help="JSON config passed to the sandbox executor.",
+)
 def evaluate_command(
     candidate_path: Path,
     baseline_path: Path | None,
@@ -76,8 +95,20 @@ def evaluate_command(
     min_pass_rate: float,
     ci_method: str,
     rr_ci_method: str,
+    report_dir: Path | None,
+    executor: str | None,
+    executor_config: str | None,
 ) -> None:
     """Evaluate a candidate ranking algorithm and print the adoption decision."""
+    parsed_executor_config = None
+    if executor_config:
+        try:
+            parsed_executor_config = json.loads(executor_config)
+            if not isinstance(parsed_executor_config, dict):
+                raise ValueError("Executor config must be a JSON object.")
+        except Exception as exc:
+            raise click.ClickException(f"Invalid executor config: {exc}") from exc
+
     outcome = evaluate_candidate(
         candidate_path,
         baseline_path=baseline_path,
@@ -89,6 +120,9 @@ def evaluate_command(
         min_pass_rate=min_pass_rate,
         ci_method=ci_method,
         rr_ci_method=rr_ci_method,
+        report_dir=report_dir,
+        executor=executor,
+        executor_config=parsed_executor_config,
     )
 
     table = Table(title="Ranking Guard Result", box=box.SIMPLE_HEAVY)

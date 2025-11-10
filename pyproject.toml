@@ -16,6 +16,7 @@ dependencies = [
 [project.scripts]
 metamorphic-guard = "metamorphic_guard.cli:main"
 metaguard = "metamorphic_guard.cli:main"
+metamorphic-guard-worker = "metamorphic_guard.worker:main"
 
 [project.urls]
 Homepage = "https://github.com/duhboto/MetamorphicGuard"

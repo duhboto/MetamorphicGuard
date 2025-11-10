@@ -71,6 +71,8 @@ def test_evaluate_results():
         spec,
         test_inputs,
         violation_cap=10,
+        role="candidate",
+        seed=123,
         rerun=lambda args: {"success": True, "result": None},
     )
     
@@ -106,6 +108,8 @@ def test_evaluate_results_failure_handling():
         spec,
         test_inputs,
         violation_cap=10,
+        role="candidate",
+        seed=123,
         rerun=lambda args: {"success": False, "error": "Timeout"},
     )
     
@@ -145,12 +149,113 @@ def test_metamorphic_relation_violations_detected():
         spec,
         inputs,
         violation_cap=5,
+        role="candidate",
+        seed=321,
         rerun=rerun,
     )
 
     assert metrics["passes"] == 0
     assert metrics["pass_indicators"] == [0]
     assert metrics["mr_violations"], "Expected metamorphic relation violation to be recorded"
+
+
+def test_relation_rng_injection():
+    """Metamorphic relations flagged as seeded receive deterministic RNGs."""
+    calls: list[float] = []
+
+    def transform(value: int, *, rng):
+        calls.append(rng.random())
+        return (value,)
+
+    inputs = [(1,), (2,)]
+    spec = Spec(
+        gen_inputs=lambda n, seed: inputs,
+        properties=[
+            Property(
+                check=lambda out, original: True,
+                description="Always passes",
+            )
+        ],
+        relations=[
+            MetamorphicRelation(
+                name="rng_relation",
+                transform=transform,
+                expect="equal",
+                accepts_rng=True,
+            )
+        ],
+        equivalence=lambda a, b: a == b,
+    )
+
+    results = [{"success": True, "result": (1,)}, {"success": True, "result": (2,)}]
+
+    _evaluate_results(
+        results,
+        spec,
+        inputs,
+        violation_cap=5,
+        role="candidate",
+        seed=123,
+        rerun=lambda args: {"success": True, "result": args},
+    )
+    first_calls = list(calls)
+
+    calls.clear()
+    _evaluate_results(
+        results,
+        spec,
+        inputs,
+        violation_cap=5,
+        role="candidate",
+        seed=123,
+        rerun=lambda args: {"success": True, "result": args},
+    )
+
+    assert calls == first_calls
+
+
+def test_relation_rerun_cache():
+    """Identical transformed inputs should reuse sandbox results."""
+    call_counter = {"count": 0}
+
+    def transform(value: int):
+        return (value,)
+
+    def rerun(args):
+        call_counter["count"] += 1
+        return {"success": True, "result": args}
+
+    inputs = [(1,), (1,)]
+    spec = Spec(
+        gen_inputs=lambda n, seed: inputs,
+        properties=[
+            Property(
+                check=lambda out, original: True,
+                description="Always passes",
+            )
+        ],
+        relations=[
+            MetamorphicRelation(
+                name="identity",
+                transform=transform,
+            )
+        ],
+        equivalence=lambda a, b: a == b,
+    )
+
+    results = [{"success": True, "result": (1,)}, {"success": True, "result": (1,)}]
+
+    _evaluate_results(
+        results,
+        spec,
+        inputs,
+        violation_cap=5,
+        role="candidate",
+        seed=0,
+        rerun=rerun,
+    )
+
+    assert call_counter["count"] == 1
 def test_newcombe_ci_difference():
     baseline_metrics = {
         "passes": 60,

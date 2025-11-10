@@ -6,6 +6,8 @@ from .specs import task, Spec, Property, MetamorphicRelation
 from .generators import gen_top_k_inputs
 from .relations import permute_input, add_noise_below_min
 from .stability import multiset_equal
+from .monitoring import Monitor, LatencyMonitor
+from .dispatch import Dispatcher
 
 __version__ = "1.1.0"
 
@@ -33,12 +35,13 @@ def top_k_spec() -> Spec:
             MetamorphicRelation(
                 name="permute_input",
                 transform=permute_input,
-                expect="equal"
+                expect="equal",
+                accepts_rng=True,
             ),
             MetamorphicRelation(
                 name="add_noise_below_min", 
                 transform=add_noise_below_min,
-                expect="equal"
+                expect="equal",
             )
         ],
         equivalence=multiset_equal,

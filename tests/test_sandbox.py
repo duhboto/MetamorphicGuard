@@ -4,7 +4,28 @@ Tests for sandbox execution with resource limits and isolation.
 
 import os
 import tempfile
+from typing import Any, Dict, Optional
+
 from metamorphic_guard.sandbox import run_in_sandbox
+
+
+def fake_executor(
+    _file_path: str,
+    _func_name: str,
+    _args: tuple,
+    _timeout_s: float,
+    _mem_mb: int,
+    *,
+    config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    return {
+        "success": True,
+        "result": config.get("value") if config else "fake",
+        "stdout": "",
+        "stderr": "",
+        "duration_ms": 0.0,
+        "error": None,
+    }
 
 
 def test_sandbox_success():
@@ -176,3 +197,17 @@ def solve(x):
         assert "recursion" in combined.lower()
     finally:
         os.unlink(test_file)
+
+
+def test_sandbox_custom_executor(monkeypatch):
+    """Custom executor path should be used when environment variable is set."""
+    monkeypatch.setenv("METAMORPHIC_GUARD_EXECUTOR", "tests.test_sandbox:fake_executor")
+    monkeypatch.setenv("METAMORPHIC_GUARD_EXECUTOR_CONFIG", '{"value": "custom-result"}')
+
+    try:
+        result = run_in_sandbox("ignored.py", "solve", tuple(), timeout_s=0.1, mem_mb=32)
+        assert result["success"] is True
+        assert result["result"] == "custom-result"
+    finally:
+        monkeypatch.delenv("METAMORPHIC_GUARD_EXECUTOR", raising=False)
+        monkeypatch.delenv("METAMORPHIC_GUARD_EXECUTOR_CONFIG", raising=False)

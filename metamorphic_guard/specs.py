@@ -10,7 +10,7 @@ import functools
 @dataclass
 class Property:
     """A property to check on function outputs."""
-    check: Callable[[Any], bool]
+    check: Callable[..., bool]
     description: str
     mode: str = "hard"  # "hard" or "soft"
 
@@ -21,6 +21,7 @@ class MetamorphicRelation:
     name: str
     transform: Callable[..., Tuple[Any, ...]]
     expect: str = "equal"  # For v1, only "equal" is supported
+    accepts_rng: bool = False
 
 
 @dataclass

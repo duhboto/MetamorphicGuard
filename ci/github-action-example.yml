@@ -1,0 +1,34 @@
+name: metamorphic-guard
+
+on:
+  workflow_call:
+    inputs:
+      config:
+        description: Path to config file
+        required: false
+        default: metamorphic_guard.toml
+        type: string
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install Metamorphic Guard
+        run: pip install .[dev]
+      - name: Generate config if missing
+        run: |
+          if [ ! -f "${{ inputs.config }}" ]; then
+            metamorphic-guard init --path "${{ inputs.config }}" --distributed --monitor latency
+          fi
+      - name: Run evaluation
+        run: |
+          metamorphic-guard --config "${{ inputs.config }}" --report-dir reports/
+      - name: Upload reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: metamorphic-guard-reports
+          path: reports/

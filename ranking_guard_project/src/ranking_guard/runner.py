@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 from metamorphic_guard.gate import decide_adopt
 from metamorphic_guard.harness import run_eval
@@ -44,6 +44,9 @@ def evaluate_candidate(
     bootstrap_samples: int = 500,
     ci_method: str = "bootstrap",
     rr_ci_method: str = "log",
+    report_dir: Optional[Path] = None,
+    executor: Optional[str] = None,
+    executor_config: Optional[Dict[str, object]] = None,
 ) -> EvaluationOutcome:
     """
     Run the Metamorphic Guard evaluation and return a structured summary.
@@ -70,6 +73,8 @@ def evaluate_candidate(
         bootstrap_samples=bootstrap_samples,
         ci_method=ci_method,
         rr_ci_method=rr_ci_method,
+        executor=executor,
+        executor_config=executor_config,
     )
 
     decision = decide_adopt(
@@ -78,7 +83,7 @@ def evaluate_candidate(
         min_pass_rate=min_pass_rate,
     )
     result["decision"] = decision
-    report = Path(write_report(result))
+    report = Path(write_report(result, directory=report_dir))
 
     delta_ci = result["delta_ci"]
     rr_ci = result["relative_risk_ci"]
