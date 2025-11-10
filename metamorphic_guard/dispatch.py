@@ -98,8 +98,9 @@ def ensure_dispatcher(
         return QueueDispatcher(workers, queue_config)
 
     plugin_registry = dispatcher_plugins()
-    if name in plugin_registry:
-        factory = plugin_registry[name]
+    definition = plugin_registry.get(name)
+    if definition is not None:
+        factory = definition.factory
         instance = factory(workers=workers, config=queue_config)
         if not isinstance(instance, Dispatcher):
             raise TypeError(f"Dispatcher plugin '{name}' must return a Dispatcher instance.")

@@ -1,0 +1,56 @@
+{"__inputs": [],
+ "__elements": [],
+ "__requires": [
+  {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "9.0.0"},
+  {"type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "2.0.0"}
+ ],
+ "annotations": {"list": []},
+ "editable": true,
+ "gnetId": null,
+ "graphTooltip": 0,
+ "id": null,
+ "iteration": 1650000000000,
+ "links": [],
+ "panels": [
+  {
+   "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+   "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+   "id": 1,
+   "targets": [
+    {
+     "expr": "sum by (role, status) (metamorphic_cases_total)",
+     "legendFormat": "{{role}}.{{status}}",
+     "refId": "A"
+    }
+   ],
+   "title": "Evaluation Cases",
+   "type": "timeseries"
+  },
+  {
+   "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+   "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+   "id": 2,
+   "targets": [
+    {
+     "expr": "sum by (status) (rate(metamorphic_cases_total[5m]))",
+     "legendFormat": "{{status}}",
+     "refId": "A"
+    }
+   ],
+   "title": "Case Throughput (5m rate)",
+   "type": "timeseries"
+  }
+ ],
+ "refresh": "30s",
+ "schemaVersion": 36,
+ "style": "dark",
+ "tags": ["metamorphic-guard"],
+ "templating": {"list": []},
+ "time": {"from": "now-6h", "to": "now"},
+ "timepicker": {},
+ "timezone": "", 
+ "title": "Metamorphic Guard Overview",
+ "uid": "metamorphic-guard-overview",
+ "version": 1
+}
+

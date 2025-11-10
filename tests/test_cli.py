@@ -97,6 +97,7 @@ def solve(L, k):
                 '--executor-config', '{}',
                 '--export-violations', str(Path(report_dir) / "violations.json"),
                 '--html-report', str(Path(report_dir) / "report.html"),
+                '--policy-version', 'test-policy',
             ])
 
             # Should succeed (exit code 0 for acceptance)
@@ -114,6 +115,8 @@ def solve(L, k):
             assert "environment" in report_data
             assert "relative_risk" in report_data
             assert "relative_risk_ci" in report_data
+            assert report_data["config"].get("policy_version") == "test-policy"
+            assert report_data["config"].get("sandbox_plugins") is False
             violations_file = Path(report_dir) / "violations.json"
             assert violations_file.exists()
             violations_payload = json.loads(violations_file.read_text())
@@ -124,10 +127,165 @@ def solve(L, k):
             assert html_report_path.exists()
             html_content = html_report_path.read_text()
             assert "<html" in html_content.lower()
+            assert "chart.umd.min.js" in html_content
+            assert "pass-rate-chart" in html_content
 
     finally:
         os.unlink(baseline_file)
         os.unlink(candidate_file)
+
+
+def test_cli_log_json_and_artifact_flags(tmp_path):
+    runner = CliRunner()
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(
+            """
+def solve(L, k):
+    if not L:
+        return []
+    return sorted(L, reverse=True)[: min(len(L), k)]
+"""
+        )
+        baseline = f.name
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(
+            """
+def solve(L, k):
+    return sorted(L, reverse=True)[: min(len(L), k)]
+"""
+        )
+        candidate = f.name
+
+    try:
+        result = runner.invoke(
+            main,
+            [
+                "--task",
+                "top_k",
+                "--baseline",
+                baseline,
+                "--candidate",
+                candidate,
+                "--n",
+                "6",
+                "--improve-delta",
+                "0.0",
+                "--report-dir",
+                str(tmp_path),
+                "--log-json",
+                "--no-metrics",
+                "--failed-artifact-limit",
+                "1",
+                "--sandbox-plugins",
+            ],
+        )
+
+        assert result.exit_code == 0
+    finally:
+        os.unlink(baseline)
+        os.unlink(candidate)
+
+
+def test_cli_log_file_output(tmp_path):
+    runner = CliRunner()
+
+    baseline = tmp_path / "baseline.py"
+    candidate = tmp_path / "candidate.py"
+    baseline.write_text(
+        """
+def solve(L, k):
+    return sorted(L)[: min(len(L), k)]
+""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """
+def solve(L, k):
+    return sorted(L, reverse=True)[: min(len(L), k)]
+""",
+        encoding="utf-8",
+    )
+
+    log_path = tmp_path / "logs" / "run.jsonl"
+    report_dir = tmp_path / "reports"
+
+    result = runner.invoke(
+        main,
+        [
+            "--task",
+            "top_k",
+            "--baseline",
+            str(baseline),
+            "--candidate",
+            str(candidate),
+            "--n",
+            "4",
+            "--improve-delta",
+            "0.0",
+            "--report-dir",
+            str(report_dir),
+            "--log-file",
+            str(log_path),
+            "--no-metrics",
+        ],
+    )
+
+    assert result.exit_code in (0, 1)
+    assert log_path.exists()
+    entries = [line for line in log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert entries, "Expected structured log entries in log file"
+    assert any("\"event\":" in line for line in entries)
+
+
+def test_cli_init_interactive(tmp_path):
+    runner = CliRunner()
+    config_path = tmp_path / "metaguard.toml"
+
+    user_input = """custom_task
+baseline.py
+candidate.py
+y
+latency,success_rate
+"""
+
+    result = runner.invoke(
+        main,
+        ["init", "--path", str(config_path), "--interactive"],
+        input=user_input,
+    )
+
+    assert result.exit_code == 0
+    content = config_path.read_text()
+    assert 'task = "custom_task"' in content
+    assert 'baseline = "baseline.py"' in content
+    assert 'candidate = "candidate.py"' in content
+    assert 'monitors = ["latency", "success_rate"]' in content
+    assert 'dispatcher = "queue"' in content  # distributed selected
+
+
+def test_cli_scaffold_plugin_monitor(tmp_path):
+    runner = CliRunner()
+    target = tmp_path / "my_monitor.py"
+
+    result = runner.invoke(
+        main,
+        [
+            "scaffold-plugin",
+            "--name",
+            "MyMonitor",
+            "--kind",
+            "monitor",
+            "--path",
+            str(target),
+        ],
+    )
+
+    assert result.exit_code == 0
+    text = target.read_text()
+    assert "class MyMonitor" in text
+    assert "def record" in text
 
 
 def test_cli_config_file(tmp_path):
@@ -151,6 +309,8 @@ def test_cli_config_file(tmp_path):
             "n = 8",
             "seed = 99",
             "improve_delta = 0.0",
+            "policy_version = \"policy-v1\"",
+            "sandbox_plugins = true",
         ]),
         encoding="utf-8",
     )
@@ -169,9 +329,30 @@ def test_cli_config_file(tmp_path):
             report_data = json.loads(report_path.read_text())
             assert report_data["n"] == 8
             assert report_data["seed"] == 99
+            assert report_data["config"].get("sandbox_plugins") is True
+            assert report_data["config"].get("policy_version") == "policy-v1"
     finally:
         os.unlink(baseline_file)
         os.unlink(candidate_file)
+
+
+def test_cli_config_validation_error(tmp_path):
+    runner = CliRunner()
+
+    config_path = tmp_path / "bad.toml"
+    config_path.write_text(
+        "\n".join([
+            'task = "top_k"',
+            'baseline = "baseline.py"',
+            'candidate = "candidate.py"',
+            'n = 0',
+        ]),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(main, ['--config', str(config_path)])
+    assert result.exit_code != 0
+    assert "n" in result.output.lower()
 
 
 def test_cli_config_override(tmp_path):

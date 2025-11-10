@@ -64,6 +64,8 @@ def solve(x):
         result = run_in_sandbox(test_file, "solve", (42,), timeout_s=0.1, mem_mb=100)
         
         assert result["success"] is False
+        assert result.get("error_type") == "timeout"
+        assert result.get("error_code") == "SANDBOX_TIMEOUT"
         # Check for timeout indicators in error or stderr
         error_msg = (result["error"] or "").lower()
         stderr_msg = (result["stderr"] or "").lower()
@@ -211,3 +213,25 @@ def test_sandbox_custom_executor(monkeypatch):
     finally:
         monkeypatch.delenv("METAMORPHIC_GUARD_EXECUTOR", raising=False)
         monkeypatch.delenv("METAMORPHIC_GUARD_EXECUTOR_CONFIG", raising=False)
+
+
+def test_sandbox_secret_redaction(monkeypatch):
+    monkeypatch.setenv("METAMORPHIC_GUARD_REDACT", r"(?i)password\s*=\s*\w+")
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(
+            """
+def solve():
+    return "password=abc123"
+"""
+        )
+        test_file = f.name
+
+    try:
+        result = run_in_sandbox(test_file, "solve", tuple(), timeout_s=1.0, mem_mb=64)
+        assert result["success"] is True
+        assert result["result"] == "[REDACTED]"
+        assert "password" not in (result["stdout"] or "")
+    finally:
+        os.unlink(test_file)
+        monkeypatch.delenv("METAMORPHIC_GUARD_REDACT", raising=False)

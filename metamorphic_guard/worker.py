@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 import traceback
+import uuid
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import click
@@ -12,10 +15,10 @@ from .dispatch_queue import (
     RedisQueueAdapter,
     QueueAdapter,
     _Result,
-    _decode_payload,
+    _decode_args,
 )
 from .sandbox import run_in_sandbox
-from .observability import log_event
+from .observability import add_log_context, close_logging, configure_logging, configure_metrics, log_event
 
 
 def _create_adapter(backend: str, config: Optional[Dict[str, Any]]) -> QueueAdapter:
@@ -45,12 +48,32 @@ def _create_adapter(backend: str, config: Optional[Dict[str, Any]]) -> QueueAdap
 @click.option("--poll-interval", type=float, default=1.0, show_default=True, help="Poll interval in seconds.")
 @click.option("--default-timeout-s", type=float, default=2.0, show_default=True, help="Fallback timeout per task.")
 @click.option("--default-mem-mb", type=int, default=512, show_default=True, help="Fallback memory limit per task.")
+@click.option(
+    "--log-file",
+    type=click.Path(dir_okay=False, writable=True, path_type=Path),
+    default=None,
+    help="Append structured JSON logs to the specified file.",
+)
+@click.option("--log-json/--no-log-json", default=None, help="Emit structured JSON logs to stdout.")
+@click.option(
+    "--metrics/--no-metrics",
+    "metrics_enabled",
+    default=None,
+    help="Toggle Prometheus metrics collection for this worker.",
+)
+@click.option("--metrics-port", type=int, default=None, help="Expose Prometheus metrics on the provided port.")
+@click.option("--metrics-host", type=str, default="0.0.0.0", show_default=True, help="Bind address for metrics server.")
 def main(
     backend: str,
     queue_config: Optional[str],
     poll_interval: float,
     default_timeout_s: float,
     default_mem_mb: int,
+    log_file: Optional[Path],
+    log_json: Optional[bool],
+    metrics_enabled: Optional[bool],
+    metrics_port: Optional[int],
+    metrics_host: str,
 ) -> None:
     """Run the Metamorphic Guard worker loop."""
     try:
@@ -60,12 +83,34 @@ def main(
     except Exception as exc:
         raise click.ClickException(f"Invalid queue-config: {exc}") from exc
 
+    enable_logging = log_json if log_json is not None else (True if log_file else None)
+    configure_logging(enable_logging, path=log_file)
+
+    if metrics_enabled is not None or metrics_port is not None:
+        try:
+            configure_metrics(
+                enabled=(metrics_enabled if metrics_enabled is not None else True),
+                port=metrics_port,
+                host=metrics_host,
+            )
+        except RuntimeError as exc:
+            raise click.ClickException(str(exc)) from exc
+
     adapter = _create_adapter(backend, config)
-    if isinstance(adapter, InMemoryQueueAdapter):
-        raise click.ClickException(
-            "The in-memory backend only supports in-process execution. "
-            "Use '--backend redis' for distributed workers."
-        )
+    worker_id = str(uuid.uuid4())
+    adapter.register_worker(worker_id)
+    add_log_context(command="worker", worker_id=worker_id, backend=backend)
+
+    heartbeat_interval = float(config.get("heartbeat_interval", 10.0))
+    stop_event = threading.Event()
+
+    def heartbeat_loop() -> None:
+        while not stop_event.is_set():
+            adapter.register_worker(worker_id)
+            stop_event.wait(heartbeat_interval)
+
+    hb_thread = threading.Thread(target=heartbeat_loop, daemon=True)
+    hb_thread.start()
 
     click.echo(
         f"Metamorphic Guard worker started (backend={backend}). Press Ctrl+C to stop.",
@@ -74,7 +119,7 @@ def main(
 
     try:
         while True:
-            task = adapter.consume_task(timeout=poll_interval)
+            task = adapter.consume_task(worker_id, timeout=poll_interval)
             if task is None:
                 continue
             if task.job_id == "__shutdown__":
@@ -99,7 +144,7 @@ def main(
             if executor_conf is not None and not isinstance(executor_conf, dict):
                 raise ValueError("executor_config must be a JSON object.")
 
-            args_list = _decode_payload(task.payload, compress=task.compressed)
+            args_list = _decode_args(task.payload, compress=task.compressed)
             for case_index, args in zip(task.case_indices, args_list):
                 log_event(
                     "worker_task_start",
@@ -134,6 +179,7 @@ def main(
                 adapter.publish_result(
                     _Result(
                         job_id=task.job_id,
+                        task_id=task.task_id,
                         case_index=case_index,
                         role=task.role,
                         result=result,
@@ -149,7 +195,10 @@ def main(
     except KeyboardInterrupt:  # pragma: no cover - user initiated
         click.echo("Worker interrupted. Exiting.", err=True)
     finally:
+        stop_event.set()
+        hb_thread.join(timeout=heartbeat_interval)
         adapter.signal_shutdown()
+        close_logging()
 
 
 if __name__ == "__main__":

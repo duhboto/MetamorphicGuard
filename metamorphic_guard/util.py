@@ -8,7 +8,7 @@ import json
 import os
 import platform
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
@@ -206,7 +206,14 @@ def _discover_project_root(start: Path) -> Path | None:
     return None
 
 
-def write_failed_artifacts(result: dict, *, directory: str | Path | None = None) -> Optional[Path]:
+def write_failed_artifacts(
+    result: dict,
+    *,
+    directory: str | Path | None = None,
+    limit: Optional[int] = None,
+    ttl_days: Optional[int] = None,
+    run_id: Optional[str] = None,
+) -> Optional[Path]:
     """Persist failed case information for later diagnostics."""
     artifact_dir = directory or os.getenv("METAMORPHIC_GUARD_FAILED_DIR")
     if artifact_dir is None:
@@ -216,14 +223,41 @@ def write_failed_artifacts(result: dict, *, directory: str | Path | None = None)
         artifact_dir = project_root / "reports" / "failed_cases"
     path = Path(artifact_dir)
     path.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"failed_{result.get('task', 'task')}_{timestamp}.json"
+    now = datetime.now()
+    timestamp = now.strftime("%Y%m%d_%H%M%S")
+    prefix = run_id or f"failed_{result.get('task', 'task')}"
+    filename = f"{prefix}_{timestamp}.json"
     payload = {
         "task": result.get("task"),
         "baseline": result.get("baseline", {}),
         "candidate": result.get("candidate", {}),
         "config": result.get("config", {}),
+        "job_metadata": result.get("job_metadata", {}),
+        "run_id": run_id,
     }
     target = path / filename
     target.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    _prune_failed_artifacts(path, limit=limit, ttl_days=ttl_days, now=now)
     return target
+
+
+def _prune_failed_artifacts(
+    directory: Path,
+    *,
+    limit: Optional[int],
+    ttl_days: Optional[int],
+    now: datetime,
+) -> None:
+    files = sorted(directory.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+    if ttl_days is not None and ttl_days >= 0:
+        cutoff = now - timedelta(days=ttl_days)
+        for file_path in list(files):
+            mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
+            if mtime < cutoff:
+                file_path.unlink(missing_ok=True)
+                files.remove(file_path)
+
+    if limit is not None and limit > 0 and len(files) > limit:
+        for file_path in files[limit:]:
+            file_path.unlink(missing_ok=True)

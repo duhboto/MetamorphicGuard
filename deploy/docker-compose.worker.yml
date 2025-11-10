@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    command:
+      - redis-server
+      - "--appendonly"
+      - "no"
+    ports:
+      - "6379:6379"
+
+  worker:
+    image: python:3.11-slim
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      - PYTHONUNBUFFERED=1
+      - METAMORPHIC_GUARD_EXECUTOR=docker
+      - METAMORPHIC_GUARD_EXECUTOR_CONFIG={"image":"python:3.11-slim","memory_mb":512,"network":"none"}
+    volumes:
+      - ../:/workspace:ro
+    working_dir: /workspace
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        pip install . && \
+        metamorphic-guard-worker \
+          --backend redis \
+          --queue-config '{"url":"redis://redis:6379/0","heartbeat_interval":5}'
+    depends_on:
+      - redis
+

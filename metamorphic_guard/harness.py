@@ -2,11 +2,14 @@
 Test harness for running evaluations and computing bootstrap confidence intervals.
 """
 
+from __future__ import annotations
+
 import hashlib
 import math
 import random
+import uuid
 from statistics import NormalDist
-from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .sandbox import run_in_sandbox
 from .specs import Spec, get_task
@@ -19,7 +22,7 @@ from .util import (
 )
 from .dispatch import Dispatcher, ensure_dispatcher
 from .monitoring import Monitor, MonitorContext
-from .observability import increment_metric, log_event
+from .observability import add_log_context, increment_metric, log_event
 
 
 def run_eval(
@@ -42,6 +45,9 @@ def run_eval(
     dispatcher: Dispatcher | str | None = None,
     queue_config: Dict[str, Any] | None = None,
     monitors: Sequence[Monitor] | None = None,
+    failed_artifact_limit: Optional[int] = None,
+    failed_artifact_ttl_days: Optional[int] = None,
+    policy_version: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Run evaluation comparing baseline and candidate implementations.
@@ -60,6 +66,8 @@ def run_eval(
         for monitor in monitor_objs:
             monitor.start(context)
 
+    run_id = f"eval-{uuid.uuid4().hex}"
+    add_log_context(run_id=run_id)
     log_event(
         "run_eval_start",
         task=task_name,
@@ -207,6 +215,9 @@ def run_eval(
         "environment": get_environment_fingerprint(),
         "job_metadata": collect_job_metadata(),
     }
+    result["job_metadata"]["run_id"] = run_id
+    if policy_version is not None:
+        result["config"]["policy_version"] = policy_version
 
     if monitor_objs:
         result["config"]["monitors"] = [monitor.identifier() for monitor in monitor_objs]
@@ -217,9 +228,10 @@ def run_eval(
     log_event(
         "run_eval_complete",
         task=task_name,
-        decision=result.get("decision"),
         candidate_passes=result["candidate"]["passes"],
         candidate_total=result["candidate"]["total"],
+        baseline_passes=result["baseline"]["passes"],
+        baseline_total=result["baseline"]["total"],
         delta=result["delta_pass_rate"],
     )
 
@@ -229,7 +241,12 @@ def run_eval(
         or result["candidate"].get("prop_violations")
         or result["candidate"].get("mr_violations")
     ):
-        write_failed_artifacts(result)
+        write_failed_artifacts(
+            result,
+            limit=failed_artifact_limit,
+            ttl_days=failed_artifact_ttl_days,
+            run_id=run_id,
+        )
 
     return result
 

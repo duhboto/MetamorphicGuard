@@ -3,9 +3,12 @@ from __future__ import annotations
 import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, Sequence, List
+import multiprocessing as mp
+import queue
+from typing import Any, Dict, Sequence, List, DefaultDict, Callable
+from collections import defaultdict
 
-from .plugins import monitor_plugins
+from .plugins import PluginDefinition, monitor_plugins
 
 
 @dataclass(frozen=True)
@@ -214,24 +217,176 @@ class TrendMonitor(Monitor):
         }
 
 
-def resolve_monitors(specs: Sequence[str]) -> List[Monitor]:
+class FairnessGapMonitor(Monitor):
+    """Compare acceptance rates across sensitive groups and flag gaps."""
+
+    def __init__(self, max_gap: float = 0.05, field: str = "group") -> None:
+        super().__init__()
+        self.max_gap = max(0.0, float(max_gap))
+        self.field = field
+        self._lock = threading.Lock()
+        self._counts: Dict[str, DefaultDict[str, Dict[str, int]]] = {
+            "baseline": defaultdict(lambda: {"success": 0, "total": 0}),
+            "candidate": defaultdict(lambda: {"success": 0, "total": 0}),
+        }
+
+    def record(self, record: MonitorRecord) -> None:
+        group = record.result.get(self.field)
+        if group is None:
+            return
+        with self._lock:
+            bucket = self._counts.setdefault(record.role, defaultdict(lambda: {"success": 0, "total": 0}))
+            stats = bucket[group]
+            stats["total"] += 1
+            if record.success:
+                stats["success"] += 1
+
+    def _rates(self, data: DefaultDict[str, Dict[str, int]]) -> Dict[str, float]:
+        rates: Dict[str, float] = {}
+        for group, stats in data.items():
+            total = stats["total"]
+            if total:
+                rates[group] = stats["success"] / total
+        return rates
+
+    def finalize(self) -> Dict[str, Any]:
+        alerts: List[Dict[str, Any]] = []
+        baseline_rates = self._rates(self._counts.get("baseline", defaultdict(dict)))
+        candidate_rates = self._rates(self._counts.get("candidate", defaultdict(dict)))
+        combined_groups = set(baseline_rates) | set(candidate_rates)
+
+        gaps: Dict[str, Dict[str, float]] = {}
+        max_gap_detected = 0.0
+        for group in combined_groups:
+            base_rate = baseline_rates.get(group)
+            cand_rate = candidate_rates.get(group)
+            entry: Dict[str, float] = {}
+            if base_rate is not None:
+                entry["baseline_rate"] = base_rate
+            if cand_rate is not None:
+                entry["candidate_rate"] = cand_rate
+            if base_rate is not None and cand_rate is not None:
+                gap = abs(base_rate - cand_rate)
+                entry["gap"] = gap
+                max_gap_detected = max(max_gap_detected, gap)
+                if gap > self.max_gap:
+                    alerts.append(
+                        {
+                            "type": "fairness_gap",
+                            "group": group,
+                            "gap": gap,
+                            "threshold": self.max_gap,
+                            "baseline_rate": base_rate,
+                            "candidate_rate": cand_rate,
+                        }
+                    )
+            gaps[group] = entry
+
+        return {
+            "id": self.identifier(),
+            "type": "fairness_gap",
+            "field": self.field,
+            "summary": {
+                "baseline": baseline_rates,
+                "candidate": candidate_rates,
+                "max_gap": max_gap_detected,
+                "groups": gaps,
+            },
+            "alerts": alerts,
+        }
+
+
+class ResourceUsageMonitor(Monitor):
+    """Track resource consumption metrics surfaced by sandbox results."""
+
+    def __init__(self, metric: str = "cpu_ms", alert_ratio: float = 1.5) -> None:
+        super().__init__()
+        self.metric = metric
+        self.alert_ratio = max(0.0, float(alert_ratio))
+        self._lock = threading.Lock()
+        self._samples: Dict[str, List[float]] = {"baseline": [], "candidate": []}
+
+    def record(self, record: MonitorRecord) -> None:
+        usage = None
+        metrics = record.result.get("resource_usage")
+        if isinstance(metrics, dict) and self.metric in metrics:
+            usage = metrics[self.metric]
+        elif self.metric in record.result:
+            usage = record.result[self.metric]
+        if usage is None:
+            return
+        with self._lock:
+            self._samples.setdefault(record.role, []).append(float(usage))
+
+    def finalize(self) -> Dict[str, Any]:
+        summary: Dict[str, Dict[str, float]] = {}
+        for role, values in self._samples.items():
+            if values:
+                mean = sum(values) / len(values)
+                summary[role] = {"count": len(values), "mean": mean}
+            else:
+                summary[role] = {"count": 0, "mean": None}
+
+        alerts: List[Dict[str, Any]] = []
+        baseline_mean = summary.get("baseline", {}).get("mean")
+        candidate_mean = summary.get("candidate", {}).get("mean")
+        if (
+            baseline_mean is not None
+            and baseline_mean > 0
+            and candidate_mean is not None
+            and candidate_mean > baseline_mean * self.alert_ratio
+        ):
+            alerts.append(
+                {
+                    "type": "resource_regression",
+                    "metric": self.metric,
+                    "baseline_mean": baseline_mean,
+                    "candidate_mean": candidate_mean,
+                    "ratio": candidate_mean / baseline_mean,
+                    "threshold": self.alert_ratio,
+                }
+            )
+
+        return {
+            "id": self.identifier(),
+            "type": "resource_usage",
+            "metric": self.metric,
+            "summary": summary,
+            "alerts": alerts,
+        }
+
+
+def resolve_monitors(specs: Sequence[str], *, sandbox_plugins: bool = False) -> List[Monitor]:
     """Instantiate monitors based on CLI-style specifications."""
 
-    registry = {
+    builtin_registry = {
         "latency": LatencyMonitor,
         "success_rate": SuccessRateMonitor,
         "trend": TrendMonitor,
+        "fairness": FairnessGapMonitor,
+        "fairness_gap": FairnessGapMonitor,
+        "resource": ResourceUsageMonitor,
+        "resource_usage": ResourceUsageMonitor,
     }
-    registry.update(monitor_plugins())
+
+    plugin_registry = monitor_plugins()
 
     monitors: List[Monitor] = []
     for spec in specs:
         name, params = _parse_monitor_spec(spec)
-        factory = registry.get(name)
-        if factory is None:
-            raise ValueError(f"Unknown monitor '{name}'. Available: {list(registry.keys())}")
-        monitor = factory(**params)
+        factory = builtin_registry.get(name)
+        if factory is not None:
+            monitors.append(factory(**params))
+            continue
+
+        definition = plugin_registry.get(name)
+        if definition is None:
+            available = sorted(set(list(builtin_registry.keys()) + list(plugin_registry.keys())))
+            raise ValueError(f"Unknown monitor '{name}'. Available: {available}")
+
+        monitor = _instantiate_plugin_monitor(definition, params, sandbox_plugins)
         monitors.append(monitor)
+
     return monitors
 
 
@@ -258,4 +413,139 @@ def _convert_value(value: str) -> Any:
     if value.lower() in {"true", "false"}:
         return value.lower() == "true"
     return value
+
+
+def _instantiate_plugin_monitor(
+    definition: PluginDefinition,
+    params: Dict[str, Any],
+    sandbox_plugins: bool,
+) -> Monitor:
+    should_sandbox = sandbox_plugins or definition.metadata.sandbox
+    factory = definition.factory
+
+    if should_sandbox:
+        return SandboxedMonitorProxy(definition, params)
+
+    instance = factory(**params)
+    if not isinstance(instance, Monitor):
+        raise TypeError(
+            f"Monitor plugin '{definition.name}' must return a Monitor instance, got {type(instance)!r}."
+        )
+    return instance
+
+
+class SandboxedMonitorProxy(Monitor):
+    """Proxy that isolates plugin monitor logic in a separate process."""
+
+    def __init__(self, definition: PluginDefinition, params: Dict[str, Any]) -> None:
+        super().__init__()
+        self._definition = definition
+        self._ctx = mp.get_context("spawn")
+        self._requests: mp.Queue = self._ctx.Queue()
+        self._responses: mp.Queue = self._ctx.Queue()
+        self._process = self._ctx.Process(
+            target=_sandboxed_monitor_worker,
+            args=(definition.factory, params, self._requests, self._responses),
+            daemon=True,
+        )
+        self._process.start()
+        status, payload = self._responses.get()
+        if status != "ok":
+            self._cleanup(force=True)
+            raise RuntimeError(
+                f"Failed to initialise monitor plugin '{definition.name}': {payload}"
+            )
+        self._identifier_override = payload or definition.metadata.name or definition.name
+
+    def identifier(self) -> str:
+        return self._identifier_override
+
+    def start(self, context: MonitorContext) -> None:
+        super().start(context)
+        self._send("start", context)
+
+    def record(self, record: MonitorRecord) -> None:
+        self._send("record", record)
+
+    def finalize(self) -> Dict[str, Any]:
+        status, payload = self._send("finalize", None, expect_response=True)
+        if status != "ok":
+            raise RuntimeError(f"Monitor plugin '{self._definition.name}' failed to finalize: {payload}")
+        self._cleanup()
+        return payload or {}
+
+    def _send(self, command: str, payload: Any, *, expect_response: bool = False) -> Any:
+        self._requests.put((command, payload))
+        status, response = self._responses.get()
+        if status != "ok":
+            self._cleanup(force=True)
+            raise RuntimeError(
+                f"Monitor plugin '{self._definition.name}' raised an error during '{command}': {response}"
+            )
+        if expect_response:
+            return status, response
+        return None
+
+    def _cleanup(self, force: bool = False) -> None:
+        if getattr(self, "_process", None) is None:
+            return
+
+        if self._process.is_alive() and not force:
+            self._requests.put(("stop", None))
+            try:
+                self._responses.get(timeout=0.5)
+            except queue.Empty:  # pragma: no cover - defensive
+                pass
+
+        if self._process.is_alive():
+            self._process.join(timeout=0.5)
+        if self._process.is_alive():  # pragma: no cover - defensive
+            self._process.kill()
+        self._process = None
+
+    def __del__(self) -> None:  # pragma: no cover - best effort cleanup
+        try:
+            self._cleanup()
+        except Exception:
+            return
+
+
+def _sandboxed_monitor_worker(
+    factory: Callable[..., Any],
+    params: Dict[str, Any],
+    requests: mp.Queue,
+    responses: mp.Queue,
+) -> None:
+    try:
+        monitor_obj = factory(**params)
+        if not isinstance(monitor_obj, Monitor):
+            raise TypeError(
+                f"Plugin factory returned {type(monitor_obj)!r}, expected Monitor."
+            )
+        identifier = monitor_obj.identifier()
+    except Exception as exc:  # pragma: no cover - defensive
+        responses.put(("error", repr(exc)))
+        return
+
+    responses.put(("ok", identifier))
+
+    while True:
+        command, payload = requests.get()
+        try:
+            if command == "start":
+                monitor_obj.start(payload)
+                responses.put(("ok", None))
+            elif command == "record":
+                monitor_obj.record(payload)
+                responses.put(("ok", None))
+            elif command == "finalize":
+                result = monitor_obj.finalize()
+                responses.put(("ok", result))
+            elif command == "stop":
+                responses.put(("ok", None))
+                break
+            else:  # pragma: no cover - defensive
+                responses.put(("error", f"Unknown command '{command}'"))
+        except Exception as exc:  # pragma: no cover - defensive
+            responses.put(("error", repr(exc)))
 

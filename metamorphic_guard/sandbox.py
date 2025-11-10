@@ -27,6 +27,8 @@ _CACHE_ROOT.mkdir(parents=True, exist_ok=True)
 _SNAPSHOT_CACHE: Dict[str, tuple[Path, bool]] = {}
 _SNAPSHOT_LOCK = threading.Lock()
 
+from .redaction import get_redactor
+
 def run_in_sandbox(
     file_path: str,
     func_name: str,
@@ -53,7 +55,7 @@ def run_in_sandbox(
     config = executor_config if executor_config is not None else _load_executor_config()
 
     if backend == "local":
-        return _run_local_sandbox(
+        raw_result = _run_local_sandbox(
             file_path,
             func_name,
             args,
@@ -61,8 +63,9 @@ def run_in_sandbox(
             mem_mb,
             config=config,
         )
+        return _finalize_result(raw_result, config)
     if backend == "docker":
-        return _run_docker_sandbox(
+        raw_result = _run_docker_sandbox(
             file_path,
             func_name,
             args,
@@ -70,13 +73,15 @@ def run_in_sandbox(
             mem_mb,
             config=config,
         )
+        return _finalize_result(raw_result, config)
 
     executor_callable = _load_executor_callable(backend)
     call_kwargs: Dict[str, Any] = {}
     if config is not None:
         call_kwargs["config"] = config
 
-    return executor_callable(file_path, func_name, args, timeout_s, mem_mb, **call_kwargs)
+    raw_result = executor_callable(file_path, func_name, args, timeout_s, mem_mb, **call_kwargs)
+    return _finalize_result(raw_result, config)
 
 
 def _run_local_sandbox(
@@ -94,7 +99,7 @@ def _run_local_sandbox(
     Returns execution metadata along with either the parsed result (on success) or
     structured error information (on failure).
     """
-    del config
+    config = config or {}
 
     start_time = time.time()
 
@@ -146,6 +151,8 @@ def _run_local_sandbox(
                     stdout="",
                     stderr=f"Process timed out after {timeout_s}s",
                     error="Timeout",
+                    error_type="timeout",
+                    error_code="SANDBOX_TIMEOUT",
                 )
 
             duration_ms = (time.time() - start_time) * 1000
@@ -157,6 +164,9 @@ def _run_local_sandbox(
                     stdout=stdout,
                     stderr=stderr,
                     error=f"Process exited with code {process.returncode}",
+                    error_type="process_exit",
+                    error_code="SANDBOX_EXIT_CODE",
+                    diagnostics={"returncode": process.returncode},
                 )
 
             parsed = _parse_success(stdout)
@@ -167,6 +177,8 @@ def _run_local_sandbox(
                     stdout=stdout,
                     stderr=stderr,
                     error="No success marker found in output",
+                    error_type="output_parse",
+                    error_code="SANDBOX_PARSE_ERROR",
                 )
 
             return _result(
@@ -185,6 +197,8 @@ def _run_local_sandbox(
                 stdout="",
                 stderr="",
                 error=f"Execution failed: {exc}",
+                error_type="internal_error",
+                error_code="SANDBOX_UNHANDLED_EXCEPTION",
             )
 
 
@@ -304,6 +318,8 @@ def _run_docker_sandbox(
                 stdout="",
                 stderr="",
                 error=f"Process timed out after {timeout_s}s",
+                error_type="timeout",
+                error_code="SANDBOX_TIMEOUT",
             )
         except FileNotFoundError:
             duration_ms = (time.time() - start_time) * 1000
@@ -313,6 +329,8 @@ def _run_docker_sandbox(
                 stdout="",
                 stderr="",
                 error="Docker executable not found",
+                error_type="executor_missing",
+                error_code="SANDBOX_DOCKER_NOT_FOUND",
             )
 
         duration_ms = (time.time() - start_time) * 1000
@@ -324,6 +342,9 @@ def _run_docker_sandbox(
                 stdout=completed.stdout,
                 stderr=completed.stderr,
                 error=f"Process exited with code {completed.returncode}",
+                error_type="process_exit",
+                error_code="SANDBOX_EXIT_CODE",
+                diagnostics={"returncode": completed.returncode},
             )
 
         parsed = _parse_success(completed.stdout)
@@ -334,6 +355,8 @@ def _run_docker_sandbox(
                 stdout=completed.stdout,
                 stderr=completed.stderr,
                 error="No success marker found in output",
+                error_type="output_parse",
+                error_code="SANDBOX_PARSE_ERROR",
             )
 
         return _result(
@@ -785,9 +808,12 @@ def _result(
     stderr: str,
     error: Optional[str] = None,
     result: Optional[Any] = None,
+    error_type: Optional[str] = None,
+    error_code: Optional[str] = None,
+    diagnostics: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Helper for constructing run_in_sandbox response payloads."""
-    return {
+    payload: Dict[str, Any] = {
         "success": success,
         "result": result,
         "stdout": stdout,
@@ -795,3 +821,17 @@ def _result(
         "duration_ms": duration_ms,
         "error": error,
     }
+    if error_type:
+        payload["error_type"] = error_type
+    if error_code:
+        payload["error_code"] = error_code
+    if diagnostics:
+        payload["diagnostics"] = diagnostics
+    return payload
+
+
+def _finalize_result(result: Any, config: Optional[Dict[str, Any]]) -> Any:
+    if not isinstance(result, dict):
+        return result
+    redactor = get_redactor(config if isinstance(config, dict) else None)
+    return redactor.redact(result)

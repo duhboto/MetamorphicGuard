@@ -165,6 +165,14 @@ n = 600
 seed = 1337
 executor = "docker"
 executor_config = { image = "python:3.11-slim", cpus = 2, memory_mb = 1024 }
+policy_version = "policy-2025-11-09"
+
+[metamorphic_guard.queue]
+backend = "redis"
+url = "redis://localhost:6379/0"
+
+[metamorphic_guard.alerts]
+webhooks = ["https://hooks.example.dev/metaguard"]
 ```
 
 Run with:
@@ -175,13 +183,24 @@ metamorphic-guard --config metaguard.toml --report-dir reports/
 
 CLI arguments still override config values when provided.
 
+Configuration files are validated via a Pydantic schema; malformed values (e.g.
+negative `n`, unknown dispatchers) raise actionable CLI errors before a run starts.
+The optional `policy_version` propagates into reports/metadata, making it easy to
+track changes to guard rails across deployments.
+
 ### Monitors & Alerts
 
 Monitors provide higher-order statistical invariants beyond per-test properties.
 Enable them via `--monitor latency` to capture latency distributions and flag
-regressions, or specify multiple monitors as needed. Monitor output is written
-under the `monitors` key in the JSON report and surfaced in the optional HTML
-report. Custom monitors can be supplied programmatically via the Python API.
+regressions, add `--monitor fairness` to track per-group success deltas, or
+`--monitor resource:metric=cpu_ms,alert_ratio=1.3` to watch resource budgets.
+Monitor output is written under the `monitors` key in the JSON report and
+surfaced in the optional HTML report. Combine monitors by repeating
+`--monitor …` on the CLI or programmatically via the Python API.
+
+Alerts can be pushed to downstream systems by wiring `--alert-webhook
+https://hooks.example.dev/guard`. The payload contains the flattened monitor
+alerts together with run metadata (task, decision, run_id) for correlation.
 
 ## Implementation Requirements
 
@@ -207,6 +226,8 @@ def solve(*args):
 - Native FFI (`ctypes`, `cffi`), multiprocessing forks, and user site-packages are blocked at import time
 - Timeout enforcement per test case
 - Deterministic execution with fixed seeds
+- Structured failures: sandbox responses include `error_type` / `error_code` fields (e.g., `timeout`, `process_exit`) and diagnostics for easier automation.
+- Secret redaction: configure `METAMORPHIC_GUARD_REDACT` or `executor_config.redact_patterns` to scrub sensitive values from stdout/stderr/results before they leave the sandbox. Default patterns catch common API keys and tokens.
 - Optional executors: set `--executor` / `METAMORPHIC_GUARD_EXECUTOR` to run evaluations inside Docker (`docker`) or a custom plugin (`package.module:callable`). Pass JSON tunables via `--executor-config` / `METAMORPHIC_GUARD_EXECUTOR_CONFIG` and override the Docker image with `METAMORPHIC_GUARD_DOCKER_IMAGE`.
 
 Example Docker run:
@@ -224,6 +245,8 @@ metamorphic-guard \
 > container or VM (e.g., Docker with seccomp/AppArmor or Firejail) and drop Linux
 > capabilities. The built-in guardrails reduce attack surface, but pairing them with
 > kernel isolation provides a stronger security boundary.
+
+See `deploy/docker-compose.worker.yml` for a hardened reference stack (Redis + containerised worker with read-only root filesystem and disabled privileges).
 
 ### Distributed Execution (Preview)
 
@@ -244,12 +267,23 @@ metamorphic-guard-worker --backend redis --queue-config '{"url":"redis://localho
 Workers fetch tasks, run sandboxed evaluations, and stream results back to the
 coordinator. Memory backend workers remain in-process and are best suited for tests.
 
+Adaptive queue controls:
+- `adaptive_batching` (default `true`) grows/shrinks batch sizes based on observed
+  duration and queue pressure. Override `initial_batch_size`, `max_batch_size`, or
+  `adaptive_fast_threshold_ms` / `adaptive_slow_threshold_ms` to tune behaviour.
+- `adaptive_compress` automatically avoids gzip when payloads are already tiny or
+  compression fails to win over raw JSON, cutting CPU for short test cases.
+- `inflight_factor` governs how many cases are kept in-flight (per worker) before
+  backpressure kicks in; lower it for heavyweight candidates, raise it for latency-sensitive smoke tests.
+
 ### Plugin Ecosystem
 
 Metamorphic Guard supports external extensions via Python entry points:
 
 - `metamorphic_guard.monitors`: register additional monitor factories
 - `metamorphic_guard.dispatchers`: provide custom dispatcher implementations
+- Inspect installed plugins with `metamorphic-guard plugin list` (append `--json` for machine-readable output) and view rich metadata via `metamorphic-guard plugin info <name>`.
+- Third-party packages should expose a `PLUGIN_METADATA` mapping (name, version, guard_min/guard_max, sandbox flag, etc.) so compatibility is surfaced in the registry.
 
 Example `pyproject.toml` snippet:
 
@@ -267,20 +301,38 @@ metamorphic-guard --monitor latency99
 Programmatic APIs (`metamorphic_guard.monitoring.resolve_monitors`) also pick up
 registered plugins, enabling teams to share bespoke invariants, dispatchers, and
 workflows across services.
+Pass `--sandbox-plugins` during evaluation (or set `sandbox_plugins = true` in config) to execute third-party monitors inside per-plugin subprocesses. Plugins can set `sandbox = true` in their metadata to request isolation by default.
 
 ### Observability & Artifacts
 
 - Set `METAMORPHIC_GUARD_LOG_JSON=1` to stream structured JSON logs (start/complete events,
   worker task telemetry) to stdout for ingestion by log pipelines.
+- Prefer the CLI toggles `--log-json` / `--no-log-json` and `--metrics` / `--no-metrics` for one-off runs; pair with `--metrics-port` to expose a Prometheus endpoint directly from the coordinator or worker.
+- Capture structured logs to disk with `--log-file observability/run.jsonl`; the coordinator/worker
+  will append JSON events and handle file lifecycle automatically.
 - Enable Prometheus counters by exporting `METAMORPHIC_GUARD_PROMETHEUS=1` and register the
   exposed registry (`metamorphic_guard.observability.prometheus_registry()`) with your HTTP exporter.
 - Persist failing case artifacts either by providing `METAMORPHIC_GUARD_FAILED_DIR` or letting the
   harness default to `reports/failed_cases/`; these JSON snapshots capture violations and config for debugging.
+- Retention controls: `--failed-artifact-limit` caps how many snapshots are retained and
+  `--failed-artifact-ttl-days` prunes entries older than the configured horizon.
+- Queue telemetry ships out-of-the-box: `metamorphic_queue_pending_tasks` (tasks waiting),
+  `metamorphic_queue_inflight_cases` (cases outstanding), and `metamorphic_queue_active_workers`
+  (live heartbeat count) alongside throughput counters (`*_cases_dispatched_total`, `*_cases_completed_total`,
+  `*_cases_requeued_total`).
+- A starter Grafana dashboard lives at `docs/grafana/metamorphic-guard-dashboard.json` – import it
+  into Grafana and point the Prometheus datasource at the Guard metrics endpoint for live telemetry.
+- HTML reports embed Chart.js dashboards summarising pass rates, fairness gaps, and resource usage
+  whenever the relevant monitors are enabled, making it easy to eyeball regressions without leaving the report.
 
 ### Quick Start Wizard & Cookbook
 
 - Run `metamorphic-guard init` to scaffold a `metamorphic_guard.toml` configuration (supports distributed
   queue defaults and monitor presets).
+- Prefer `metamorphic-guard init --interactive` for a guided wizard that prompts for baseline/candidate paths,
+  distributed mode, and default monitors.
+- Generate reusable plugin templates with `metamorphic-guard scaffold-plugin --kind monitor --name MyMonitor` and
+  wire them into your project via entry points.
 - Explore `docs/cookbook.md` for recipes covering distributed evaluations, advanced monitors, and CI pipelines.
 
 ## Output Format
@@ -364,47 +416,3 @@ The system generates JSON reports in `reports/report_<timestamp>.json`:
   }
 }
 ```
-
-> Set `METAMORPHIC_GUARD_REPORT_DIR=/custom/path` (or pass `directory=` to
-> `write_report`) to control where artifacts land when running outside the repo.
-
-## Adoption Policy
-
-A candidate is adopted if **all** conditions are met:
-
-1. **No Property Violations**: All hard properties must pass
-2. **No Metamorphic Relation Violations**: All relations must be satisfied
-3. **Sufficient Improvement**: Lower bound of 95% CI > improvement threshold
-4. **Minimum Pass Rate**: Candidate pass rate ≥ minimum threshold
-
-## Testing
-
-Install development dependencies first:
-
-```bash
-pip install -e .[dev]
-# or
-pip install -r requirements-dev.txt
-```
-
-Run the test suite:
-
-```bash
-pytest tests/
-```
-
-Run specific test categories:
-
-```bash
-pytest tests/test_sandbox.py    # Sandbox isolation tests
-pytest tests/test_harness.py    # Evaluation tests
-pytest tests/test_gate.py       # Adoption logic tests
-```
-
-## Contributing
-
-We welcome contributions that extend Metamorphic Guard or its companion demos.
-
-- Open issues or propose feature ideas via GitHub discussions or pull requests. Describe the use case and attach any relevant reports generated under `reports/`.
-- Run `pytest tests/` locally before submitting a PR to ensure the gate, harness, and sandbox integrations stay green.
-- Explore the reference projects for inspiration: scripts in `examples/` show minimal usage, `demo_project/src/run_demo.py` offers a scripted walkthrough, and `ranking_guard_project/` demonstrates a production-style release gate.
