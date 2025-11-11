@@ -315,8 +315,15 @@ EVALUATE_OPTIONS = [
     ),
     click.option(
         "--sandbox-plugins/--no-sandbox-plugins",
-        default=None,
-        help="Execute third-party monitors in isolated subprocesses.",
+        default=True,
+        show_default=True,
+        help="Execute third-party plugins in isolated subprocesses (default: enabled for security).",
+    ),
+    click.option(
+        "--allow-unsafe-plugins",
+        is_flag=True,
+        default=False,
+        help="Allow plugins to run without sandboxing (security risk). Equivalent to --no-sandbox-plugins.",
     ),
     click.option(
         "--log-file",
@@ -429,6 +436,7 @@ def evaluate_command(
     monitor_names: Sequence[str],
     alert_webhooks: Sequence[str],
     sandbox_plugins: Optional[bool],
+    allow_unsafe_plugins: bool,
     log_file: Optional[Path],
     log_json: Optional[bool],
     metrics_enabled: Optional[bool],
@@ -581,12 +589,18 @@ def evaluate_command(
                 click.echo(f"Error: Invalid queue config ({exc})", err=True)
                 sys.exit(1)
 
+        # Handle sandboxing: default to True, allow opt-out via --allow-unsafe-plugins
+        effective_sandbox = sandbox_plugins if sandbox_plugins is not None else True
+        if allow_unsafe_plugins:
+            effective_sandbox = False
+            click.echo("⚠️  Warning: Unsafe plugins enabled (sandboxing disabled)", err=True)
+
         monitor_objects = []
         if monitor_names:
             try:
                 monitor_objects = resolve_monitors(
                     monitor_names,
-                    sandbox_plugins=bool(sandbox_plugins),
+                    sandbox_plugins=effective_sandbox,
                 )
             except ValueError as exc:
                 click.echo(f"Error: {exc}", err=True)
@@ -684,7 +698,7 @@ def evaluate_command(
             }
 
         decision = result.get("decision", {})
-        result.setdefault("config", {})["sandbox_plugins"] = bool(sandbox_plugins)
+        result.setdefault("config", {})["sandbox_plugins"] = effective_sandbox
         stats = result.get("statistics") or {}
         if stats:
             click.echo(
@@ -773,7 +787,7 @@ def evaluate_command(
                         "decision": decision,
                         "run_id": result.get("job_metadata", {}).get("run_id"),
                         "policy_version": policy_version,
-                        "sandbox_plugins": sandbox_plugins,
+                        "sandbox_plugins": effective_sandbox,
                     },
                 )
             except Exception as exc:
@@ -822,7 +836,7 @@ def evaluate_command(
             baseline_pass_rate=result["baseline"]["pass_rate"],
             run_id=result.get("job_metadata", {}).get("run_id"),
             policy_version=policy_version,
-            sandbox_plugins=sandbox_plugins,
+            sandbox_plugins=effective_sandbox,
         )
 
         # Export trace to OpenTelemetry if enabled
