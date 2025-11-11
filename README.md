@@ -66,6 +66,8 @@ New to Metamorphic Guard? Check out our [First PR Gate Tutorial](docs/first-pr-g
 - Integrating with GitHub Actions
 - Generating reports and badges
 
+**Architecture**: See [Architecture Documentation](docs/architecture.md) for details on component interfaces, execution system, worker liveness, and signal handling.
+
 ## Reference Projects in This Repository
 
 Metamorphic Guard ships with three companion projects that demonstrate how teams can fold the library into their delivery workflows and produce auditable evidence:
