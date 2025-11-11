@@ -528,6 +528,19 @@ metamorphic-guard evaluate --task demo --baseline baseline.py --candidate candid
 
 This produces standard JUnit XML that can be consumed by Jenkins, GitHub Actions, GitLab CI, and other CI systems.
 
+#### GitHub Actions Integration
+
+Metamorphic Guard includes a ready-to-use GitHub Actions workflow template. See [GitHub Actions Documentation](docs/github-actions.md) for setup instructions.
+
+The template workflow (`.github/workflows/metamorphic-guard-template.yml`) provides:
+- Automatic evaluation on pull requests
+- Report uploads (HTML, JSON, JUnit XML)
+- PR comments with evaluation results and metrics
+- Status badge generation
+- Job failure on candidate rejection
+
+Copy the template to your repository's `.github/workflows/` directory and customize as needed.
+
 #### JSON Schema
 
 Report and configuration files conform to JSON Schemas for validation and type checking:

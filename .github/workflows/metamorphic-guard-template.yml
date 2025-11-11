@@ -1,0 +1,218 @@
+name: Metamorphic Guard Evaluation
+
+on:
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: 'Baseline implementation path'
+        required: true
+        default: 'baseline.py'
+      candidate:
+        description: 'Candidate implementation path'
+        required: true
+        default: 'candidate.py'
+      task:
+        description: 'Task name'
+        required: true
+        default: 'top_k'
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      
+      - name: Install Metamorphic Guard
+        run: |
+          pip install --upgrade pip
+          pip install metamorphic-guard
+      
+      - name: Run evaluation
+        id: evaluate
+        run: |
+          mkdir -p reports
+          
+          # Run evaluation with HTML, JSON, and JUnit reports
+          metamorphic-guard evaluate \
+            --task ${{ github.event.inputs.task || 'top_k' }} \
+            --baseline ${{ github.event.inputs.baseline || 'baseline.py' }} \
+            --candidate ${{ github.event.inputs.candidate || 'candidate.py' }} \
+            --n 400 \
+            --seed 42 \
+            --ci-method newcombe \
+            --report-dir reports \
+            --html-report reports/evaluation.html \
+            --junit-report reports/junit.xml \
+            --min-delta 0.02 \
+            --min-pass-rate 0.80 || EVAL_EXIT=$?
+          
+          # Capture exit code (0 = adopt, 1 = reject, 2 = error)
+          EVAL_EXIT=${EVAL_EXIT:-$?}
+          echo "exit_code=$EVAL_EXIT" >> $GITHUB_OUTPUT
+          
+          # Extract decision from JSON report
+          REPORT_FILE=$(ls reports/report_*.json | head -1)
+          if [ -f "$REPORT_FILE" ]; then
+            DECISION=$(python3 -c "import json; d=json.load(open('$REPORT_FILE')); print('adopt' if d.get('decision', {}).get('adopt') else 'reject')")
+            DELTA=$(python3 -c "import json; d=json.load(open('$REPORT_FILE')); print(f\"{d.get('delta_pass_rate', 0):.4f}\")")
+            DELTA_CI=$(python3 -c "import json; d=json.load(open('$REPORT_FILE')); ci=d.get('delta_ci', [0,0]); print(f\"[{ci[0]:.4f}, {ci[1]:.4f}]\")")
+            REASON=$(python3 -c "import json; d=json.load(open('$REPORT_FILE')); print(d.get('decision', {}).get('reason', 'unknown'))")
+            
+            echo "decision=$DECISION" >> $GITHUB_OUTPUT
+            echo "delta=$DELTA" >> $GITHUB_OUTPUT
+            echo "delta_ci=$DELTA_CI" >> $GITHUB_OUTPUT
+            echo "reason=$REASON" >> $GITHUB_OUTPUT
+            echo "report_file=$REPORT_FILE" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evaluation-reports
+          path: |
+            reports/*.json
+            reports/*.html
+            reports/*.xml
+          retention-days: 30
+      
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const reportFile = '${{ steps.evaluate.outputs.report_file }}';
+            let comment = '## 🔍 Metamorphic Guard Evaluation\n\n';
+            
+            const decision = '${{ steps.evaluate.outputs.decision }}';
+            const delta = '${{ steps.evaluate.outputs.delta }}';
+            const deltaCi = '${{ steps.evaluate.outputs.delta_ci }}';
+            const reason = '${{ steps.evaluate.outputs.reason }}';
+            const exitCode = '${{ steps.evaluate.outputs.exit_code }}';
+            
+            if (decision === 'adopt') {
+              comment += '✅ **Decision: ADOPT**\n\n';
+            } else {
+              comment += '❌ **Decision: REJECT**\n\n';
+            }
+            
+            comment += `- **Δ Pass Rate**: ${delta}\n`;
+            comment += `- **95% CI**: ${deltaCi}\n`;
+            comment += `- **Reason**: ${reason}\n\n`;
+            
+            if (reportFile && fs.existsSync(reportFile)) {
+              const report = JSON.parse(fs.readFileSync(reportFile, 'utf8'));
+              
+              if (report.baseline && report.candidate) {
+                comment += `### Metrics\n\n`;
+                comment += `| Metric | Baseline | Candidate |\n`;
+                comment += `|--------|----------|-----------|\n`;
+                comment += `| Pass Rate | ${report.baseline.pass_rate.toFixed(3)} | ${report.candidate.pass_rate.toFixed(3)} |\n`;
+                comment += `| Passes | ${report.baseline.passes}/${report.baseline.total} | ${report.candidate.passes}/${report.candidate.total} |\n\n`;
+              }
+              
+              if (report.relation_coverage) {
+                comment += `### Relation Coverage\n\n`;
+                const categories = report.relation_coverage.categories || {};
+                for (const [cat, stats] of Object.entries(categories)) {
+                  const passRate = stats.candidate_pass_rate;
+                  if (passRate !== null && passRate !== undefined) {
+                    comment += `- **${cat}**: ${passRate.toFixed(3)} (${stats.candidate_failures}/${stats.candidate_total} failures)\n`;
+                  }
+                }
+                comment += '\n';
+              }
+            }
+            
+            comment += `📊 [View full report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n`;
+            
+            // Find existing comment
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.data.find(c => 
+              c.user.type === 'Bot' && c.body.includes('Metamorphic Guard Evaluation')
+            );
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: comment,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment,
+              });
+            }
+      
+      - name: Generate badge
+        if: always()
+        run: |
+          mkdir -p badges
+          DECISION="${{ steps.evaluate.outputs.decision }}"
+          
+          if [ "$DECISION" = "adopt" ]; then
+            COLOR="green"
+            STATUS="passing"
+          else
+            COLOR="red"
+            STATUS="failing"
+          fi
+          
+          # Generate SVG badge (simplified version)
+          cat > badges/metamorphic-guard.svg << EOF
+          <svg xmlns="http://www.w3.org/2000/svg" width="150" height="20">
+            <linearGradient id="b" x2="0" y2="100%">
+              <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+              <stop offset="1" stop-opacity=".1"/>
+            </linearGradient>
+            <mask id="a">
+              <rect width="150" height="20" rx="3" fill="#fff"/>
+            </mask>
+            <g mask="url(#a)">
+              <path fill="#555" d="M0 0h67v20H0z"/>
+              <path fill="#${COLOR}" d="M67 0h83v20H67z"/>
+              <path fill="url(#b)" d="M0 0h150v20H0z"/>
+            </g>
+            <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+              <text x="33.5" y="15" fill="#010101" fill-opacity=".3">Metamorphic</text>
+              <text x="33.5" y="14">Metamorphic</text>
+              <text x="108.5" y="15" fill="#010101" fill-opacity=".3">${STATUS}</text>
+              <text x="108.5" y="14">${STATUS}</text>
+            </g>
+          </svg>
+          EOF
+      
+      - name: Upload badge
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: badge
+          path: badges/metamorphic-guard.svg
+          retention-days: 90
+      
+      - name: Fail job if evaluation rejected
+        if: steps.evaluate.outputs.exit_code == '1'
+        run: |
+          echo "Evaluation rejected the candidate implementation"
+          exit 1
+

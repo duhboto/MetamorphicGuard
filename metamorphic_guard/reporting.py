@@ -70,6 +70,8 @@ def render_html_report(payload: Dict[str, Any], destination: Path) -> Path:
     resource_chart = _extract_resource_chart(monitors)
     relation_block = _render_relation_coverage(payload.get("relation_coverage"))
     replay_block = _render_replay_block(payload.get("replay"))
+    policy_block = _render_policy_block(payload.get("policy"), decision)
+    coverage_chart = _build_coverage_chart(payload.get("relation_coverage"))
 
     fairness_block = (
         """
@@ -93,7 +95,7 @@ def render_html_report(payload: Dict[str, Any], destination: Path) -> Path:
         else ""
     )
 
-    chart_script = _build_chart_script(pass_chart_config, fairness_chart, resource_chart)
+    chart_script = _build_chart_script(pass_chart_config, fairness_chart, resource_chart, coverage_chart)
 
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -116,10 +118,21 @@ def render_html_report(payload: Dict[str, Any], destination: Path) -> Path:
     .monitor-alerts li {{ margin-bottom: 0.25rem; }}
     .chart-container {{ margin: 2rem 0; }}
     .chart-container canvas {{ max-width: 720px; width: 100%; height: 320px; }}
+    .policy-banner {{ 
+      padding: 1rem; 
+      margin: 1.5rem 0; 
+      border-radius: 6px; 
+      border-left: 4px solid;
+      background: #f9f9f9;
+    }}
+    .policy-banner.adopt {{ border-color: #4caf50; background: #e8f5e9; }}
+    .policy-banner.reject {{ border-color: #f44336; background: #ffebee; }}
+    .policy-banner h2 {{ margin-top: 0; }}
   </style>
 </head>
 <body>
   <h1>Metamorphic Guard Report</h1>
+  {policy_block}
   <p><strong>Task:</strong> {html.escape(str(payload.get("task", "")))}</p>
   <p><strong>Decision:</strong> {html.escape(str(decision.get("reason", "unknown")))}</p>
   <p><strong>Adopt:</strong> {html.escape(str(decision.get("adopt", False)))}</p>
@@ -149,7 +162,11 @@ def render_html_report(payload: Dict[str, Any], destination: Path) -> Path:
 
   {replay_block}
 
+  {fairness_block}
+  {resource_block}
   {relation_block}
+  
+  {('<div class="chart-container"><h2>MR Coverage by Category</h2><canvas id="coverage-chart"></canvas></div>' if coverage_chart else '')}
 
   <h2>Baseline Violations</h2>
   {_format_violations(baseline)}
@@ -591,6 +608,7 @@ def _build_chart_script(
     pass_chart: Dict[str, Any],
     fairness_chart: Dict[str, Any] | None,
     resource_chart: Dict[str, Any] | None,
+    coverage_chart: Dict[str, Any] | None,
 ) -> str:
     fairness_def = ""
     fairness_init = ""
@@ -604,6 +622,12 @@ def _build_chart_script(
         resource_def = f"const resourceChartConfig = {json.dumps(resource_chart)};"
         resource_init = "const resourceCtx = document.getElementById('resource-chart');\n    if (resourceCtx) { new Chart(resourceCtx, resourceChartConfig); }"
 
+    coverage_def = ""
+    coverage_init = ""
+    if coverage_chart:
+        coverage_def = f"const coverageChartConfig = {json.dumps(coverage_chart)};"
+        coverage_init = "const coverageCtx = document.getElementById('coverage-chart');\n    if (coverageCtx) { new Chart(coverageCtx, coverageChartConfig); }"
+
     return (
         "\n  <script src=\"https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js\"></script>\n  <script>\n    const passRateChartConfig = "
         + json.dumps(pass_chart)
@@ -612,10 +636,100 @@ def _build_chart_script(
         + ("\n    " if fairness_def else "")
         + resource_def
         + ("\n    " if resource_def else "")
+        + coverage_def
+        + ("\n    " if coverage_def else "")
         + "document.addEventListener('DOMContentLoaded', () => {\n      if (typeof Chart === 'undefined') { return; }\n      const passCtx = document.getElementById('pass-rate-chart');\n      if (passCtx) { new Chart(passCtx, passRateChartConfig); }\n      "
         + fairness_init
         + ("\n      " if fairness_init else "")
         + resource_init
+        + ("\n      " if resource_init else "")
+        + coverage_init
         + "\n    });\n  </script>\n"
     )
+
+
+def _render_policy_block(policy: Dict[str, Any] | None, decision: Dict[str, Any]) -> str:
+    """Render policy decision banner."""
+    adopt = decision.get("adopt", False)
+    reason = decision.get("reason", "unknown")
+    banner_class = "adopt" if adopt else "reject"
+    status_icon = "✅" if adopt else "❌"
+    status_text = "ADOPTED" if adopt else "REJECTED"
+    
+    policy_info = ""
+    if policy:
+        gating = policy.get("gating", {})
+        if gating:
+            policy_info = "<ul>"
+            if "min_delta" in gating:
+                policy_info += f"<li><strong>Min Δ:</strong> {gating['min_delta']}</li>"
+            if "min_pass_rate" in gating:
+                policy_info += f"<li><strong>Min Pass Rate:</strong> {gating['min_pass_rate']}</li>"
+            if "alpha" in gating:
+                policy_info += f"<li><strong>α:</strong> {gating['alpha']}</li>"
+            policy_info += "</ul>"
+    
+    return f"""
+  <div class="policy-banner {banner_class}">
+    <h2>{status_icon} Decision: {status_text}</h2>
+    <p><strong>Reason:</strong> {html.escape(str(reason))}</p>
+    {policy_info}
+  </div>
+"""
+
+
+def _build_coverage_chart(coverage: Dict[str, Any] | None) -> Dict[str, Any] | None:
+    """Build chart configuration for MR coverage by category."""
+    if not coverage:
+        return None
+    
+    categories = coverage.get("categories") or {}
+    if not categories:
+        return None
+    
+    labels = []
+    baseline_rates = []
+    candidate_rates = []
+    
+    for category, stats in categories.items():
+        labels.append(category)
+        baseline_pr = stats.get("baseline_pass_rate")
+        candidate_pr = stats.get("candidate_pass_rate")
+        baseline_rates.append(round(float(baseline_pr * 100), 1) if baseline_pr is not None else 0)
+        candidate_rates.append(round(float(candidate_pr * 100), 1) if candidate_pr is not None else 0)
+    
+    return {
+        "type": "bar",
+        "data": {
+            "labels": labels,
+            "datasets": [
+                {
+                    "label": "Baseline Pass Rate (%)",
+                    "backgroundColor": "#4caf50",
+                    "data": baseline_rates,
+                },
+                {
+                    "label": "Candidate Pass Rate (%)",
+                    "backgroundColor": "#2196f3",
+                    "data": candidate_rates,
+                },
+            ],
+        },
+        "options": {
+            "responsive": True,
+            "plugins": {
+                "title": {
+                    "display": True,
+                    "text": "MR Coverage by Category",
+                },
+                "legend": {"display": True},
+            },
+            "scales": {
+                "y": {
+                    "beginAtZero": True,
+                    "suggestedMax": 100,
+                },
+            },
+        },
+    }
 
