@@ -237,7 +237,8 @@ def write_failed_artifacts(
     }
     target = path / filename
     target.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    _prune_failed_artifacts(path, limit=limit, ttl_days=ttl_days, now=now)
+    # Ensure file is written before pruning (write_text is synchronous)
+    _prune_failed_artifacts(path, limit=limit, ttl_days=ttl_days, now=now, exclude=target)
     return target
 
 
@@ -247,17 +248,58 @@ def _prune_failed_artifacts(
     limit: Optional[int],
     ttl_days: Optional[int],
     now: datetime,
+    exclude: Optional[Path] = None,
 ) -> None:
-    files = sorted(directory.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    def get_existing_files() -> list[Path]:
+        """Get all existing JSON files from the directory."""
+        files = []
+        for file_path in directory.glob("*.json"):
+            try:
+                file_path.stat()  # Verify file exists
+                files.append(file_path)
+            except (OSError, FileNotFoundError):
+                continue
+        return files
 
+    # Apply TTL filtering first
     if ttl_days is not None and ttl_days >= 0:
         cutoff = now - timedelta(days=ttl_days)
-        for file_path in list(files):
-            mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
-            if mtime < cutoff:
+        files = get_existing_files()
+        for file_path in files:
+            if file_path == exclude:
+                continue
+            try:
+                mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
+                if mtime < cutoff:
+                    file_path.unlink(missing_ok=True)
+            except (OSError, FileNotFoundError):
                 file_path.unlink(missing_ok=True)
-                files.remove(file_path)
 
-    if limit is not None and limit > 0 and len(files) > limit:
-        for file_path in files[limit:]:
-            file_path.unlink(missing_ok=True)
+    # Apply limit: re-read files after TTL pruning to get current state
+    if limit is not None and limit > 0:
+        files = get_existing_files()
+        if len(files) <= limit:
+            return  # No pruning needed
+
+        # Sort by mtime (newest first), then by filename for stability
+        files_sorted = sorted(
+            files,
+            key=lambda p: (p.stat().st_mtime, p.name),
+            reverse=True,
+        )
+        
+        # Keep the top `limit` files, but always preserve the excluded file
+        files_to_keep = set(files_sorted[:limit])
+        if exclude is not None and exclude.exists():
+            files_to_keep.add(exclude)
+            # If adding exclude pushes us over limit, remove the oldest non-excluded file
+            if len(files_to_keep) > limit:
+                for file_path in reversed(files_sorted):
+                    if file_path != exclude and file_path in files_to_keep:
+                        files_to_keep.remove(file_path)
+                        break
+        
+        # Delete files not in the keep set
+        for file_path in files:
+            if file_path not in files_to_keep:
+                file_path.unlink(missing_ok=True)
