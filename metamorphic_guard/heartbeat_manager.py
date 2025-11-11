@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Optional, Set, Any
 
-from .logging import log_event
+from .observability import log_event
 
 
 @dataclass
