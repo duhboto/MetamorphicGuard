@@ -84,7 +84,7 @@ class LLMHarness:
 
     def run(
         self,
-        case: Dict[str, Any],
+        case: Dict[str, Any] | List[str] | str,
         props: Optional[Sequence[Judge | LLMJudge]] = None,
         mrs: Optional[Sequence[Mutant | PromptMutant]] = None,
         n: int = 100,
@@ -96,7 +96,10 @@ class LLMHarness:
         Run evaluation of LLM on test cases.
 
         Args:
-            case: Test case with "system" and "user" keys (or prompt template)
+            case: Can be:
+                - Dict with "system" and "user" keys
+                - List of user prompts (strings)
+                - Single user prompt (string)
             props: List of judges to evaluate outputs
             mrs: List of mutants to apply to inputs
             n: Number of test cases
@@ -107,17 +110,76 @@ class LLMHarness:
         Returns:
             Evaluation report dictionary
         """
-        # For now, this is a placeholder that shows the intended API
-        # Full implementation would:
-        # 1. Create a task spec that uses LLM executor
-        # 2. Apply mutants to generate test cases
-        # 3. Run evaluation with judges as properties
-        # 4. Return structured report
+        from .llm_specs import create_llm_spec, simple_llm_inputs
+        from .specs import task
 
-        # This is a simplified version - full implementation would integrate
-        # with the existing run_eval infrastructure
-        raise NotImplementedError(
-            "LLMHarness.run() is not yet fully implemented. "
-            "Use run_eval directly with executor='openai' for now."
+        # Parse case input
+        if isinstance(case, str):
+            prompts = [case]
+            system_prompt = None
+        elif isinstance(case, list):
+            prompts = case
+            system_prompt = None
+        elif isinstance(case, dict):
+            prompts = [case.get("user", "")]
+            system_prompt = case.get("system")
+        else:
+            raise ValueError(f"Invalid case type: {type(case)}")
+
+        # Create input generator
+        gen_inputs_fn = simple_llm_inputs(prompts, system_prompt)
+
+        # Create task spec
+        spec = create_llm_spec(
+            gen_inputs=gen_inputs_fn,
+            judges=list(props) if props else None,
+            mutants=list(mrs) if mrs else None,
         )
+
+        # Register task temporarily
+        task_name = f"llm_eval_{id(self)}"
+        from .specs import _TASK_REGISTRY
+
+        def get_spec() -> Spec:
+            return spec
+
+        _TASK_REGISTRY[task_name] = get_spec
+
+        # For LLM evaluation, we need to create temporary "baseline" and "candidate" files
+        # that represent the system prompts. The executor will use file_path as system prompt.
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            
+            # Create baseline and candidate "files" (just system prompts)
+            baseline_file = tmp_path / "baseline.txt"
+            candidate_file = tmp_path / "candidate.txt"
+            
+            # For now, use the same system prompt for both (can be extended)
+            baseline_system = system_prompt or ""
+            candidate_system = system_prompt or ""
+            
+            baseline_file.write_text(baseline_system, encoding="utf-8")
+            candidate_file.write_text(candidate_system, encoding="utf-8")
+
+            # Run evaluation
+            result = run_eval(
+                task_name=task_name,
+                baseline_path=str(baseline_file),
+                candidate_path=str(candidate_file),
+                n=n,
+                seed=seed,
+                executor=self.executor,
+                executor_config=self.executor_config,
+                bootstrap_samples=1000 if bootstrap else 0,
+                **kwargs,
+            )
+
+        # Clean up temporary task
+        if task_name in _TASK_REGISTRY:
+            del _TASK_REGISTRY[task_name]
+
+        return result
 
