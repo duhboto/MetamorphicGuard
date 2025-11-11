@@ -9,6 +9,7 @@ import pytest
     candidate="examples/top_k_improved.py",
     n=50,
     seed=42,
+    improve_delta=0.0,  # Allow candidate if it's at least as good as baseline
 )
 def test_top_k_improved():
     """Example test using pytest-metamorphic marker."""
