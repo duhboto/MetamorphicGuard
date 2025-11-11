@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 
 class QueueSettings(BaseModel):
@@ -18,6 +18,8 @@ class AlertSettings(BaseModel):
 
 
 class EvaluatorConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)  # Allow both field name and alias
+
     task: str
     baseline: str
     candidate: str
