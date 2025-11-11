@@ -204,17 +204,23 @@ class AnthropicExecutor(LLMExecutor):
 
         response = self.client.messages.create(**kwargs, timeout=timeout)
 
+        # Handle empty or malformed responses
         content = ""
         if response.content:
             # Anthropic returns content as a list of text blocks
-            content = "".join(
-                block.text for block in response.content if hasattr(block, "text") and block.type == "text"
-            )
+            text_blocks = [
+                block.text for block in response.content 
+                if hasattr(block, "text") and hasattr(block, "type") and block.type == "text"
+            ]
+            content = "".join(text_blocks)
 
-        # Calculate tokens and cost
-        tokens_prompt = response.usage.input_tokens if response.usage else 0
-        tokens_completion = response.usage.output_tokens if response.usage else 0
-        tokens_total = tokens_prompt + tokens_completion
+        # Calculate tokens and cost (handle missing usage data)
+        if response.usage:
+            tokens_prompt = response.usage.input_tokens or 0
+            tokens_completion = response.usage.output_tokens or 0
+            tokens_total = tokens_prompt + tokens_completion
+        else:
+            tokens_prompt = tokens_completion = tokens_total = 0
 
         # Get pricing for model (fallback to claude-3-haiku if unknown)
         model_pricing = self.pricing.get(

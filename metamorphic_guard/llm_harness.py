@@ -173,10 +173,10 @@ class LLMHarness:
                 candidate_file.write_text(candidate_system or "", encoding="utf-8")
 
                 # Create separate executor configs for baseline and candidate
-                baseline_config = self.executor_config.copy()
+                baseline_config = (self.executor_config or {}).copy()
                 baseline_config["model"] = baseline_model
                 
-                candidate_config = self.executor_config.copy()
+                candidate_config = (self.executor_config or {}).copy()
                 candidate_config["model"] = self.model
 
                 # Run evaluation

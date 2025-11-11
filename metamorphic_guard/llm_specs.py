@@ -33,17 +33,23 @@ def create_llm_spec(
     properties: List[Property] = []
     if judges:
         for judge in judges:
+            # Capture judge in closure properly to avoid late binding issue
+            judge_capture = judge  # Create a new variable for each iteration
 
             def make_check(judge_instance: Judge) -> Callable[..., bool]:
                 def check(output: Any, *args: Any) -> bool:
-                    result = judge_instance.evaluate(output, args[0] if args else None)
-                    return result.get("pass", False)
+                    try:
+                        result = judge_instance.evaluate(output, args[0] if args else None)
+                        return result.get("pass", False) if isinstance(result, dict) else False
+                    except Exception:
+                        # If judge evaluation fails, treat as failure
+                        return False
 
                 return check
 
             properties.append(
                 Property(
-                    check=make_check(judge),
+                    check=make_check(judge_capture),
                     description=f"{judge.name()}: {judge.__class__.__name__}",
                     mode="hard",
                 )
@@ -53,21 +59,28 @@ def create_llm_spec(
     relations: List[MetamorphicRelation] = []
     if mutants:
         for mutant in mutants:
+            # Capture mutant in closure properly to avoid late binding issue
+            mutant_capture = mutant  # Create a new variable for each iteration
 
             def make_transform(mutant_instance: Mutant) -> Callable[..., Tuple[Any, ...]]:
                 def transform(*args: Any, rng: Any = None) -> Tuple[Any, ...]:
                     if len(args) == 0:
                         return args
-                    # Transform the first argument (prompt)
-                    transformed = mutant_instance.transform(args[0], rng=rng)
-                    return (transformed,) + args[1:]
+                    try:
+                        # Transform the first argument (prompt)
+                        # Pass rng as keyword argument to match PromptMutant interface
+                        transformed = mutant_instance.transform(args[0], rng=rng) if rng is not None else mutant_instance.transform(args[0])
+                        return (transformed,) + args[1:]
+                    except Exception:
+                        # If mutation fails, return original args
+                        return args
 
                 return transform
 
             relations.append(
                 MetamorphicRelation(
                     name=mutant.name(),
-                    transform=make_transform(mutant),
+                    transform=make_transform(mutant_capture),
                     expect="equal",
                     accepts_rng=True,
                 )

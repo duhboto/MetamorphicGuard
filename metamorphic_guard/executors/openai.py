@@ -206,13 +206,20 @@ class OpenAIExecutor(LLMExecutor):
 
         response = self.client.chat.completions.create(**kwargs, timeout=timeout)
 
+        # Handle empty or malformed responses
+        if not response.choices or len(response.choices) == 0:
+            raise ValueError("API returned empty choices list")
+        
         choice = response.choices[0]
         content = choice.message.content or ""
 
-        # Calculate tokens and cost
-        tokens_prompt = response.usage.prompt_tokens if response.usage else 0
-        tokens_completion = response.usage.completion_tokens if response.usage else 0
-        tokens_total = response.usage.total_tokens if response.usage else 0
+        # Calculate tokens and cost (handle missing usage data)
+        if response.usage:
+            tokens_prompt = response.usage.prompt_tokens or 0
+            tokens_completion = response.usage.completion_tokens or 0
+            tokens_total = response.usage.total_tokens or 0
+        else:
+            tokens_prompt = tokens_completion = tokens_total = 0
 
         # Get pricing for model (fallback to gpt-3.5-turbo if unknown)
         model_pricing = self.pricing.get(model, self.pricing.get("gpt-3.5-turbo", {"prompt": 0.0015, "completion": 0.002}))
