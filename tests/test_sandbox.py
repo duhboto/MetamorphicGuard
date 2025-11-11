@@ -55,7 +55,7 @@ def test_sandbox_timeout():
         f.write('''
 import time
 def solve(x):
-    time.sleep(10)  # Sleep longer than timeout
+    time.sleep(2)  # Sleep longer than timeout (but not too long)
     return x
 ''')
         test_file = f.name
