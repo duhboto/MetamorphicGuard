@@ -356,6 +356,88 @@ class ResourceUsageMonitor(Monitor):
         }
 
 
+class LLMCostMonitor(Monitor):
+    """Track LLM token usage and cost metrics."""
+
+    def __init__(self, alert_cost_ratio: float = 1.5) -> None:
+        super().__init__()
+        self.alert_cost_ratio = max(0.0, float(alert_cost_ratio))
+        self._lock = threading.Lock()
+        self._tokens: Dict[str, Dict[str, List[float]]] = {
+            "baseline": {"prompt": [], "completion": [], "total": []},
+            "candidate": {"prompt": [], "completion": [], "total": []},
+        }
+        self._costs: Dict[str, List[float]] = {"baseline": [], "candidate": []}
+
+    def record(self, record: MonitorRecord) -> None:
+        result = record.result
+        with self._lock:
+            role = record.role
+            if "tokens_prompt" in result:
+                self._tokens[role]["prompt"].append(float(result["tokens_prompt"]))
+            if "tokens_completion" in result:
+                self._tokens[role]["completion"].append(float(result["tokens_completion"]))
+            if "tokens_total" in result:
+                self._tokens[role]["total"].append(float(result["tokens_total"]))
+            if "cost_usd" in result:
+                self._costs[role].append(float(result["cost_usd"]))
+
+    def finalize(self) -> Dict[str, Any]:
+        summary: Dict[str, Dict[str, Any]] = {}
+        for role in ["baseline", "candidate"]:
+            role_tokens = self._tokens.get(role, {})
+            role_costs = self._costs.get(role, [])
+            summary[role] = {
+                "tokens_prompt": {
+                    "count": len(role_tokens.get("prompt", [])),
+                    "total": sum(role_tokens.get("prompt", [])),
+                    "mean": sum(role_tokens.get("prompt", [])) / len(role_tokens.get("prompt", []))
+                    if role_tokens.get("prompt")
+                    else 0.0,
+                },
+                "tokens_completion": {
+                    "count": len(role_tokens.get("completion", [])),
+                    "total": sum(role_tokens.get("completion", [])),
+                    "mean": sum(role_tokens.get("completion", [])) / len(role_tokens.get("completion", []))
+                    if role_tokens.get("completion")
+                    else 0.0,
+                },
+                "tokens_total": {
+                    "count": len(role_tokens.get("total", [])),
+                    "total": sum(role_tokens.get("total", [])),
+                    "mean": sum(role_tokens.get("total", [])) / len(role_tokens.get("total", []))
+                    if role_tokens.get("total")
+                    else 0.0,
+                },
+                "cost_usd": {
+                    "count": len(role_costs),
+                    "total": sum(role_costs),
+                    "mean": sum(role_costs) / len(role_costs) if role_costs else 0.0,
+                },
+            }
+
+        alerts: List[Dict[str, Any]] = []
+        baseline_cost = summary.get("baseline", {}).get("cost_usd", {}).get("mean", 0.0)
+        candidate_cost = summary.get("candidate", {}).get("cost_usd", {}).get("mean", 0.0)
+        if baseline_cost > 0 and candidate_cost > baseline_cost * self.alert_cost_ratio:
+            alerts.append(
+                {
+                    "type": "cost_regression",
+                    "baseline_cost_usd": baseline_cost,
+                    "candidate_cost_usd": candidate_cost,
+                    "ratio": candidate_cost / baseline_cost,
+                    "threshold": self.alert_cost_ratio,
+                }
+            )
+
+        return {
+            "id": self.identifier(),
+            "type": "llm_cost",
+            "summary": summary,
+            "alerts": alerts,
+        }
+
+
 def resolve_monitors(specs: Sequence[str], *, sandbox_plugins: bool = False) -> List[Monitor]:
     """Instantiate monitors based on CLI-style specifications."""
 
@@ -367,6 +449,8 @@ def resolve_monitors(specs: Sequence[str], *, sandbox_plugins: bool = False) -> 
         "fairness_gap": FairnessGapMonitor,
         "resource": ResourceUsageMonitor,
         "resource_usage": ResourceUsageMonitor,
+        "llm_cost": LLMCostMonitor,
+        "llm_cost_monitor": LLMCostMonitor,
     }
 
     plugin_registry = monitor_plugins()

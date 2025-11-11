@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "metamorphic_guard"
-version = "1.2.1"
+version = "2.0.0"
 description = "A Python library for comparing program versions using metamorphic testing"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -28,3 +28,25 @@ Documentation = "https://pypi.org/project/metamorphic-guard/"
 dev = [
     "pytest>=7.0.0",
 ]
+llm = [
+    "openai>=1.0.0",
+    "anthropic>=0.18.0",
+]
+
+[project.entry-points."metamorphic_guard.executors"]
+openai = "metamorphic_guard.executors.openai:OpenAIExecutor"
+anthropic = "metamorphic_guard.executors.anthropic:AnthropicExecutor"
+
+[project.entry-points."metamorphic_guard.mutants"]
+paraphrase = "metamorphic_guard.mutants.builtin:ParaphraseMutant"
+negation_flip = "metamorphic_guard.mutants.builtin:NegationFlipMutant"
+role_swap = "metamorphic_guard.mutants.builtin:RoleSwapMutant"
+jailbreak_probe = "metamorphic_guard.mutants.advanced:JailbreakProbeMutant"
+chain_of_thought = "metamorphic_guard.mutants.advanced:ChainOfThoughtToggleMutant"
+instruction_permutation = "metamorphic_guard.mutants.advanced:InstructionPermutationMutant"
+
+[project.entry-points."metamorphic_guard.judges"]
+length = "metamorphic_guard.judges.builtin:LengthJudge"
+no_pii = "metamorphic_guard.judges.builtin:NoPIIJudge"
+rubric = "metamorphic_guard.judges.structured:RubricJudge"
+citation = "metamorphic_guard.judges.structured:CitationJudge"

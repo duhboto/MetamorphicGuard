@@ -9,6 +9,9 @@ from typing import Any, Callable, Dict, Iterable, Mapping, Optional
 
 PLUGIN_GROUP_MONITORS = "metamorphic_guard.monitors"
 PLUGIN_GROUP_DISPATCHERS = "metamorphic_guard.dispatchers"
+PLUGIN_GROUP_EXECUTORS = "metamorphic_guard.executors"
+PLUGIN_GROUP_MUTANTS = "metamorphic_guard.mutants"
+PLUGIN_GROUP_JUDGES = "metamorphic_guard.judges"
 
 
 @dataclass(frozen=True)
@@ -121,6 +124,21 @@ def dispatcher_plugins() -> Mapping[str, PluginDefinition]:
     return _load_entry_points(PLUGIN_GROUP_DISPATCHERS)
 
 
+@lru_cache(maxsize=None)
+def executor_plugins() -> Mapping[str, PluginDefinition]:
+    return _load_entry_points(PLUGIN_GROUP_EXECUTORS)
+
+
+@lru_cache(maxsize=None)
+def mutant_plugins() -> Mapping[str, PluginDefinition]:
+    return _load_entry_points(PLUGIN_GROUP_MUTANTS)
+
+
+@lru_cache(maxsize=None)
+def judge_plugins() -> Mapping[str, PluginDefinition]:
+    return _load_entry_points(PLUGIN_GROUP_JUDGES)
+
+
 def plugin_registry(kind: Optional[str] = None) -> Dict[str, PluginDefinition]:
     """Return a mapping of plugin name -> definition for the requested kind."""
 
@@ -130,5 +148,11 @@ def plugin_registry(kind: Optional[str] = None) -> Dict[str, PluginDefinition]:
         registry.update(monitor_plugins())
     if normalized in {"dispatcher", "all"}:
         registry.update(dispatcher_plugins())
+    if normalized in {"executor", "all"}:
+        registry.update(executor_plugins())
+    if normalized in {"mutant", "all"}:
+        registry.update(mutant_plugins())
+    if normalized in {"judge", "all"}:
+        registry.update(judge_plugins())
     return registry
 
