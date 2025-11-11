@@ -70,6 +70,29 @@ class TrustScores(BaseModel):
     details: Optional[Dict[str, Any]] = None
 
 
+class Provenance(BaseModel):
+    """Provenance metadata for auditability and reproducibility."""
+
+    library_version: Optional[str] = Field(
+        None, description="Metamorphic Guard library version"
+    )
+    git_sha: Optional[str] = Field(None, description="Git commit SHA")
+    git_dirty: Optional[bool] = Field(None, description="Whether working tree has uncommitted changes")
+    python_version: Optional[str] = Field(None, description="Python version")
+    platform: Optional[str] = Field(None, description="Platform identifier")
+    hostname: Optional[str] = Field(None, description="Hostname where evaluation ran")
+    executable: Optional[str] = Field(None, description="Python executable path")
+    mr_ids: Optional[List[str]] = Field(
+        None, description="List of metamorphic relation identifiers"
+    )
+    spec_fingerprint: Optional[Dict[str, Any]] = Field(
+        None, description="Hash-based fingerprint of task specification"
+    )
+    environment: Optional[Dict[str, str]] = Field(
+        None, description="Runtime environment metadata"
+    )
+
+
 class Report(BaseModel):
     """Complete Metamorphic Guard evaluation report."""
 
@@ -87,6 +110,7 @@ class Report(BaseModel):
     policy_version: Optional[str] = None
     trust_scores: Optional[Dict[str, TrustScores]] = None
     llm_metrics: Optional[Dict[str, Any]] = None
+    provenance: Optional[Provenance] = None
 
     class Config:
         """Pydantic config."""

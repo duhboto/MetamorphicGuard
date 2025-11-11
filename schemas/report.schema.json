@@ -157,6 +157,149 @@
       "title": "JobMetadata",
       "type": "object"
     },
+    "Provenance": {
+      "description": "Provenance metadata for auditability and reproducibility.",
+      "properties": {
+        "library_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Metamorphic Guard library version",
+          "title": "Library Version"
+        },
+        "git_sha": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Git commit SHA",
+          "title": "Git Sha"
+        },
+        "git_dirty": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Whether working tree has uncommitted changes",
+          "title": "Git Dirty"
+        },
+        "python_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Python version",
+          "title": "Python Version"
+        },
+        "platform": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Platform identifier",
+          "title": "Platform"
+        },
+        "hostname": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Hostname where evaluation ran",
+          "title": "Hostname"
+        },
+        "executable": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Python executable path",
+          "title": "Executable"
+        },
+        "mr_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of metamorphic relation identifiers",
+          "title": "Mr Ids"
+        },
+        "spec_fingerprint": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Hash-based fingerprint of task specification",
+          "title": "Spec Fingerprint"
+        },
+        "environment": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Runtime environment metadata",
+          "title": "Environment"
+        }
+      },
+      "title": "Provenance",
+      "type": "object"
+    },
     "TrustScores": {
       "description": "Trust scores for RAG evaluations.",
       "properties": {
@@ -431,6 +574,17 @@
       ],
       "default": null,
       "title": "Llm Metrics"
+    },
+    "provenance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Provenance"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     }
   },
   "required": [

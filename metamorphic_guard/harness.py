@@ -496,12 +496,47 @@ def run_eval(
     if policy_config:
         result["policy"] = _serialize_for_report(policy_config)
 
-    # Add version information
+    # Build provenance section
+    provenance_data: Dict[str, Any] = {}
+    
+    # Library version
     try:
         from . import __version__
-        result["job_metadata"]["metamorphic_guard_version"] = __version__
+        provenance_data["library_version"] = __version__
     except ImportError:
         pass
+    
+    # Git and environment from job_metadata
+    job_meta = result.get("job_metadata", {})
+    if "git_commit" in job_meta:
+        provenance_data["git_sha"] = job_meta["git_commit"]
+    if "git_dirty" in job_meta:
+        provenance_data["git_dirty"] = job_meta["git_dirty"]
+    if "hostname" in job_meta:
+        provenance_data["hostname"] = job_meta["hostname"]
+    if "python_version" in job_meta:
+        provenance_data["python_version"] = job_meta["python_version"]
+    if "executable" in job_meta:
+        provenance_data["executable"] = job_meta["executable"]
+    
+    # Platform and environment
+    env_fp = result.get("environment", {})
+    if "platform" in env_fp:
+        provenance_data["platform"] = env_fp["platform"]
+    if env_fp:
+        provenance_data["environment"] = env_fp
+    
+    # MR IDs from spec
+    mr_ids = [rel.name for rel in spec.relations]
+    if mr_ids:
+        provenance_data["mr_ids"] = mr_ids
+    
+    # Spec fingerprint
+    if "spec_fingerprint" in result:
+        provenance_data["spec_fingerprint"] = result["spec_fingerprint"]
+    
+    if provenance_data:
+        result["provenance"] = provenance_data
     
     if policy_version is not None:
         result["config"]["policy_version"] = policy_version

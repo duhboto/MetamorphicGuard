@@ -1,0 +1,10 @@
+name = "policy-v1"
+description = "Baseline guardrail policy ensuring minimum lift and pass rate."
+
+[gating]
+min_delta = 0.02
+min_pass_rate = 0.80
+alpha = 0.05
+power_target = 0.8
+violation_cap = 25
+

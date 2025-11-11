@@ -110,6 +110,13 @@
       "title": "Improve Delta",
       "type": "number"
     },
+    "min_pass_rate": {
+      "default": 0.8,
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Min Pass Rate",
+      "type": "number"
+    },
     "violation_cap": {
       "default": 25,
       "minimum": 1,
@@ -129,7 +136,7 @@
       "type": "integer"
     },
     "ci_method": {
-      "default": "bootstrap",
+      "default": "newcombe",
       "title": "Ci Method",
       "type": "string"
     },
@@ -199,6 +206,25 @@
       ],
       "default": null,
       "title": "Policy Version"
+    },
+    "policy": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Policy"
+    },
+    "power_target": {
+      "default": 0.8,
+      "exclusiveMaximum": 1.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Power Target",
+      "type": "number"
     },
     "log_json": {
       "anyOf": [

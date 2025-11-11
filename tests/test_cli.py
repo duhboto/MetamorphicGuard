@@ -121,6 +121,13 @@ def solve(L, k):
             assert "environment" in report_data
             assert "relative_risk" in report_data
             assert "relative_risk_ci" in report_data
+            # Verify provenance section exists and contains expected fields
+            provenance = report_data.get("provenance")
+            assert provenance is not None
+            assert "library_version" in provenance
+            assert "mr_ids" in provenance
+            assert "spec_fingerprint" in provenance
+            assert "python_version" in provenance
             assert report_data["config"].get("policy_version") == "test-policy"
             assert report_data["config"].get("sandbox_plugins") is False
             assert len(report_data.get("cases", [])) == 10

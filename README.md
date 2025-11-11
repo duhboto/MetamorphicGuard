@@ -147,6 +147,7 @@ metamorphic-guard --help
 - `--otlp-endpoint`: OpenTelemetry OTLP endpoint URL for trace export (e.g., `http://localhost:4317`)
 - `--html-report`: Write an interactive-ready HTML summary alongside the JSON report
 - `--junit-report` / `--junit-xml`: Write JUnit XML output for CI integration (e.g., `--junit-report test-results.xml`)
+- `--policy`: Path to a policy file (`.toml` or `.yaml`) that overrides thresholds (see [Policy as Code](#policy-as-code))
 - `--dispatcher`: Execution dispatcher (`local` threads or experimental `queue`)
 - `--queue-config`: JSON configuration for queue-backed dispatchers (experimental)
 - `--monitor`: Enable built-in monitors such as `latency`
@@ -452,6 +453,24 @@ For relative risk (candidate/baseline ratio), the `log` method uses a log-normal
 - Reports now include `statistics.power_estimate` and `statistics.recommended_n`; the CLI mirrors these values so you can judge whether an evaluation was sufficiently powered for the current `--power-target`.
 - Every JSON report ships with a replay bundle (`*_cases.json`) plus a copy-pastable CLI command, making it trivial to re-run or debug any evaluation.
 
+### Policy as Code
+
+Policies describe guard-rail thresholds (minimum delta, pass-rate floor, etc.) and live alongside code so changes are auditable. Metamorphic Guard accepts `.toml` or `.yaml` policy files via `--policy` or the `policy` key in config files. Example:
+
+```toml
+name = "policy-v1"
+description = "Baseline guardrail policy ensuring minimum lift and pass rate."
+
+[gating]
+min_delta = 0.02
+min_pass_rate = 0.80
+alpha = 0.05
+power_target = 0.8
+violation_cap = 25
+```
+
+Policies are stored under `policies/` for local development. Use `policy-v1.toml` as a starting point or opt into the stricter `policy-strict.toml`. Reports embed policy metadata (`config.policy_version`, `policy` block) so downstream systems know which guard rails were active.
+
 ### Plugin Ecosystem
 
 Metamorphic Guard supports external extensions via Python entry points:
@@ -507,11 +526,20 @@ Report and configuration files conform to JSON Schemas for validation and type c
 - **Report Schema**: `schemas/report.schema.json` - Validates evaluation report JSON files
 - **Config Schema**: `schemas/config.schema.json` - Validates TOML configuration files (when converted to JSON)
 
+Reports include a `provenance` section with auditability metadata:
+- Library version (`library_version`)
+- Git commit SHA (`git_sha`) and dirty status (`git_dirty`)
+- Python version and platform information (`python_version`, `platform`, `hostname`, `executable`)
+- Metamorphic relation identifiers (`mr_ids`)
+- Task specification fingerprint (`spec_fingerprint`)
+- Runtime environment details (`environment`)
+
 This enables:
 - Validation of report files
 - Type checking in integrations
 - IDE autocomplete for report consumers
 - Automated schema validation in CI/CD pipelines
+- Full auditability and reproducibility of evaluation runs
 
 Validate a report against the schema:
 

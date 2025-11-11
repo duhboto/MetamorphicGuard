@@ -1,0 +1,10 @@
+name = "policy-strict"
+description = "Stricter promotion policy for high-risk deployments."
+
+[gating]
+min_delta = 0.05
+min_pass_rate = 0.9
+alpha = 0.02
+power_target = 0.9
+violation_cap = 10
+
