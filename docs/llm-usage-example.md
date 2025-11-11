@@ -165,11 +165,58 @@ The LLM features integrate seamlessly with Metamorphic Guard's existing infrastr
 - **Statistical analysis** with bootstrap confidence intervals
 - **Adoption gating** with data-driven decisions
 
+## Advanced Features
+
+### Anthropic Executor
+
+```python
+h = LLMHarness(
+    model="claude-3-5-sonnet-20241022",
+    provider="anthropic",
+    executor_config={"api_key": "sk-ant-..."},  # Or set ANTHROPIC_API_KEY
+)
+```
+
+### Advanced Mutants
+
+```python
+from metamorphic_guard.mutants.advanced import (
+    JailbreakProbeMutant,
+    ChainOfThoughtToggleMutant,
+    InstructionPermutationMutant,
+)
+
+mutants = [
+    JailbreakProbeMutant(intensity=0.3),  # Test safety boundaries
+    ChainOfThoughtToggleMutant(),  # Toggle reasoning instructions
+    InstructionPermutationMutant(),  # Reorder instructions
+]
+```
+
+### Structured Judges
+
+```python
+from metamorphic_guard.judges.structured import RubricJudge, CitationJudge
+
+rubric = {
+    "criteria": [
+        {"name": "completeness", "weight": 0.3},
+        {"name": "accuracy", "weight": 0.4},
+        {"name": "clarity", "weight": 0.3},
+    ],
+    "threshold": 0.7,
+}
+
+judges = [
+    RubricJudge(rubric=rubric),
+    CitationJudge(require_citations=True, min_citations=2),
+]
+```
+
 ## Next Steps
 
-- Add Anthropic executor
-- Implement more sophisticated mutants (jailbreak probes, chain-of-thought)
-- Add structured judges (rubric JSON, citation checks)
-- Create LLMHarness wrapper for easier API
-- Add pytest-metamorph plugin
+- Local vLLM executor support
+- pytest-metamorph plugin
+- More sophisticated rubric evaluation (LLM-as-judge)
+- RAG-specific guards
 

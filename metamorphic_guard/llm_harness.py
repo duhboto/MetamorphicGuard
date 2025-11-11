@@ -80,6 +80,7 @@ class LLMHarness:
             self.executor = "local_llm"
             self.executor_config["model_path"] = provider.split(":", 1)[1]
         else:
+            # Try to use provider name directly as executor
             self.executor = provider
 
     def run(
