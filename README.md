@@ -20,15 +20,29 @@ A Python library that compares two program versions—*baseline* and *candidate*
             ranking-guard evaluate --candidate implementations/candidate_heap.py
 ```
 
-Sample CLI decision:
+Sample CLI decisions:
 
+**Accepted candidate:**
 ```bash
-$ ranking-guard evaluate --candidate implementations/candidate_heap.py
-Candidate     implementations/candidate_heap.py
+$ metamorphic-guard evaluate --task top_k --baseline baseline.py --candidate candidate.py
+Candidate     candidate.py
 Adopt?        ✅ Yes
 Reason        meets_gate
 Δ Pass Rate   0.0125
 Δ 95% CI      [0.0040, 0.0210]
+Policy        policy-v1
+Report        reports/report_2025-11-02T12-00-00.json
+```
+
+**Rejected candidate:**
+```bash
+$ metamorphic-guard evaluate --task top_k --baseline baseline.py --candidate candidate.py
+Candidate     candidate.py
+Adopt?        ❌ No
+Reason        Improvement insufficient: CI lower bound -0.0050 < 0.02
+Δ Pass Rate   -0.0025
+Δ 95% CI      [-0.0100, 0.0050]
+Policy        policy-v1
 Report        reports/report_2025-11-02T12-00-00.json
 ```
 
@@ -113,13 +127,13 @@ metamorphic-guard --help
 - `--seed`: Random seed for reproducibility (default: 42)
 - `--timeout-s`: Timeout per test in seconds (default: 2.0)
 - `--mem-mb`: Memory limit in MB (default: 512)
-- `--alpha`: Significance level for confidence intervals (default: 0.05)
 - `--improve-delta`: Minimum improvement threshold (default: 0.02)
 - `--violation-cap`: Maximum violations to report (default: 25)
 - `--parallel`: Number of worker processes used to drive the sandbox (default: 1)
 - `--bootstrap-samples`: Resamples used for percentile bootstrap CI (default: 1000)
-- `--ci-method`: Confidence interval method for pass-rate delta (`bootstrap`, `newcombe`, `wilson`). See "Why Bootstrap?" section below for guidance.
-- `--rr-ci-method`: Confidence interval method for relative risk (`log`)
+- `--ci-method`: Confidence interval method for pass-rate delta (`bootstrap`, `newcombe`, `wilson`). See "Confidence Interval Methods" section below for guidance.
+- `--rr-ci-method`: Confidence interval method for relative risk (`log`). Use when baseline pass-rate is near 0 or 1, or when you need a ratio-based comparison. The log method uses a log-normal approximation appropriate for ratio statistics.
+- `--alpha`: Significance level for confidence intervals (default: 0.05)
 - `--report-dir`: Destination directory for JSON reports (defaults to auto-discovery)
 - `--executor`: Sandbox backend (`local`, `docker`, or `module:callable`)
 - `--executor-config`: JSON object with executor-specific settings (e.g. CPU, image)
@@ -229,6 +243,54 @@ Alerts can be pushed to downstream systems by wiring `--alert-webhook
 https://hooks.example.dev/guard`. The payload contains the flattened monitor
 alerts together with run metadata (task, decision, run_id) for correlation.
 
+**Example alert payload:**
+```json
+{
+  "alerts": [
+    {
+      "monitor": "latency",
+      "message": "Latency regression detected",
+      "baseline_p50_ms": 45.2,
+      "candidate_p50_ms": 78.5,
+      "ratio": 1.74
+    }
+  ],
+  "metadata": {
+    "task": "top_k",
+    "decision": {"adopt": false, "reason": "latency_regression"},
+    "run_id": "run_20250110_120000",
+    "policy_version": "policy-v1"
+  }
+}
+```
+
+Alerts appear in the HTML report under each monitor's section when present.
+
+### Environment Variables
+
+Metamorphic Guard supports the following environment variables for configuration:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `METAMORPHIC_GUARD_LOG_JSON` | Enable structured JSON logging (`1` to enable) | Disabled |
+| `METAMORPHIC_GUARD_PROMETHEUS` | Enable Prometheus metrics (`1` to enable) | Disabled |
+| `METAMORPHIC_GUARD_REPORT_DIR` | Directory for JSON reports | Auto-discovered |
+| `METAMORPHIC_GUARD_FAILED_DIR` | Directory for failed-case artifacts | `reports/failed_cases/` |
+| `METAMORPHIC_GUARD_EXECUTOR` | Sandbox executor (`local`, `docker`, or `module:callable`) | `local` |
+| `METAMORPHIC_GUARD_EXECUTOR_CONFIG` | JSON string with executor-specific settings | None |
+| `METAMORPHIC_GUARD_DOCKER_IMAGE` | Docker image for executor (overrides default) | `python:3.11-slim` |
+| `METAMORPHIC_GUARD_REDACT` | Comma-separated regex patterns for secret redaction | Built-in patterns |
+| `METAMORPHIC_GUARD_BANNED` | Comma-separated list of banned Python modules | None |
+
+**Example:**
+```bash
+export METAMORPHIC_GUARD_LOG_JSON=1
+export METAMORPHIC_GUARD_PROMETHEUS=1
+export METAMORPHIC_GUARD_EXECUTOR=docker
+export METAMORPHIC_GUARD_DOCKER_IMAGE=python:3.12-slim
+metamorphic-guard evaluate --task top_k --baseline baseline.py --candidate candidate.py
+```
+
 ## Implementation Requirements
 
 ### Candidate Function Contract
@@ -257,7 +319,7 @@ def solve(*args):
 - Secret redaction: configure `METAMORPHIC_GUARD_REDACT` or `executor_config.redact_patterns` to scrub sensitive values from stdout/stderr/results before they leave the sandbox. Default patterns catch common API keys and tokens.
 - Optional executors: set `--executor` / `METAMORPHIC_GUARD_EXECUTOR` to run evaluations inside Docker (`docker`) or a custom plugin (`package.module:callable`). Pass JSON tunables via `--executor-config` / `METAMORPHIC_GUARD_EXECUTOR_CONFIG` and override the Docker image with `METAMORPHIC_GUARD_DOCKER_IMAGE`.
 
-Example Docker run:
+**Example Docker run:**
 
 ```bash
 metamorphic-guard \
@@ -268,12 +330,52 @@ metamorphic-guard \
   --executor-config '{"image":"python:3.11-slim","cpus":1.5,"memory_mb":768}'
 ```
 
-> **Deployment tip:** For untrusted code, run the sandbox worker inside an OS-level
-> container or VM (e.g., Docker with seccomp/AppArmor or Firejail) and drop Linux
-> capabilities. The built-in guardrails reduce attack surface, but pairing them with
-> kernel isolation provides a stronger security boundary.
+**Security Hardening:**
 
-See `deploy/docker-compose.worker.yml` for a hardened reference stack (Redis + containerised worker with read-only root filesystem and disabled privileges).
+> **⚠️ Security Disclaimer:** The built-in sandbox provides application-level isolation (network denial, subprocess blocking, FFI/multiprocessing guards) but does not provide kernel-level isolation. For untrusted code, always run evaluations inside OS-level containers or VMs with additional hardening.
+
+When using the Docker executor, Metamorphic Guard applies the following security measures:
+
+**Application-level (always enabled):**
+- Network access disabled (`--network none` or `NO_NETWORK=1`)
+- Subprocess creation blocked (`os.system`, `subprocess.Popen`, etc.)
+- Native FFI blocked (`ctypes`, `cffi`)
+- Multiprocessing forks blocked
+- User site-packages disabled (`PYTHONNOUSERSITE=1`)
+- Resource limits: CPU time, memory, process count
+
+**Docker-level (configurable via `executor_config.security_opt`):**
+- Seccomp profiles: restrict syscalls (e.g., `seccomp=unconfined` or custom profile)
+- AppArmor profiles: restrict filesystem/network access
+- Capabilities: drop privileges (e.g., `--cap-drop ALL`)
+- Read-only filesystem: `--read-only` with tmpfs mounts
+- No new privileges: `--security-opt no-new-privileges:true`
+- User namespace: `--userns=host` or custom mapping
+
+**Hardened deployment example:**
+
+See `deploy/docker-compose.worker.yml` for a production-ready stack with:
+- Read-only root filesystem
+- Dropped capabilities
+- Network isolation
+- Resource limits
+- Redis-backed queue
+
+**Recommended for untrusted code:**
+```bash
+metamorphic-guard \
+  --executor docker \
+  --executor-config '{
+    "image": "python:3.11-slim",
+    "security_opt": [
+      "no-new-privileges:true",
+      "seccomp=./seccomp-profile.json"
+    ],
+    "read_only": true,
+    "tmpfs": ["/tmp"],
+    "cap_drop": ["ALL"]
+  }'
+```
 
 ### Distributed Execution (Preview)
 
