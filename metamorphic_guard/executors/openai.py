@@ -8,6 +8,7 @@ import time
 from typing import Any, Dict, Optional
 
 from .__init__ import LLMExecutor
+from ..redaction import get_redactor
 
 try:
     import openai
@@ -40,12 +41,13 @@ class OpenAIExecutor(LLMExecutor):
             raise ValueError("OpenAI API key required (config['api_key'] or OPENAI_API_KEY env var)")
 
         self.client = openai.OpenAI(api_key=self.api_key)
-        # Pricing per 1K tokens (as of 2024, update as needed)
+        # Pricing per 1K tokens (approximate, as of 2024 - verify current rates)
         self.pricing = {
             "gpt-4": {"prompt": 0.03, "completion": 0.06},
             "gpt-4-turbo": {"prompt": 0.01, "completion": 0.03},
             "gpt-3.5-turbo": {"prompt": 0.0015, "completion": 0.002},
         }
+        self._redactor = get_redactor(config)
 
     def execute(
         self,
@@ -65,8 +67,58 @@ class OpenAIExecutor(LLMExecutor):
         """
         start_time = time.time()
         model = func_name if func_name else self.model
+        
+        # Validate inputs
         user_prompt = args[0] if args else ""
+        if not isinstance(user_prompt, str) or not user_prompt.strip():
+            return {
+                "success": False,
+                "duration_ms": 0.0,
+                "stdout": "",
+                "stderr": "Empty or invalid user prompt",
+                "error": "Empty or invalid user prompt",
+                "error_type": "ValidationError",
+                "error_code": "invalid_input",
+            }
+        
         system_prompt = args[1] if len(args) > 1 else (file_path if file_path else None)
+        
+        # Validate model name (basic check)
+        if not model or not isinstance(model, str):
+            return {
+                "success": False,
+                "duration_ms": 0.0,
+                "stdout": "",
+                "stderr": f"Invalid model name: {model}",
+                "error": f"Invalid model name: {model}",
+                "error_type": "ValidationError",
+                "error_code": "invalid_model",
+            }
+        
+        # Validate temperature range (OpenAI: 0-2)
+        if self.temperature < 0 or self.temperature > 2:
+            return {
+                "success": False,
+                "duration_ms": 0.0,
+                "stdout": "",
+                "stderr": f"Temperature must be between 0 and 2, got {self.temperature}",
+                "error": f"Temperature must be between 0 and 2, got {self.temperature}",
+                "error_type": "ValidationError",
+                "error_code": "invalid_parameter",
+            }
+        
+        # Validate max_tokens (OpenAI supports up to 128K for some models, but we'll be conservative)
+        # Note: Actual limits vary by model - GPT-4 supports up to 128K, GPT-3.5-turbo supports 16K
+        if self.max_tokens <= 0 or self.max_tokens > 128000:
+            return {
+                "success": False,
+                "duration_ms": 0.0,
+                "stdout": "",
+                "stderr": f"max_tokens must be between 1 and 128000, got {self.max_tokens}",
+                "error": f"max_tokens must be between 1 and 128000, got {self.max_tokens}",
+                "error_type": "ValidationError",
+                "error_code": "invalid_parameter",
+            }
 
         try:
             result = self._call_llm(
@@ -94,14 +146,33 @@ class OpenAIExecutor(LLMExecutor):
             }
         except Exception as e:
             duration_ms = (time.time() - start_time) * 1000
+            error_msg = str(e)
+            # Redact potential API keys from error messages
+            redacted_error = self._redactor.redact(error_msg)
+            
+            # Determine specific error code
+            error_code = "llm_api_error"
+            error_type = type(e).__name__
+            
+            # Handle specific OpenAI API errors
+            if hasattr(e, "status_code"):
+                if e.status_code == 401:
+                    error_code = "authentication_error"
+                elif e.status_code == 429:
+                    error_code = "rate_limit_error"
+                elif e.status_code == 400:
+                    error_code = "invalid_request"
+                elif e.status_code == 500:
+                    error_code = "api_server_error"
+            
             return {
                 "success": False,
                 "duration_ms": duration_ms,
                 "stdout": "",
-                "stderr": str(e),
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "error_code": "llm_api_error",
+                "stderr": redacted_error,
+                "error": redacted_error,
+                "error_type": error_type,
+                "error_code": error_code,
             }
 
     def _call_llm(

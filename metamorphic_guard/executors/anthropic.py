@@ -8,6 +8,7 @@ import time
 from typing import Any, Dict, Optional
 
 from .__init__ import LLMExecutor
+from ..redaction import get_redactor
 
 try:
     import anthropic
@@ -40,13 +41,14 @@ class AnthropicExecutor(LLMExecutor):
             raise ValueError("Anthropic API key required (config['api_key'] or ANTHROPIC_API_KEY env var)")
 
         self.client = anthropic.Anthropic(api_key=self.api_key)
-        # Pricing per 1M tokens (as of 2024, update as needed)
+        # Pricing per 1M tokens (approximate, as of 2024 - verify current rates)
         self.pricing = {
             "claude-3-5-sonnet-20241022": {"prompt": 3.0, "completion": 15.0},
             "claude-3-opus-20240229": {"prompt": 15.0, "completion": 75.0},
             "claude-3-sonnet-20240229": {"prompt": 3.0, "completion": 15.0},
             "claude-3-haiku-20240307": {"prompt": 0.25, "completion": 1.25},
         }
+        self._redactor = get_redactor(config)
 
     def execute(
         self,
@@ -66,8 +68,57 @@ class AnthropicExecutor(LLMExecutor):
         """
         start_time = time.time()
         model = func_name if func_name else self.model
+        
+        # Validate inputs
         user_prompt = args[0] if args else ""
+        if not isinstance(user_prompt, str) or not user_prompt.strip():
+            return {
+                "success": False,
+                "duration_ms": 0.0,
+                "stdout": "",
+                "stderr": "Empty or invalid user prompt",
+                "error": "Empty or invalid user prompt",
+                "error_type": "ValidationError",
+                "error_code": "invalid_input",
+            }
+        
         system_prompt = args[1] if len(args) > 1 else (file_path if file_path else None)
+        
+        # Validate model name
+        if not model or not isinstance(model, str):
+            return {
+                "success": False,
+                "duration_ms": 0.0,
+                "stdout": "",
+                "stderr": f"Invalid model name: {model}",
+                "error": f"Invalid model name: {model}",
+                "error_type": "ValidationError",
+                "error_code": "invalid_model",
+            }
+        
+        # Validate temperature range (Anthropic: 0-1)
+        if self.temperature < 0 or self.temperature > 1:
+            return {
+                "success": False,
+                "duration_ms": 0.0,
+                "stdout": "",
+                "stderr": f"Temperature must be between 0 and 1, got {self.temperature}",
+                "error": f"Temperature must be between 0 and 1, got {self.temperature}",
+                "error_type": "ValidationError",
+                "error_code": "invalid_parameter",
+            }
+        
+        # Validate max_tokens (Anthropic: 1-4096)
+        if self.max_tokens <= 0 or self.max_tokens > 4096:
+            return {
+                "success": False,
+                "duration_ms": 0.0,
+                "stdout": "",
+                "stderr": f"max_tokens must be between 1 and 4096, got {self.max_tokens}",
+                "error": f"max_tokens must be between 1 and 4096, got {self.max_tokens}",
+                "error_type": "ValidationError",
+                "error_code": "invalid_parameter",
+            }
 
         try:
             result = self._call_llm(
@@ -94,14 +145,33 @@ class AnthropicExecutor(LLMExecutor):
             }
         except Exception as e:
             duration_ms = (time.time() - start_time) * 1000
+            error_msg = str(e)
+            # Redact potential API keys from error messages
+            redacted_error = self._redactor.redact(error_msg)
+            
+            # Determine specific error code
+            error_code = "llm_api_error"
+            error_type = type(e).__name__
+            
+            # Handle specific Anthropic API errors
+            if hasattr(e, "status_code"):
+                if e.status_code == 401:
+                    error_code = "authentication_error"
+                elif e.status_code == 429:
+                    error_code = "rate_limit_error"
+                elif e.status_code == 400:
+                    error_code = "invalid_request"
+                elif e.status_code == 500:
+                    error_code = "api_server_error"
+            
             return {
                 "success": False,
                 "duration_ms": duration_ms,
                 "stdout": "",
-                "stderr": str(e),
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "error_code": "llm_api_error",
+                "stderr": redacted_error,
+                "error": redacted_error,
+                "error_type": error_type,
+                "error_code": error_code,
             }
 
     def _call_llm(

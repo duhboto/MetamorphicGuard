@@ -91,6 +91,8 @@ class LLMHarness:
         n: int = 100,
         seed: int = 42,
         bootstrap: bool = True,
+        baseline_model: Optional[str] = None,
+        baseline_system: Optional[str] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """
@@ -106,29 +108,35 @@ class LLMHarness:
             n: Number of test cases
             seed: Random seed
             bootstrap: Whether to compute bootstrap confidence intervals
+            baseline_model: Optional model name for baseline (defaults to candidate model)
+            baseline_system: Optional system prompt for baseline (defaults to candidate system)
             **kwargs: Additional arguments passed to run_eval
 
         Returns:
             Evaluation report dictionary
         """
         from .llm_specs import create_llm_spec, simple_llm_inputs
-        from .specs import task
+        from .specs import Spec
 
         # Parse case input
         if isinstance(case, str):
             prompts = [case]
-            system_prompt = None
+            candidate_system = None
         elif isinstance(case, list):
             prompts = case
-            system_prompt = None
+            candidate_system = None
         elif isinstance(case, dict):
             prompts = [case.get("user", "")]
-            system_prompt = case.get("system")
+            candidate_system = case.get("system")
         else:
             raise ValueError(f"Invalid case type: {type(case)}")
 
-        # Create input generator
-        gen_inputs_fn = simple_llm_inputs(prompts, system_prompt)
+        # Use baseline overrides if provided, otherwise use candidate values
+        baseline_model = baseline_model or self.model
+        baseline_system = baseline_system or candidate_system
+
+        # Create input generator (use candidate system for test inputs)
+        gen_inputs_fn = simple_llm_inputs(prompts, candidate_system)
 
         # Create task spec
         spec = create_llm_spec(
@@ -137,8 +145,9 @@ class LLMHarness:
             mutants=list(mrs) if mrs else None,
         )
 
-        # Register task temporarily
-        task_name = f"llm_eval_{id(self)}"
+        # Register task temporarily with unique name
+        import uuid
+        task_name = f"llm_eval_{uuid.uuid4().hex[:8]}"
         from .specs import _TASK_REGISTRY
 
         def get_spec() -> Spec:
@@ -147,40 +156,45 @@ class LLMHarness:
         _TASK_REGISTRY[task_name] = get_spec
 
         # For LLM evaluation, we need to create temporary "baseline" and "candidate" files
-        # that represent the system prompts. The executor will use file_path as system prompt.
+        # that represent the system prompts. The executor will use file_path as system prompt
+        # and func_name as model name.
         import tempfile
         from pathlib import Path
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmp_path = Path(tmpdir)
-            
-            # Create baseline and candidate "files" (just system prompts)
-            baseline_file = tmp_path / "baseline.txt"
-            candidate_file = tmp_path / "candidate.txt"
-            
-            # For now, use the same system prompt for both (can be extended)
-            baseline_system = system_prompt or ""
-            candidate_system = system_prompt or ""
-            
-            baseline_file.write_text(baseline_system, encoding="utf-8")
-            candidate_file.write_text(candidate_system, encoding="utf-8")
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmp_path = Path(tmpdir)
+                
+                # Create baseline and candidate "files" (just system prompts)
+                baseline_file = tmp_path / "baseline.txt"
+                candidate_file = tmp_path / "candidate.txt"
+                
+                baseline_file.write_text(baseline_system or "", encoding="utf-8")
+                candidate_file.write_text(candidate_system or "", encoding="utf-8")
 
-            # Run evaluation
-            result = run_eval(
-                task_name=task_name,
-                baseline_path=str(baseline_file),
-                candidate_path=str(candidate_file),
-                n=n,
-                seed=seed,
-                executor=self.executor,
-                executor_config=self.executor_config,
-                bootstrap_samples=1000 if bootstrap else 0,
-                **kwargs,
-            )
+                # Create separate executor configs for baseline and candidate
+                baseline_config = self.executor_config.copy()
+                baseline_config["model"] = baseline_model
+                
+                candidate_config = self.executor_config.copy()
+                candidate_config["model"] = self.model
 
-        # Clean up temporary task
-        if task_name in _TASK_REGISTRY:
-            del _TASK_REGISTRY[task_name]
+                # Run evaluation
+                result = run_eval(
+                    task_name=task_name,
+                    baseline_path=str(baseline_file),
+                    candidate_path=str(candidate_file),
+                    n=n,
+                    seed=seed,
+                    executor=self.executor,
+                    executor_config=candidate_config,  # Use candidate config (baseline handled via func_name)
+                    bootstrap_samples=1000 if bootstrap else 0,
+                    **kwargs,
+                )
+        finally:
+            # Clean up temporary task
+            if task_name in _TASK_REGISTRY:
+                del _TASK_REGISTRY[task_name]
 
         return result
 
