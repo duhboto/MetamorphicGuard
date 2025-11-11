@@ -156,6 +156,9 @@ def run_eval(
     failed_artifact_ttl_days: Optional[int] = None,
     policy_version: Optional[str] = None,
     explicit_inputs: Optional[List[Tuple[Any, ...]]] = None,
+    min_pass_rate: float = 0.80,
+    power_target: float = 0.8,
+    policy_config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Run evaluation comparing baseline and candidate implementations.
@@ -270,7 +273,7 @@ def run_eval(
         sample_size: int,
         alpha_value: float,
         delta_value: float,
-        power_target: float = 0.8,
+        power_target: float,
     ) -> Tuple[float, Optional[int]]:
         if sample_size == 0:
             return 0.0, None
@@ -331,6 +334,7 @@ def run_eval(
             "mem_mb": mem_mb,
             "alpha": alpha,
             "improve_delta": improve_delta,
+            "min_pass_rate": min_pass_rate,
             "violation_cap": violation_cap,
             "parallel": worker_count,
             "bootstrap_samples": bootstrap_samples,
@@ -379,7 +383,7 @@ def run_eval(
     ]
 
     try:
-        result["decision"] = decide_adopt(result, improve_delta=improve_delta)
+        result["decision"] = decide_adopt(result, improve_delta=improve_delta, min_pass_rate=min_pass_rate)
     except Exception as exc:
         result["decision"] = {
             "adopt": False,
@@ -392,14 +396,18 @@ def run_eval(
         n,
         alpha,
         improve_delta,
+        power_target,
     )
     result["statistics"] = {
         "power_estimate": power_estimate,
-        "power_target": 0.8,
+        "power_target": power_target,
         "recommended_n": recommended_n,
         "min_delta": improve_delta,
         "alpha": alpha,
     }
+
+    if policy_config:
+        result["policy"] = _serialize_for_report(policy_config)
 
     # Add version information
     try:

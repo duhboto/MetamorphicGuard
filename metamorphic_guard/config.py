@@ -29,10 +29,11 @@ class EvaluatorConfig(BaseModel):
     mem_mb: int = Field(default=512, gt=0)
     alpha: float = Field(default=0.05, gt=0, lt=1)
     min_delta: float = Field(default=0.02, alias="improve_delta")  # improve_delta is deprecated
+    min_pass_rate: float = Field(default=0.80, ge=0, le=1)
     violation_cap: int = Field(default=25, ge=1)
     parallel: int = Field(default=1, ge=1)
     bootstrap_samples: int = Field(default=1000, ge=1)
-    ci_method: str = Field(default="bootstrap")
+    ci_method: str = Field(default="newcombe")
     rr_ci_method: str = Field(default="log")
     monitors: List[str] = Field(default_factory=list)
     dispatcher: str = Field(default="local")
@@ -41,6 +42,8 @@ class EvaluatorConfig(BaseModel):
     executor: Optional[str] = None
     executor_config: Optional[dict] = None
     policy_version: Optional[str] = None
+    policy: Optional[str] = None
+    power_target: float = Field(default=0.8, gt=0, lt=1)
     log_json: Optional[bool] = None
     log_file: Optional[str] = None
     metrics_enabled: Optional[bool] = None

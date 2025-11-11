@@ -578,3 +578,78 @@ def solve(L, k):
         ],
     )
     assert replay_result.exit_code == 0
+
+
+def test_cli_policy_file(tmp_path):
+    runner = CliRunner()
+
+    baseline = tmp_path / "baseline.py"
+    candidate = tmp_path / "candidate.py"
+    baseline.write_text(
+        """
+def solve(L, k):
+    return sorted(L)[: min(len(L), k)]
+""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """
+def solve(L, k):
+    return sorted(L)[: min(len(L), k)]
+""",
+        encoding="utf-8",
+    )
+
+    policy_path = tmp_path / "policy.toml"
+    policy_path.write_text(
+        "\n".join(
+            [
+                "[gating]",
+                "min_delta = 0.05",
+                "alpha = 0.01",
+                "power_target = 0.9",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    report_dir = tmp_path / "policy_reports"
+    try:
+        result = runner.invoke(
+            main,
+            [
+                "--task",
+                "top_k",
+                "--baseline",
+                str(baseline),
+                "--candidate",
+                str(candidate),
+                "--n",
+                "5",
+                "--min-pass-rate",
+                "0.5",
+                "--min-delta",
+                "0.0",
+                "--policy",
+                str(policy_path),
+                "--report-dir",
+                str(report_dir),
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "Using policy file" in result.output
+        assert "Power estimate" in result.output
+
+        report_files = list(report_dir.glob("report_*.json"))
+        assert report_files, "Expected report file created"
+        report = json.loads(report_files[0].read_text())
+        assert report["decision"]["adopt"] is False
+        assert report["config"]["alpha"] == 0.01
+        assert report["statistics"]["power_target"] == 0.9
+        policy_payload = report.get("policy")
+        assert policy_payload
+        assert policy_payload["gating"]["min_delta"] == 0.05
+    finally:
+        baseline.unlink()
+        candidate.unlink()

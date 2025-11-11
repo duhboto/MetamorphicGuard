@@ -1,7 +1,3 @@
-"""
-Command-line interface for Metamorphic Guard.
-"""
-
 import json
 import sys
 from pathlib import Path
@@ -10,7 +6,6 @@ from typing import Any, Dict, List, Optional, Sequence
 import click
 
 from .config import ConfigLoadError, load_config
-from .gate import decide_adopt
 from .harness import run_eval
 from .specs import list_tasks
 from .util import write_report
@@ -26,6 +21,7 @@ from .observability import (
     configure_metrics,
     log_event,
 )
+from .policy import load_policy_file, PolicyLoadError
 
 
 _PLUGIN_TEMPLATES = {
@@ -128,6 +124,7 @@ def _load_config_defaults(ctx: click.Context, param: click.Parameter, value: Opt
             "mem_mb": config.mem_mb,
             "alpha": config.alpha,
             "min_delta": config.min_delta,  # improve_delta is deprecated, use min_delta
+        "min_pass_rate": config.min_pass_rate,
             "violation_cap": config.violation_cap,
             "parallel": config.parallel,
             "bootstrap_samples": config.bootstrap_samples,
@@ -146,6 +143,8 @@ def _load_config_defaults(ctx: click.Context, param: click.Parameter, value: Opt
             "failed_artifact_limit": config.failed_artifact_limit,
             "failed_artifact_ttl_days": config.failed_artifact_ttl_days,
             "sandbox_plugins": config.sandbox_plugins,
+        "power_target": config.power_target,
+        "policy": Path(config.policy) if config.policy else None,
         }
     )
 
@@ -197,6 +196,20 @@ EVALUATE_OPTIONS = [
         show_default=True,
         help="Minimum improvement threshold for adoption (--improve-delta is deprecated, use --min-delta)",
     ),
+    click.option(
+        "--min-pass-rate",
+        type=float,
+        default=0.80,
+        show_default=True,
+        help="Minimum candidate pass rate required for adoption.",
+    ),
+    click.option(
+        "--power-target",
+        type=float,
+        default=0.8,
+        show_default=True,
+        help="Desired statistical power for detecting improvements (used for guidance).",
+    ),
     click.option("--violation-cap", default=25, show_default=True, help="Maximum violations to record"),
     click.option(
         "--parallel",
@@ -204,6 +217,12 @@ EVALUATE_OPTIONS = [
         default=1,
         show_default=True,
         help="Number of concurrent workers for sandbox execution",
+    ),
+    click.option(
+        "--policy",
+        type=click.Path(exists=True, dir_okay=False, path_type=Path),
+        default=None,
+        help="Path to a TOML policy file defining gate thresholds.",
     ),
     click.option(
         "--bootstrap-samples",
@@ -379,6 +398,7 @@ def evaluate_command(
     mem_mb: int,
     alpha: float,
     min_delta: float,  # Renamed from improve_delta
+    min_pass_rate: float,
     violation_cap: int,
     parallel: int,
     bootstrap_samples: int,
@@ -405,6 +425,8 @@ def evaluate_command(
     policy_version: Optional[str],
     otlp_endpoint: Optional[str],
     replay_input: Path | None,
+    policy: Path | None,
+    power_target: float,
 ) -> None:
     """Compare baseline and candidate implementations using metamorphic testing."""
 
@@ -485,6 +507,36 @@ def evaluate_command(
 
         effective_n = len(explicit_inputs) if explicit_inputs is not None else n
 
+        policy_payload = None
+        if policy is not None:
+            try:
+                policy_payload = load_policy_file(policy)
+            except PolicyLoadError as exc:
+                raise click.ClickException(str(exc)) from exc
+
+            gating_cfg = policy_payload.get("gating", {})
+            def _maybe_float(value: Any, label: str) -> float:
+                try:
+                    return float(value)
+                except (TypeError, ValueError):
+                    raise click.ClickException(f"Policy value '{label}' must be numeric.")
+
+            if "min_delta" in gating_cfg:
+                min_delta = _maybe_float(gating_cfg["min_delta"], "min_delta")
+            if "min_pass_rate" in gating_cfg:
+                min_pass_rate = _maybe_float(gating_cfg["min_pass_rate"], "min_pass_rate")
+            if "alpha" in gating_cfg:
+                alpha = _maybe_float(gating_cfg["alpha"], "alpha")
+            if "power_target" in gating_cfg:
+                power_target = _maybe_float(gating_cfg["power_target"], "power_target")
+            if "violation_cap" in gating_cfg:
+                try:
+                    violation_cap = int(gating_cfg["violation_cap"])
+                except (TypeError, ValueError):
+                    raise click.ClickException("Policy value 'violation_cap' must be an integer.")
+
+            click.echo(f"Using policy file: {policy}")
+
         click.echo(f"Running evaluation: {task}")
         click.echo(f"Baseline: {baseline}")
         click.echo(f"Candidate: {candidate}")
@@ -548,6 +600,9 @@ def evaluate_command(
             failed_artifact_ttl_days=failed_artifact_ttl_days,
             policy_version=policy_version,
             explicit_inputs=explicit_inputs,
+            min_pass_rate=min_pass_rate,
+            power_target=power_target,
+            policy_config=policy_payload,
         )
 
         decision = result.get("decision", {})
@@ -565,7 +620,7 @@ def evaluate_command(
         if ci_method.lower() == "bootstrap":
             baseline_rate = result["baseline"]["pass_rate"]
             candidate_rate = result["candidate"]["pass_rate"]
-            if n < 100 or min(baseline_rate, candidate_rate) < 0.05 or max(baseline_rate, candidate_rate) > 0.95:
+            if effective_n < 100 or min(baseline_rate, candidate_rate) < 0.05 or max(baseline_rate, candidate_rate) > 0.95:
                 click.echo(
                     "Warning: Bootstrap intervals can be unstable for small samples or extreme pass rates. "
                     "Consider using --ci-method=newcombe.",
