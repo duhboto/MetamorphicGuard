@@ -14,18 +14,61 @@ pip install metamorphic-guard[llm]
 pip install openai
 ```
 
-### 2. Basic LLM Evaluation
+### 2. Using LLMHarness (Recommended)
+
+```python
+from metamorphic_guard.llm_harness import LLMHarness
+from metamorphic_guard.judges.builtin import LengthJudge, NoPIIJudge
+from metamorphic_guard.mutants.builtin import ParaphraseMutant
+
+# Initialize harness
+h = LLMHarness(
+    model="gpt-3.5-turbo",
+    provider="openai",
+    executor_config={"api_key": "sk-..."},  # Or set OPENAI_API_KEY env var
+    max_tokens=512,
+    temperature=0.0,
+)
+
+# Define test case
+case = {
+    "system": "You are a helpful assistant",
+    "user": "Summarize AI safety in 3 sentences"
+}
+
+# Define judges (output evaluation)
+judges = [
+    LengthJudge(max_chars=300),
+    NoPIIJudge(),
+]
+
+# Define mutants (input transformations)
+mutants = [ParaphraseMutant()]
+
+# Run evaluation
+report = h.run(
+    case=case,
+    props=judges,
+    mrs=mutants,
+    n=100,
+    seed=42,
+)
+
+print(f"Adopt: {report['decision']['adopt']}")
+print(f"Pass rate: {report['candidate']['pass_rate']}")
+```
+
+### 3. Direct Evaluation with run_eval
 
 ```python
 from metamorphic_guard.harness import run_eval
-from metamorphic_guard.executors.openai import OpenAIExecutor
 
 # Configure OpenAI executor
 executor_config = {
     "api_key": "sk-...",  # Or set OPENAI_API_KEY env var
     "model": "gpt-3.5-turbo",
     "max_tokens": 512,
-    "temperature": 0.0,  # Deterministic
+    "temperature": 0.0,
     "seed": 42,
 }
 
@@ -37,6 +80,7 @@ result = run_eval(
     executor="openai",
     executor_config=executor_config,
     n=100,
+    monitors=["llm_cost"],  # Track token usage and costs
 )
 ```
 
@@ -115,7 +159,11 @@ The LLM features integrate seamlessly with Metamorphic Guard's existing infrastr
 - **Mutants** can be used as metamorphic relations
 - **Judges** can be used as property checks
 - **Monitors** track LLM-specific metrics (tokens, cost, latency)
+  - Use `llm_cost` monitor to track token usage and costs
+  - Alerts on cost regressions (default: 1.5x threshold)
 - **Distributed execution** via queue dispatcher handles rate limits
+- **Statistical analysis** with bootstrap confidence intervals
+- **Adoption gating** with data-driven decisions
 
 ## Next Steps
 
