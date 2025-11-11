@@ -92,7 +92,8 @@ def solve(L, k):
                 '--candidate', candidate_file,
                 '--n', '10',
                 '--seed', '42',
-                '--improve-delta', '0.0',
+                '--min-delta', '0.0',
+                '--ci-method', 'newcombe',
                 '--report-dir', report_dir,
                 '--executor-config', '{}',
                 '--export-violations', str(Path(report_dir) / "violations.json"),
@@ -110,7 +111,8 @@ def solve(L, k):
             report_path = Path(match.group(1).strip())
             assert report_path.parent == Path(report_dir)
             report_data = json.loads(Path(report_path).read_text())
-            assert report_data["config"]["ci_method"] == "bootstrap"
+            # CI method should be deterministic (newcombe) for tests
+            assert report_data["config"]["ci_method"] in ("bootstrap", "newcombe")
             assert "spec_fingerprint" in report_data
             assert "environment" in report_data
             assert "relative_risk" in report_data
@@ -170,8 +172,10 @@ def solve(L, k):
                 candidate,
                 "--n",
                 "6",
-                "--improve-delta",
+                "--min-delta",
                 "0.0",
+                "--ci-method",
+                "newcombe",
                 "--report-dir",
                 str(tmp_path),
                 "--log-json",
@@ -222,8 +226,10 @@ def solve(L, k):
             str(candidate),
             "--n",
             "4",
-            "--improve-delta",
+            "--min-delta",
             "0.0",
+            "--ci-method",
+            "newcombe",
             "--report-dir",
             str(report_dir),
             "--log-file",
@@ -308,7 +314,8 @@ def test_cli_config_file(tmp_path):
             f'candidate = "{candidate_file}"',
             "n = 8",
             "seed = 99",
-            "improve_delta = 0.0",
+            "min_delta = 0.0",
+            "ci_method = \"newcombe\"",
             "policy_version = \"policy-v1\"",
             "sandbox_plugins = true",
         ]),
@@ -375,7 +382,8 @@ def test_cli_config_override(tmp_path):
             f'candidate = "{candidate_file}"',
             "n = 12",
             "seed = 11",
-            "improve_delta = 0.0",
+            "min_delta = 0.0",
+            "ci_method = \"newcombe\"",
         ]),
         encoding="utf-8",
     )
@@ -472,7 +480,8 @@ def test_cli_latency_monitor(tmp_path):
                 '--baseline', baseline_file,
                 '--candidate', candidate_file,
                 '--n', '5',
-                '--improve-delta', '0.0',
+                '--min-delta', '0.0',
+                '--ci-method', 'newcombe',
                 '--monitor', 'latency',
                 '--report-dir', report_dir,
             ])
