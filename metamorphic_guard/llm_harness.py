@@ -191,10 +191,64 @@ class LLMHarness:
                     bootstrap_samples=1000 if bootstrap else 0,
                     **kwargs,
                 )
+                
+                # Aggregate cost and latency metrics from results
+                result = self._aggregate_llm_metrics(result)
         finally:
             # Clean up temporary task
             if task_name in _TASK_REGISTRY:
                 del _TASK_REGISTRY[task_name]
 
+        return result
+    
+    def _aggregate_llm_metrics(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Aggregate cost and latency metrics from evaluation results.
+        
+        Extracts token usage, costs, and latency from individual test results
+        and adds summary statistics to the report.
+        """
+        # Extract metrics from baseline and candidate results
+        baseline_metrics = {
+            "total_cost_usd": 0.0,
+            "total_tokens": 0,
+            "total_latency_ms": 0.0,
+            "avg_latency_ms": 0.0,
+            "count": 0,
+        }
+        candidate_metrics = {
+            "total_cost_usd": 0.0,
+            "total_tokens": 0,
+            "total_latency_ms": 0.0,
+            "avg_latency_ms": 0.0,
+            "count": 0,
+        }
+        
+        # Aggregate from individual test results if available
+        # Note: Individual results may not be in the report, so we check monitors
+        if "monitors" in result:
+            for monitor_id, monitor_data in result["monitors"].items():
+                if monitor_id == "llm_cost":
+                    summary = monitor_data.get("summary", {})
+                    if "baseline" in summary:
+                        baseline_metrics["total_cost_usd"] = summary["baseline"].get("total_cost_usd", 0.0)
+                        baseline_metrics["total_tokens"] = summary["baseline"].get("total_tokens", 0)
+                    if "candidate" in summary:
+                        candidate_metrics["total_cost_usd"] = summary["candidate"].get("total_cost_usd", 0.0)
+                        candidate_metrics["total_tokens"] = summary["candidate"].get("total_tokens", 0)
+        
+        # Add aggregated metrics to result
+        if "llm_metrics" not in result:
+            result["llm_metrics"] = {}
+        
+        result["llm_metrics"]["baseline"] = baseline_metrics
+        result["llm_metrics"]["candidate"] = candidate_metrics
+        result["llm_metrics"]["cost_delta_usd"] = candidate_metrics["total_cost_usd"] - baseline_metrics["total_cost_usd"]
+        result["llm_metrics"]["cost_ratio"] = (
+            candidate_metrics["total_cost_usd"] / baseline_metrics["total_cost_usd"]
+            if baseline_metrics["total_cost_usd"] > 0
+            else float("inf")
+        )
+        
         return result
 

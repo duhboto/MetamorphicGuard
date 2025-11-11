@@ -22,14 +22,11 @@ except ImportError:
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Register the metamorphic marker and ensure plugin is active."""
+    """Register the metamorphic marker."""
     config.addinivalue_line(
         "markers",
         "metamorphic(task, baseline, candidate, n=100, seed=42): Run Metamorphic Guard evaluation as a test",
     )
-    # Register this as an active plugin
-    if not hasattr(config, "option") or not config.option.plugins:
-        config.pluginmanager.register(pytest_metamorphic_plugin, "metamorphic")
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -115,10 +112,6 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: Optional[pytest.Item]) 
     junit_path = config.getoption("--mg-junit-xml", default=None)
     if junit_path and write_junit_xml:
         write_junit_xml(result, Path(junit_path))
-
-
-# Create plugin instance
-pytest_metamorphic_plugin = type("PytestMetamorphicPlugin", (), {})()
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
