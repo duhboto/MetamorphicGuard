@@ -47,6 +47,8 @@ role_swap = "metamorphic_guard.mutants.builtin:RoleSwapMutant"
 jailbreak_probe = "metamorphic_guard.mutants.advanced:JailbreakProbeMutant"
 chain_of_thought = "metamorphic_guard.mutants.advanced:ChainOfThoughtToggleMutant"
 instruction_permutation = "metamorphic_guard.mutants.advanced:InstructionPermutationMutant"
+citation_shuffle = "metamorphic_guard.mutant_bank.rag_mutants:CitationShuffleMutant"
+context_reorder = "metamorphic_guard.mutant_bank.rag_mutants:ContextReorderMutant"
 
 [project.entry-points."metamorphic_guard.judges"]
 length = "metamorphic_guard.judges.builtin:LengthJudge"
