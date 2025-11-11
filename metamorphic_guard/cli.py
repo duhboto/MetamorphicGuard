@@ -670,7 +670,7 @@ def plugin_group() -> None:
 @plugin_group.command("list")
 @click.option(
     "--kind",
-    type=click.Choice(["monitor", "dispatcher", "all"], case_sensitive=False),
+    type=click.Choice(["monitor", "dispatcher", "executor", "mutant", "judge", "task", "relation", "all"], case_sensitive=False),
     default="all",
     show_default=True,
     help="Filter by plugin kind.",
@@ -777,10 +777,22 @@ def plugin_info(plugin_name: str, kind: str, json_flag: bool) -> None:
     entry_name = next((k for k, v in registry.items() if v is definition), key)
     metadata = definition.metadata
 
+    # Determine kind from group
+    kind_map = {
+        "metamorphic_guard.monitors": "monitor",
+        "metamorphic_guard.dispatchers": "dispatcher",
+        "metamorphic_guard.executors": "executor",
+        "metamorphic_guard.mutants": "mutant",
+        "metamorphic_guard.judges": "judge",
+        "metamorphic_guard.tasks": "task",
+        "metamorphic_guard.relations": "relation",
+    }
+    plugin_kind = kind_map.get(definition.group, "unknown")
+    
     payload = {
         "name": metadata.name or definition.name,
         "entry": entry_name,
-        "kind": "monitor" if definition.group == "metamorphic_guard.monitors" else "dispatcher",
+        "kind": plugin_kind,
         "version": metadata.version,
         "description": metadata.description,
         "guard_min": metadata.guard_min,

@@ -1,6 +1,9 @@
 [build-system]
-requires = ["setuptools>=64", "wheel"]
+requires = ["setuptools>=64", "wheel", "setuptools-scm>=7.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+write_to = "metamorphic_guard/_version.py"
 
 [project]
 name = "metamorphic_guard"
@@ -50,3 +53,6 @@ length = "metamorphic_guard.judges.builtin:LengthJudge"
 no_pii = "metamorphic_guard.judges.builtin:NoPIIJudge"
 rubric = "metamorphic_guard.judges.structured:RubricJudge"
 citation = "metamorphic_guard.judges.structured:CitationJudge"
+
+[project.entry-points."pytest11"]
+metamorphic = "pytest_metamorphic.plugin"

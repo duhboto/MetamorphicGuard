@@ -1,5 +1,5 @@
 """
-Metamorphic Guard v1 - A Python library for comparing program versions using metamorphic testing.
+Metamorphic Guard: A Python library for comparing program versions using metamorphic testing.
 """
 
 from .specs import task, Spec, Property, MetamorphicRelation
@@ -9,7 +9,17 @@ from .stability import multiset_equal
 from .monitoring import Monitor, LatencyMonitor
 from .dispatch import Dispatcher
 
-__version__ = "1.1.0"
+# Version management via setuptools_scm
+try:
+    from importlib.metadata import version
+
+    __version__ = version("metamorphic_guard")
+except Exception:
+    # Fallback for development or if package not installed
+    try:
+        from ._version import __version__  # type: ignore
+    except ImportError:
+        __version__ = "dev"  # type: ignore
 
 
 @task("top_k")

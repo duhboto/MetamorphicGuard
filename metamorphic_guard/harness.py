@@ -216,6 +216,14 @@ def run_eval(
         "job_metadata": collect_job_metadata(),
     }
     result["job_metadata"]["run_id"] = run_id
+    
+    # Add version information
+    try:
+        from . import __version__
+        result["job_metadata"]["metamorphic_guard_version"] = __version__
+    except ImportError:
+        pass
+    
     if policy_version is not None:
         result["config"]["policy_version"] = policy_version
 
