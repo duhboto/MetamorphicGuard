@@ -1,0 +1,135 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Metamorphic Guard Report",
+  "description": "JSON schema for Metamorphic Guard evaluation reports",
+  "type": "object",
+  "required": ["task", "baseline", "candidate", "decision"],
+  "properties": {
+    "task": {
+      "type": "string",
+      "description": "Task name that was evaluated"
+    },
+    "baseline": {
+      "type": "object",
+      "description": "Baseline evaluation results",
+      "required": ["total", "passes", "pass_rate"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "passes": {"type": "integer", "minimum": 0},
+        "pass_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "prop_violations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "test_case": {"type": "integer"},
+              "property": {"type": "string"},
+              "input": {"type": "string"},
+              "output": {"type": "string"},
+              "error": {"type": "string"}
+            }
+          }
+        },
+        "mr_violations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "test_case": {"type": "integer"},
+              "relation": {"type": "string"},
+              "input": {"type": "string"},
+              "output": {"type": "string"},
+              "relation_output": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "description": "Candidate evaluation results",
+      "required": ["total", "passes", "pass_rate"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "passes": {"type": "integer", "minimum": 0},
+        "pass_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "prop_violations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "test_case": {"type": "integer"},
+              "property": {"type": "string"},
+              "input": {"type": "string"},
+              "output": {"type": "string"},
+              "error": {"type": "string"}
+            }
+          }
+        },
+        "mr_violations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "test_case": {"type": "integer"},
+              "relation": {"type": "string"},
+              "input": {"type": "string"},
+              "output": {"type": "string"},
+              "relation_output": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "description": "Adoption decision",
+      "required": ["adopt"],
+      "properties": {
+        "adopt": {"type": "boolean"},
+        "reason": {"type": "string"}
+      }
+    },
+    "delta_pass_rate": {
+      "type": "number",
+      "description": "Difference in pass rates (candidate - baseline)"
+    },
+    "delta_ci": {
+      "type": "array",
+      "items": {"type": "number"},
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "95% confidence interval for pass rate delta"
+    },
+    "relative_risk": {
+      "type": "number",
+      "description": "Relative risk (candidate pass rate / baseline pass rate)"
+    },
+    "relative_risk_ci": {
+      "type": "array",
+      "items": {"type": "number"},
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "95% confidence interval for relative risk"
+    },
+    "config": {
+      "type": "object",
+      "description": "Configuration used for evaluation"
+    },
+    "job_metadata": {
+      "type": "object",
+      "description": "Job execution metadata",
+      "properties": {
+        "duration_seconds": {"type": "number"},
+        "seed": {"type": "integer"},
+        "n": {"type": "integer"}
+      }
+    },
+    "monitors": {
+      "type": "object",
+      "description": "Monitor results",
+      "additionalProperties": true
+    }
+  }
+}
+

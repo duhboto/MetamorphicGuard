@@ -15,6 +15,7 @@ from .harness import run_eval
 from .specs import list_tasks
 from .util import write_report
 from .reporting import render_html_report
+from .junit import write_junit_xml
 from .monitoring import resolve_monitors
 from .plugins import plugin_registry
 from .notifications import collect_alerts, send_webhook_alerts
@@ -262,6 +263,12 @@ EVALUATE_OPTIONS = [
         help="Optional destination for an HTML summary report.",
     ),
     click.option(
+        "--junit-xml",
+        type=click.Path(dir_okay=False, writable=True, path_type=Path),
+        default=None,
+        help="Optional destination for JUnit XML output (for CI integration).",
+    ),
+    click.option(
         "--queue-config",
         type=str,
         default=None,
@@ -370,6 +377,7 @@ def evaluate_command(
     executor_config: str | None,
     export_violations: Path | None,
     html_report: Path | None,
+    junit_xml: Path | None,
     queue_config: str | None,
     monitor_names: Sequence[str],
     alert_webhooks: Sequence[str],
@@ -483,6 +491,10 @@ def evaluate_command(
 
         if html_report is not None:
             render_html_report(result, html_report)
+
+        if junit_xml is not None:
+            write_junit_xml(result, junit_xml)
+            click.echo(f"JUnit XML written to {junit_xml}")
 
         monitor_alerts = collect_alerts(result.get("monitors", {}))
         if alert_webhooks:
@@ -703,6 +715,38 @@ def plugin_list(kind: str, json_flag: bool) -> None:
         sandbox = "yes" if row["sandbox"] else "no"
         description = row["description"] or ""
         click.echo(f"{name}  {kind_str}  {version}  {sandbox:>3}   {description}")
+
+
+@main.command("report")
+@click.argument("json_report", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Output HTML file path (defaults to <json_report>.html)",
+)
+def report_command(json_report: Path, output: Path | None) -> None:
+    """Generate an HTML report from a JSON report file."""
+    import json as json_lib
+
+    try:
+        with open(json_report, "r", encoding="utf-8") as f:
+            payload = json_lib.load(f)
+    except json_lib.JSONDecodeError as e:
+        click.echo(f"Error: Invalid JSON in {json_report}: {e}", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"Error reading {json_report}: {e}", err=True)
+        sys.exit(1)
+
+    output_path = output or json_report.with_suffix(".html")
+    try:
+        render_html_report(payload, output_path)
+        click.echo(f"HTML report written to {output_path}")
+    except Exception as e:
+        click.echo(f"Error generating HTML report: {e}", err=True)
+        sys.exit(1)
 
 
 @plugin_group.command("info")

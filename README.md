@@ -53,9 +53,27 @@ Together these examples highlight how the project supports the broader IT commun
 
 ## Installation
 
+### Standard Installation
+
+```bash
+pip install metamorphic-guard
+```
+
+For development:
+
 ```bash
 pip install -e .
 ```
+
+### One-off Usage (pipx)
+
+For one-time evaluations without installing:
+
+```bash
+pipx run metamorphic-guard evaluate --task demo --baseline baseline.py --candidate candidate.py
+```
+
+This runs Metamorphic Guard in an isolated environment without modifying your system Python.
 
 ## Quick Start
 
@@ -92,15 +110,15 @@ metamorphic-guard --help
 - `--violation-cap`: Maximum violations to report (default: 25)
 - `--parallel`: Number of worker processes used to drive the sandbox (default: 1)
 - `--bootstrap-samples`: Resamples used for percentile bootstrap CI (default: 1000)
-- `--ci-method`: Confidence interval method for pass-rate delta (`bootstrap`, `newcombe`, `wilson`)
+- `--ci-method`: Confidence interval method for pass-rate delta (`bootstrap`, `newcombe`, `wilson`). See "Why Bootstrap?" section below for guidance.
 - `--rr-ci-method`: Confidence interval method for relative risk (`log`)
-- `--ci-method`: Confidence interval method for pass-rate delta (`bootstrap` or `newcombe`)
 - `--report-dir`: Destination directory for JSON reports (defaults to auto-discovery)
 - `--executor`: Sandbox backend (`local`, `docker`, or `module:callable`)
 - `--executor-config`: JSON object with executor-specific settings (e.g. CPU, image)
 - `--config`: Path to a TOML file providing defaults for the above options
 - `--export-violations`: Emit a JSON summary of property/MR failures to a given path
 - `--html-report`: Write an interactive-ready HTML summary alongside the JSON report
+- `--junit-xml`: Write JUnit XML output for CI integration (e.g., `--junit-xml test-results.xml`)
 - `--dispatcher`: Execution dispatcher (`local` threads or experimental `queue`)
 - `--queue-config`: JSON configuration for queue-backed dispatchers (experimental)
 - `--monitor`: Enable built-in monitors such as `latency`
@@ -276,6 +294,24 @@ Adaptive queue controls:
 - `inflight_factor` governs how many cases are kept in-flight (per worker) before
   backpressure kicks in; lower it for heavyweight candidates, raise it for latency-sensitive smoke tests.
 
+### Confidence Interval Methods
+
+Metamorphic Guard supports multiple methods for computing confidence intervals on pass-rate differences:
+
+| Method | Description | When to Use |
+|--------|-------------|-------------|
+| `bootstrap` | Percentile bootstrap resampling | Default choice. Works well for any sample size, accounts for correlation between baseline and candidate. Recommended for most cases. |
+| `newcombe` | Newcombe's hybrid score method | Good for small samples or when you need a closed-form solution. Based on Wilson score intervals. |
+| `wilson` | Wilson score interval | Alternative closed-form method. Similar to Newcombe but uses a different approach. |
+
+**Why Bootstrap?** Bootstrap resampling is the default because it:
+- Makes no distributional assumptions about pass rates
+- Handles small sample sizes gracefully
+- Accounts for the correlation between baseline and candidate results (they're tested on the same inputs)
+- Provides accurate coverage even when pass rates are near 0 or 1
+
+For relative risk (candidate/baseline ratio), the `log` method uses a log-normal approximation, which is appropriate for ratio statistics.
+
 ### Plugin Ecosystem
 
 Metamorphic Guard supports external extensions via Python entry points:
@@ -296,6 +332,46 @@ Once installed, the new monitor can be referenced on the CLI:
 
 ```bash
 metamorphic-guard --monitor latency99
+```
+
+### Generating Reports
+
+#### HTML Reports
+
+Generate an HTML report from an existing JSON report:
+
+```bash
+metamorphic-guard report report_20250101_120000.json -o report.html
+```
+
+Or generate HTML during evaluation:
+
+```bash
+metamorphic-guard evaluate --task demo --baseline baseline.py --candidate candidate.py --html-report report.html
+```
+
+#### JUnit XML for CI
+
+Generate JUnit XML output for CI dashboards:
+
+```bash
+metamorphic-guard evaluate --task demo --baseline baseline.py --candidate candidate.py --junit-xml test-results.xml
+```
+
+This produces standard JUnit XML that can be consumed by Jenkins, GitHub Actions, GitLab CI, and other CI systems.
+
+#### JSON Schema
+
+Report JSON files conform to a JSON Schema available at `schemas/report.schema.json`. This enables:
+- Validation of report files
+- Type checking in integrations
+- IDE autocomplete for report consumers
+
+Validate a report against the schema:
+
+```bash
+# Using ajv-cli (npm install -g ajv-cli)
+ajv validate -s schemas/report.schema.json -d report_20250101_120000.json
 ```
 
 Programmatic APIs (`metamorphic_guard.monitoring.resolve_monitors`) also pick up
