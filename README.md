@@ -198,6 +198,13 @@ modeling real ranking or pricing systems:
 - **Control randomness** – expose seed parameters and re-run stochastic algorithms
   with fixed seeds inside your relations for reproducibility.
 
+**MR Library**: See the [Metamorphic Relation Library](docs/mr-library.md) for a curated catalog of MRs organized by category (permutation, monotonicity, fairness, RAG, etc.) with examples, rationale, and literature citations. Use this guide to select appropriate MRs for your domain and author new ones.
+
+**Coverage Analysis**: Reports include `relation_coverage` showing per-relation and per-category pass rates. Use this to:
+- Identify gaps in MR coverage (missing categories)
+- Detect flaky MRs (inconsistent failures)
+- Understand domain-specific failure patterns
+
 Each report now includes hashes for the generator function, properties, metamorphic
 relations, and formatter callables (`spec_fingerprint`). This makes it possible to
 prove precisely which oracles were active during a run.
