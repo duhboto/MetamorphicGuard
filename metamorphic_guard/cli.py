@@ -190,6 +190,27 @@ EVALUATE_OPTIONS = [
     click.option("--mem-mb", default=512, show_default=True, help="Memory limit per test (MB)"),
     click.option("--alpha", default=0.05, show_default=True, help="Significance level for bootstrap CI"),
     click.option(
+        "--sequential-method",
+        type=click.Choice(["none", "pocock", "obrien-fleming", "sprt"], case_sensitive=False),
+        default="none",
+        show_default=True,
+        help="Sequential testing method for iterative PR workflows (alpha-spending or SPRT).",
+    ),
+    click.option(
+        "--max-looks",
+        type=int,
+        default=1,
+        show_default=True,
+        help="Maximum number of looks/interim analyses for sequential testing (default: 1 = no sequential testing).",
+    ),
+    click.option(
+        "--look-number",
+        type=int,
+        default=1,
+        show_default=True,
+        help="Current look number for sequential testing (1-indexed).",
+    ),
+    click.option(
         "--min-delta",
         "--improve-delta",  # Deprecated alias
         default=0.02,
@@ -418,6 +439,9 @@ def evaluate_command(
     timeout_s: float,
     mem_mb: int,
     alpha: float,
+    sequential_method: str,
+    max_looks: int,
+    look_number: int,
     min_delta: float,  # Renamed from improve_delta
     min_pass_rate: float,
     violation_cap: int,
@@ -648,6 +672,9 @@ def evaluate_command(
                 power_target=power_target,
                 policy_config=policy_payload,
                 shrink_violations=shrink_violations,
+                sequential_method=sequential_method,
+                max_looks=max_looks,
+                look_number=look_number,
             )
             
             run_decision = run_result.get("decision", {})

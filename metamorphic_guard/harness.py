@@ -165,6 +165,9 @@ def run_eval(
     power_target: float = 0.8,
     policy_config: Optional[Dict[str, Any]] = None,
     shrink_violations: bool = False,
+    sequential_method: str = "none",
+    max_looks: int = 1,
+    look_number: int = 1,
 ) -> Dict[str, Any]:
     """
     Run evaluation comparing baseline and candidate implementations.
@@ -323,6 +326,19 @@ def run_eval(
         method=ci_method,
     )
 
+    # Apply sequential testing correction if enabled
+    effective_alpha = alpha
+    if sequential_method != "none" and max_looks > 1:
+        from .sequential_testing import SequentialTestConfig, apply_sequential_correction
+        
+        seq_config = SequentialTestConfig(
+            method=sequential_method,
+            alpha=alpha,
+            max_looks=max_looks,
+            look_number=look_number,
+        )
+        delta_ci, effective_alpha = apply_sequential_correction(delta_ci, seq_config)
+
     baseline_hash = sha256_file(baseline_path)
     candidate_hash = sha256_file(candidate_path)
     spec_fingerprint = compute_spec_fingerprint(spec)
@@ -341,6 +357,10 @@ def run_eval(
             "timeout_s": timeout_s,
             "mem_mb": mem_mb,
             "alpha": alpha,
+            "effective_alpha": effective_alpha,
+            "sequential_method": sequential_method,
+            "max_looks": max_looks,
+            "look_number": look_number,
             "improve_delta": improve_delta,
             "min_pass_rate": min_pass_rate,
             "violation_cap": violation_cap,
