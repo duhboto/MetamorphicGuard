@@ -25,6 +25,95 @@ from .monitoring import Monitor, MonitorContext
 from .observability import add_log_context, increment_metric, log_event
 
 
+def _compute_trust_scores(
+    results: Sequence[Dict[str, Any]],
+    test_inputs: Sequence[Tuple[Any, ...]],
+    spec: Spec,
+) -> Optional[Dict[str, Any]]:
+    """
+    Compute trust scores for RAG evaluations if applicable.
+    
+    Args:
+        results: Evaluation results
+        test_inputs: Test input tuples
+        spec: Task specification
+        
+    Returns:
+        Trust scores dictionary or None if not applicable
+    """
+    try:
+        from .rag_guards import assess
+        
+        # Check if this looks like a RAG evaluation
+        # RAG evaluations typically have prompts and sources in inputs
+        trust_scores_list = []
+        
+        for result, args in zip(results, test_inputs):
+            if not result.get("success"):
+                continue
+                
+            output = result.get("result", "")
+            if not isinstance(output, str):
+                continue
+                
+            # Try to extract question and sources from inputs
+            # For LLM evaluations, args might be (prompt, system_prompt) or similar
+            if len(args) >= 1:
+                question = str(args[0]) if args[0] else ""
+                sources = []
+                
+                # Try to find sources in remaining args or in the result metadata
+                if len(args) > 1:
+                    for arg in args[1:]:
+                        if isinstance(arg, str) and len(arg) > 50:
+                            sources.append(arg)
+                        elif isinstance(arg, (list, tuple)):
+                            sources.extend([str(s) for s in arg if isinstance(s, str)])
+                
+                # If we have question and output, compute trust score
+                if question and output and sources:
+                    try:
+                        score, flags = assess(
+                            question=question,
+                            answer=output,
+                            sources=sources,
+                            checks=["citation", "faithfulness", "coverage", "answerability", "novelty"],
+                        )
+                        trust_scores_list.append({
+                            "score": score.score,
+                            "flags": flags.to_dict(),
+                            "details": score.details,
+                        })
+                    except Exception:
+                        # Skip if trust scoring fails
+                        continue
+        
+        if trust_scores_list:
+            # Aggregate trust scores
+            avg_score = sum(t["score"] for t in trust_scores_list) / len(trust_scores_list)
+            
+            # Aggregate flags (all must be True for overall flag to be True)
+            aggregated_flags = {
+                "citation_correct": all(t["flags"].get("citation_correct", True) for t in trust_scores_list),
+                "citation_complete": all(t["flags"].get("citation_complete", True) for t in trust_scores_list),
+                "coverage_sufficient": all(t["flags"].get("coverage_sufficient", True) for t in trust_scores_list),
+                "answerable": all(t["flags"].get("answerable", True) for t in trust_scores_list),
+                "novel_content": any(t["flags"].get("novel_content", False) for t in trust_scores_list),
+            }
+            
+            return {
+                "score": avg_score,
+                "flags": aggregated_flags,
+                "count": len(trust_scores_list),
+                "individual_scores": trust_scores_list[:10],  # Keep first 10 for details
+            }
+    except ImportError:
+        # RAG guards not available
+        pass
+    
+    return None
+
+
 def run_eval(
     task_name: str,
     baseline_path: str,
@@ -150,6 +239,10 @@ def run_eval(
             executor_config=executor_config,
         ),
     )
+    
+    # Compute trust scores if applicable (for RAG evaluations)
+    baseline_trust = _compute_trust_scores(baseline_results, test_inputs, spec)
+    candidate_trust = _compute_trust_scores(candidate_results, test_inputs, spec)
 
     delta_ci = _compute_delta_ci(
         baseline_metrics,
@@ -232,6 +325,14 @@ def run_eval(
         result["monitors"] = {
             monitor.identifier(): monitor.finalize() for monitor in monitor_objs
         }
+    
+    # Add trust scores if computed
+    if baseline_trust or candidate_trust:
+        result["trust_scores"] = {}
+        if baseline_trust:
+            result["trust_scores"]["baseline"] = baseline_trust
+        if candidate_trust:
+            result["trust_scores"]["candidate"] = candidate_trust
 
     log_event(
         "run_eval_complete",

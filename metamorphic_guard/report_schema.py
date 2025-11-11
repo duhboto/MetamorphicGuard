@@ -60,6 +60,16 @@ class JobMetadata(BaseModel):
     run_id: Optional[str] = None
 
 
+class TrustScores(BaseModel):
+    """Trust scores for RAG evaluations."""
+
+    score: float
+    flags: Dict[str, bool] = Field(default_factory=dict)
+    count: Optional[int] = None
+    individual_scores: Optional[List[Dict[str, Any]]] = None
+    details: Optional[Dict[str, Any]] = None
+
+
 class Report(BaseModel):
     """Complete Metamorphic Guard evaluation report."""
 
@@ -75,6 +85,8 @@ class Report(BaseModel):
     job_metadata: Optional[JobMetadata] = None
     monitors: Dict[str, Any] = Field(default_factory=dict)
     policy_version: Optional[str] = None
+    trust_scores: Optional[Dict[str, TrustScores]] = None
+    llm_metrics: Optional[Dict[str, Any]] = None
 
     class Config:
         """Pydantic config."""
