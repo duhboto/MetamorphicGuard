@@ -144,6 +144,7 @@ def _load_config_defaults(ctx: click.Context, param: click.Parameter, value: Opt
             "sandbox_plugins": config.sandbox_plugins,
         "power_target": config.power_target,
         "policy": Path(config.policy) if config.policy else None,
+        "stability": config.stability,
         }
     )
 
@@ -371,6 +372,13 @@ EVALUATE_OPTIONS = [
         default=None,
         help="OpenTelemetry OTLP endpoint URL (e.g., 'http://localhost:4317') for trace export.",
     ),
+    click.option(
+        "--stability",
+        type=int,
+        default=1,
+        show_default=True,
+        help="Run evaluation N times and require consistent decisions (consensus). Reports flakiness if decisions differ.",
+    ),
 ]
 
 
@@ -427,6 +435,7 @@ def evaluate_command(
     replay_input: Path | None,
     policy: Path | None,
     power_target: float,
+    stability: int,
 ) -> None:
     """Compare baseline and candidate implementations using metamorphic testing."""
 
@@ -576,34 +585,95 @@ def evaluate_command(
                 click.echo(f"Error: {exc}", err=True)
                 sys.exit(1)
 
-        result = run_eval(
-            task_name=task,
-            baseline_path=baseline,
-            candidate_path=candidate,
-            n=n,
-            seed=seed,
-            timeout_s=timeout_s,
-            mem_mb=mem_mb,
-            alpha=alpha,
-            violation_cap=violation_cap,
-            parallel=parallel,
-            improve_delta=min_delta,
-            bootstrap_samples=bootstrap_samples,
-            ci_method=ci_method,
-            rr_ci_method=rr_ci_method,
-            executor=executor,
-            executor_config=parsed_executor_config,
-            dispatcher=dispatcher,
-            queue_config=queue_cfg,
-            monitors=monitor_objects,
-            failed_artifact_limit=failed_artifact_limit,
-            failed_artifact_ttl_days=failed_artifact_ttl_days,
-            policy_version=policy_version,
-            explicit_inputs=explicit_inputs,
-            min_pass_rate=min_pass_rate,
-            power_target=power_target,
-            policy_config=policy_payload,
-        )
+        # Stability runs: execute evaluation N times and check for consensus
+        stability_runs: List[Dict[str, Any]] = []
+        decisions: List[bool] = []
+        
+        if stability > 1:
+            click.echo(f"Running stability check: {stability} runs required for consensus")
+        
+        for run_idx in range(stability):
+            if stability > 1:
+                click.echo(f"Stability run {run_idx + 1}/{stability}...")
+            
+            # Use different seeds for each run to detect flakiness
+            run_seed = seed + run_idx if stability > 1 else seed
+            
+            run_result = run_eval(
+                task_name=task,
+                baseline_path=baseline,
+                candidate_path=candidate,
+                n=n,
+                seed=run_seed,
+                timeout_s=timeout_s,
+                mem_mb=mem_mb,
+                alpha=alpha,
+                violation_cap=violation_cap,
+                parallel=parallel,
+                improve_delta=min_delta,
+                bootstrap_samples=bootstrap_samples,
+                ci_method=ci_method,
+                rr_ci_method=rr_ci_method,
+                executor=executor,
+                executor_config=parsed_executor_config,
+                dispatcher=dispatcher,
+                queue_config=queue_cfg,
+                monitors=monitor_objects,
+                failed_artifact_limit=failed_artifact_limit,
+                failed_artifact_ttl_days=failed_artifact_ttl_days,
+                policy_version=policy_version,
+                explicit_inputs=explicit_inputs,
+                min_pass_rate=min_pass_rate,
+                power_target=power_target,
+                policy_config=policy_payload,
+            )
+            
+            run_decision = run_result.get("decision", {})
+            run_adopt = run_decision.get("adopt", False)
+            decisions.append(run_adopt)
+            stability_runs.append({
+                "run": run_idx + 1,
+                "seed": run_seed,
+                "decision": run_adopt,
+                "reason": run_decision.get("reason"),
+                "delta_pass_rate": run_result.get("delta_pass_rate"),
+                "delta_ci": run_result.get("delta_ci"),
+            })
+        
+        # Use the last run's result as the primary result
+        result = run_result
+        
+        # Check for consensus
+        all_adopt = all(decisions)
+        all_reject = not any(decisions)
+        consensus = all_adopt or all_reject
+        
+        if stability > 1:
+            adopt_count = sum(decisions)
+            click.echo(f"\nStability results: {adopt_count}/{stability} runs adopted")
+            if not consensus:
+                click.echo(
+                    f"⚠️  FLAKY: Decisions inconsistent across {stability} runs. "
+                    f"Adopt: {adopt_count}, Reject: {stability - adopt_count}",
+                    err=True,
+                )
+                # Override decision to reject on flakiness
+                result["decision"] = {
+                    "adopt": False,
+                    "reason": f"flaky: inconsistent decisions across {stability} runs ({adopt_count} adopt, {stability - adopt_count} reject)",
+                }
+            else:
+                click.echo(f"✓ Consensus: All {stability} runs {'adopted' if all_adopt else 'rejected'}")
+        
+        # Add stability metadata to result
+        if stability > 1:
+            result["stability"] = {
+                "runs": stability,
+                "consensus": consensus,
+                "adopt_count": sum(decisions),
+                "reject_count": stability - sum(decisions),
+                "run_details": stability_runs,
+            }
 
         decision = result.get("decision", {})
         result.setdefault("config", {})["sandbox_plugins"] = bool(sandbox_plugins)

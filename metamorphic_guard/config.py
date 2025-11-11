@@ -52,6 +52,7 @@ class EvaluatorConfig(BaseModel):
     failed_artifact_limit: Optional[int] = Field(default=None, ge=0)
     failed_artifact_ttl_days: Optional[int] = Field(default=None, ge=0)
     sandbox_plugins: Optional[bool] = None
+    stability: int = Field(default=1, ge=1)
 
     @field_validator("dispatcher")
     @classmethod

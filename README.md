@@ -128,6 +128,7 @@ metamorphic-guard --help
 **Optional Options:**
 - `--n`: Number of test cases (default: 400)
 - `--seed`: Random seed for reproducibility (default: 42)
+- `--stability`: Run evaluation N times and require consistent decisions (default: 1). When > 1, runs the evaluation multiple times with different seeds and reports flakiness if decisions differ. Useful for detecting non-deterministic behavior.
 - `--timeout-s`: Timeout per test in seconds (default: 2.0)
 - `--mem-mb`: Memory limit in MB (default: 512)
 - `--min-delta`: Minimum improvement threshold (default: 0.02). `--improve-delta` is deprecated and will be removed in a future version.

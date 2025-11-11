@@ -786,3 +786,73 @@ def solve(L, k):
     finally:
         baseline.unlink()
         candidate.unlink()
+
+
+def test_cli_stability_runs(tmp_path):
+    """Test stability runs for consensus checking."""
+    runner = CliRunner()
+
+    baseline = tmp_path / "baseline.py"
+    candidate = tmp_path / "candidate.py"
+    baseline.write_text(
+        """
+def solve(L, k):
+    return sorted(L, reverse=True)[: min(len(L), k)]
+""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """
+def solve(L, k):
+    return sorted(L, reverse=True)[: min(len(L), k)]
+""",
+        encoding="utf-8",
+    )
+
+    report_dir = tmp_path / "stability_reports"
+    result = runner.invoke(
+        main,
+        [
+            "--task",
+            "top_k",
+            "--baseline",
+            str(baseline),
+            "--candidate",
+            str(candidate),
+            "--n",
+            "5",
+            "--min-delta",
+            "-0.5",
+            "--ci-method",
+            "newcombe",
+            "--stability",
+            "3",
+            "--report-dir",
+            str(report_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Running stability check: 3 runs required for consensus" in result.output
+    assert "Stability run 1/3" in result.output
+    assert "Stability run 2/3" in result.output
+    assert "Stability run 3/3" in result.output
+    assert "Stability results:" in result.output
+
+    report_files = sorted(
+        p for p in report_dir.glob("report_*.json") if not p.name.endswith("_cases.json")
+    )
+    assert report_files, "Expected report file created"
+    report = json.loads(report_files[0].read_text())
+    
+    # Check stability metadata
+    stability_info = report.get("stability")
+    assert stability_info is not None
+    assert stability_info["runs"] == 3
+    assert stability_info["consensus"] is True  # Should be consistent for deterministic runs
+    assert len(stability_info["run_details"]) == 3
+    assert all("decision" in run for run in stability_info["run_details"])
+    assert all("seed" in run for run in stability_info["run_details"])
+
+    baseline.unlink()
+    candidate.unlink()
