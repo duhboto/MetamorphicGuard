@@ -23,6 +23,7 @@ from .util import (
 from .dispatch import Dispatcher, ensure_dispatcher
 from .monitoring import Monitor, MonitorContext
 from .observability import add_log_context, increment_metric, log_event
+from .gate import decide_adopt
 
 
 def _compute_trust_scores(
@@ -310,6 +311,14 @@ def run_eval(
     }
     result["job_metadata"]["run_id"] = run_id
     
+    try:
+        result["decision"] = decide_adopt(result, improve_delta=improve_delta)
+    except Exception as exc:
+        result["decision"] = {
+            "adopt": False,
+            "reason": f"gate_error: {exc}",
+        }
+
     # Add version information
     try:
         from . import __version__

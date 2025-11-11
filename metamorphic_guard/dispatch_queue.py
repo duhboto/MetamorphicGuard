@@ -89,12 +89,16 @@ class InMemoryQueueAdapter(QueueAdapter):
     def __init__(self) -> None:
         self._task_queue: "queue.Queue[_Task]" = queue.Queue()
         self._result_queues: Dict[str, "queue.Queue[_Result]"] = {}
-        self._lock = threading.Lock()
+        self._result_lock = threading.Lock()
+        self._assignment_lock = threading.Lock()
+        self._heartbeat_lock = threading.Lock()
         self._shutdown = False
         self._heartbeats: Dict[str, float] = {}
         self._assignments: Dict[str, str] = {}
 
     def publish_task(self, task: _Task) -> None:
+        if self._shutdown:
+            return
         self._task_queue.put(task)
 
     def consume_task(self, worker_id: str, timeout: float | None = None) -> Optional[_Task]:
@@ -102,19 +106,24 @@ class InMemoryQueueAdapter(QueueAdapter):
             return None
         try:
             data = self._task_queue.get(timeout=timeout)
-            if isinstance(data, _Task):
-                if data.job_id != "__shutdown__":
-                    # Update assignment under lock (after blocking get completes)
-                    with self._lock:
-                        self._assignments[data.task_id] = worker_id
-                return data
-            return None
         except queue.Empty:
             return None
 
+        if not isinstance(data, _Task):
+            return None
+
+        if data.job_id != "__shutdown__":
+            with self._assignment_lock:
+                self._assignments[data.task_id] = worker_id
+        return data
+
+    def ensure_result_queue(self, job_id: str) -> None:
+        with self._result_lock:
+            self._result_queues.setdefault(job_id, queue.Queue())
+
     def publish_result(self, result: _Result) -> None:
         # Acquire queue reference under lock, then release before blocking put
-        with self._lock:
+        with self._result_lock:
             result_queue = self._result_queues.get(result.job_id)
             if result_queue is None:
                 result_queue = queue.Queue()
@@ -123,7 +132,7 @@ class InMemoryQueueAdapter(QueueAdapter):
 
     def consume_result(self, job_id: str, timeout: float | None = None) -> Optional[_Result]:
         # Acquire queue reference under lock, then release before blocking get
-        with self._lock:
+        with self._result_lock:
             result_queue = self._result_queues.get(job_id)
         if result_queue is None:
             return None
@@ -138,28 +147,41 @@ class InMemoryQueueAdapter(QueueAdapter):
             _Task(job_id="__shutdown__", task_id="__shutdown__", case_indices=[], role="", payload=b"", call_spec=None, compressed=False)
         )
 
+    def reset(self) -> None:
+        self._shutdown = False
+        with self._result_lock:
+            self._result_queues = {}
+        with self._assignment_lock:
+            self._assignments.clear()
+        with self._heartbeat_lock:
+            self._heartbeats.clear()
+
     def register_worker(self, worker_id: str) -> None:
-        with self._lock:
+        with self._heartbeat_lock:
             self._heartbeats[worker_id] = time.monotonic()
 
     def worker_assign(self, worker_id: str, task_id: str) -> None:
-        with self._lock:
+        with self._assignment_lock:
             self._assignments[task_id] = worker_id
 
     def worker_heartbeats(self) -> Dict[str, float]:
-        with self._lock:
+        with self._heartbeat_lock:
             return dict(self._heartbeats)
 
     def get_assignment(self, task_id: str) -> Optional[str]:
-        with self._lock:
+        with self._assignment_lock:
             return self._assignments.get(task_id)
 
     def pop_assignment(self, task_id: str) -> Optional[str]:
-        with self._lock:
+        with self._assignment_lock:
             return self._assignments.pop(task_id, None)
 
     def pending_count(self) -> int:
         return self._task_queue.qsize()
+
+    def worker_count(self) -> int:
+        with self._heartbeat_lock:
+            return len(self._heartbeats)
 
 
 class RedisQueueAdapter(QueueAdapter):
@@ -334,12 +356,22 @@ class QueueDispatcher(Dispatcher):
         monitors = list(monitors or [])
         job_id = str(uuid.uuid4())
 
+        reset_adapter = getattr(self.adapter, "reset", None)
+        if callable(reset_adapter):
+            reset_adapter()
+
         threads: List[_LocalWorker] = []
         if self._spawn_local_workers:
             for _ in range(self.workers):
                 worker = _LocalWorker(self.adapter, run_case)
                 worker.start()
                 threads.append(worker)
+            # Wait briefly for at least one worker to register
+            worker_ready_deadline = time.monotonic() + 5.0
+            while time.monotonic() < worker_ready_deadline:
+                if getattr(self.adapter, "worker_count", lambda: 0)() > 0:
+                    break
+                time.sleep(0.01)
 
         try:
             lease_seconds = float(self.config.get("lease_seconds", 30.0))
@@ -358,6 +390,8 @@ class QueueDispatcher(Dispatcher):
             fast_threshold_ms = float(self.config.get("adaptive_fast_threshold_ms", 50.0))
             slow_threshold_ms = float(self.config.get("adaptive_slow_threshold_ms", 500.0))
             metrics_interval = float(self.config.get("metrics_interval", 1.0))
+            overall_timeout = float(self.config.get("global_timeout", 120.0))
+            overall_deadline = time.monotonic() + overall_timeout
 
             if not adaptive_batching:
                 current_batch_size = configured_batch_size
@@ -417,11 +451,15 @@ class QueueDispatcher(Dispatcher):
                     _publish_chunk(next_index, batch)
                     next_index += batch
 
+            ensure_queue = getattr(self.adapter, "ensure_result_queue", None)
+            if ensure_queue is not None:
+                ensure_queue(job_id)
+
             _maybe_publish_batches()
 
             results: List[Dict[str, Any]] = [{} for _ in range(len(test_inputs))]
             received = 0
-            timeout = self.config.get("result_poll_timeout", 1.0)
+            poll_timeout = float(self.config.get("result_poll_timeout", 1.0))
 
             while received < len(test_inputs):
                 now = time.monotonic()
@@ -467,6 +505,11 @@ class QueueDispatcher(Dispatcher):
                                     current_batch_size,
                                 )
 
+                remaining_time = overall_deadline - now
+                if remaining_time <= 0:
+                    raise TimeoutError(f"Queue dispatcher exceeded global timeout ({overall_timeout}s)")
+
+                timeout = min(poll_timeout, max(0.1, remaining_time))
                 message = self.adapter.consume_result(job_id, timeout=timeout)
                 if message is None:
                     _maybe_publish_batches()
