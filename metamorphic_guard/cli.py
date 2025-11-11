@@ -191,10 +191,11 @@ EVALUATE_OPTIONS = [
     click.option("--mem-mb", default=512, show_default=True, help="Memory limit per test (MB)"),
     click.option("--alpha", default=0.05, show_default=True, help="Significance level for bootstrap CI"),
     click.option(
-        "--improve-delta",
+        "--min-delta",
+        "--improve-delta",  # Deprecated alias
         default=0.02,
         show_default=True,
-        help="Minimum improvement threshold for adoption",
+        help="Minimum improvement threshold for adoption (--improve-delta is deprecated, use --min-delta)",
     ),
     click.option("--violation-cap", default=25, show_default=True, help="Maximum violations to record"),
     click.option(
@@ -371,7 +372,7 @@ def evaluate_command(
     timeout_s: float,
     mem_mb: int,
     alpha: float,
-    improve_delta: float,
+    min_delta: float,  # Renamed from improve_delta
     violation_cap: int,
     parallel: int,
     bootstrap_samples: int,
@@ -498,7 +499,7 @@ def evaluate_command(
             alpha=alpha,
             violation_cap=violation_cap,
             parallel=parallel,
-            improve_delta=improve_delta,
+            improve_delta=min_delta,
             bootstrap_samples=bootstrap_samples,
             ci_method=ci_method,
             rr_ci_method=rr_ci_method,
@@ -512,7 +513,7 @@ def evaluate_command(
             policy_version=policy_version,
         )
 
-        decision = decide_adopt(result, improve_delta)
+        decision = decide_adopt(result, improve_delta=min_delta)
         result["decision"] = decision
         result.setdefault("config", {})["sandbox_plugins"] = bool(sandbox_plugins)
 
