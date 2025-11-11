@@ -129,7 +129,7 @@ def solve(L, k):
             assert "spec_fingerprint" in provenance
             assert "python_version" in provenance
             assert report_data["config"].get("policy_version") == "test-policy"
-            assert report_data["config"].get("sandbox_plugins") is False
+            assert report_data["config"].get("sandbox_plugins") is True  # Default is secure-by-default
             assert len(report_data.get("cases", [])) == 10
             assert report_data["cases"][0]["index"] == 0
             stats = report_data.get("statistics")
