@@ -649,6 +649,28 @@ Queue telemetry ships out-of-the-box: `metamorphic_queue_pending_tasks` (tasks w
   wire them into your project via entry points.
 - Explore `docs/cookbook.md` for recipes covering distributed evaluations, advanced monitors, and CI pipelines.
 
+### Benchmark Suites & Stability Audits
+
+Metamorphic Guard includes benchmark regression suites (`tests/test_benchmarks.py`) that validate the statistics engine with known lifts (positive/negative). These suites ensure confidence intervals and adoption decisions are computed correctly.
+
+**Stability Audit**: Use `stability-audit` command to detect flakiness:
+
+```bash
+metamorphic-guard stability-audit \
+  --task top_k \
+  --baseline baseline.py \
+  --candidate candidate.py \
+  --num-seeds 20 \
+  --output audit.json
+```
+
+This runs evaluations across multiple seeds and reports:
+- Consensus status (all runs agree)
+- Flakiness detection (inconsistent decisions)
+- Per-seed decisions and delta pass rates
+
+**Governance**: See [Governance Documentation](docs/governance.md) for signed artifacts, reproducible bundles, and compliance use cases.
+
 ## Output Format
 
 The system generates JSON reports in `reports/report_<timestamp>.json`:
