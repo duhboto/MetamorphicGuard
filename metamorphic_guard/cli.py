@@ -797,6 +797,51 @@ def report_command(json_report: Path, output: Path | None) -> None:
         sys.exit(1)
 
 
+@main.command("bundle")
+@click.argument("report", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Output bundle file path (defaults to <report>.tgz)",
+)
+@click.option(
+    "--baseline",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Path to baseline implementation file",
+)
+@click.option(
+    "--candidate",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Path to candidate implementation file",
+)
+def bundle_command(
+    report: Path,
+    output: Path | None,
+    baseline: Path | None,
+    candidate: Path | None,
+) -> None:
+    """Create a reproducible bundle from an evaluation report."""
+    from .bundle import create_repro_bundle
+    
+    output_path = output or report.with_suffix(".tgz")
+    
+    try:
+        bundle_path = create_repro_bundle(
+            report_path=report,
+            output_path=output_path,
+            baseline_path=baseline,
+            candidate_path=candidate,
+        )
+        click.echo(f"Repro bundle created: {bundle_path}")
+    except Exception as e:
+        click.echo(f"Error creating bundle: {e}", err=True)
+        sys.exit(1)
+
+
 @plugin_group.command("info")
 @click.argument("plugin_name")
 @click.option(

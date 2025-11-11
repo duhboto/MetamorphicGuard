@@ -581,7 +581,7 @@ The system generates JSON reports in `reports/report_<timestamp>.json`:
     "timeout_s": 2.0,
     "mem_mb": 512,
     "alpha": 0.05,
-    "improve_delta": 0.02,
+    "min_delta": 0.02,
     "violation_cap": 25,
     "parallel": 1,
     "bootstrap_samples": 1000,
