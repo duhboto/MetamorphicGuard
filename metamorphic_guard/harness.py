@@ -263,6 +263,41 @@ def run_eval(
             executor_config=executor_config,
         ),
     )
+
+    def _estimate_power(
+        p_baseline: float,
+        p_candidate: float,
+        sample_size: int,
+        alpha_value: float,
+        delta_value: float,
+        power_target: float = 0.8,
+    ) -> Tuple[float, Optional[int]]:
+        if sample_size == 0:
+            return 0.0, None
+        effect = p_candidate - p_baseline
+        pooled_var = p_baseline * (1 - p_baseline) + p_candidate * (1 - p_candidate)
+        if pooled_var == 0:
+            power_val = 1.0 if effect >= delta_value else 0.0
+            return power_val, None
+        se = math.sqrt(pooled_var / sample_size)
+        if se == 0:
+            power_val = 1.0 if effect >= delta_value else 0.0
+            return power_val, None
+
+        z_alpha = NormalDist().inv_cdf(1 - alpha_value)
+        z_effect = (effect - delta_value) / se
+        power_val = 1 - NormalDist().cdf(z_alpha - z_effect)
+        power_val = max(0.0, min(1.0, power_val))
+
+        recommended_n = None
+        if delta_value > 0 and power_target > 0 and power_target < 1:
+            p1 = p_baseline
+            p2 = max(0.0, min(1.0, p_baseline + delta_value))
+            var_target = p1 * (1 - p1) + p2 * (1 - p2)
+            if delta_value > 0 and var_target > 0:
+                z_beta = NormalDist().inv_cdf(power_target)
+                recommended_n = math.ceil(((z_alpha + z_beta) ** 2 * var_target) / (delta_value ** 2))
+        return power_val, recommended_n
     
     # Compute trust scores if applicable (for RAG evaluations)
     baseline_trust = _compute_trust_scores(baseline_results, test_inputs, spec)
@@ -350,6 +385,21 @@ def run_eval(
             "adopt": False,
             "reason": f"gate_error: {exc}",
         }
+
+    power_estimate, recommended_n = _estimate_power(
+        baseline_metrics["pass_rate"],
+        candidate_metrics["pass_rate"],
+        n,
+        alpha,
+        improve_delta,
+    )
+    result["statistics"] = {
+        "power_estimate": power_estimate,
+        "power_target": 0.8,
+        "recommended_n": recommended_n,
+        "min_delta": improve_delta,
+        "alpha": alpha,
+    }
 
     # Add version information
     try:

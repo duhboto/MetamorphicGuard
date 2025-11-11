@@ -215,7 +215,7 @@ EVALUATE_OPTIONS = [
     click.option(
         "--ci-method",
         type=click.Choice(["bootstrap", "newcombe", "wilson"], case_sensitive=False),
-        default="bootstrap",
+        default="newcombe",
         show_default=True,
         help="Method for the pass-rate delta confidence interval",
     ),
@@ -552,6 +552,25 @@ def evaluate_command(
 
         decision = result.get("decision", {})
         result.setdefault("config", {})["sandbox_plugins"] = bool(sandbox_plugins)
+        stats = result.get("statistics") or {}
+        if stats:
+            click.echo(
+                f"Power estimate (Δ ≥ {stats.get('min_delta')}): "
+                f"{stats.get('power_estimate', 0.0):.3f} "
+                f"(target {stats.get('power_target', 0.8):.2f})"
+            )
+            if stats.get("recommended_n"):
+                click.echo(f"Suggested n for target power: {stats['recommended_n']}")
+
+        if ci_method.lower() == "bootstrap":
+            baseline_rate = result["baseline"]["pass_rate"]
+            candidate_rate = result["candidate"]["pass_rate"]
+            if n < 100 or min(baseline_rate, candidate_rate) < 0.05 or max(baseline_rate, candidate_rate) > 0.95:
+                click.echo(
+                    "Warning: Bootstrap intervals can be unstable for small samples or extreme pass rates. "
+                    "Consider using --ci-method=newcombe.",
+                    err=True,
+                )
 
         report_path = write_report(result, directory=report_dir)
 

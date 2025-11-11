@@ -123,6 +123,9 @@ def solve(L, k):
             assert report_data["config"].get("sandbox_plugins") is False
             assert len(report_data.get("cases", [])) == 10
             assert report_data["cases"][0]["index"] == 0
+            stats = report_data.get("statistics")
+            assert stats is not None
+            assert "power_estimate" in stats
             violations_file = Path(report_dir) / "violations.json"
             assert violations_file.exists()
             violations_payload = json.loads(violations_file.read_text())
