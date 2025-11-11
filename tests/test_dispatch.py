@@ -96,16 +96,20 @@ def test_queue_requeues_stalled_worker(monkeypatch):
     def run_case(case_index, args):
         return {"success": True, "result": args[0], "duration_ms": 5.0}
 
+    stall_claimed = threading.Event()
+
     def stalled_worker() -> None:
         adapter.register_worker("stall")
         task = adapter.consume_task("stall", timeout=1.0)
         if not task or task.job_id == "__shutdown__":
             return
+        stall_claimed.set()
         time.sleep(0.25)
 
     stop_event = threading.Event()
 
     def finisher_worker() -> None:
+        stall_claimed.wait()
         adapter.register_worker("finisher")
         while not stop_event.is_set():
             task = adapter.consume_task("finisher", timeout=0.05)
@@ -130,7 +134,6 @@ def test_queue_requeues_stalled_worker(monkeypatch):
     finisher_thread = threading.Thread(target=finisher_worker, daemon=True)
 
     stall_thread.start()
-    time.sleep(0.15)
     finisher_thread.start()
 
     results = dispatcher.execute(
@@ -146,6 +149,7 @@ def test_queue_requeues_stalled_worker(monkeypatch):
     stall_thread.join(timeout=1.0)
     finisher_thread.join(timeout=1.0)
 
+    assert stall_claimed.is_set(), "stall worker failed to claim a task"
     assert [result["result"] for result in results] == [0, 1]
     assert sum(requeue_counts) >= 1
 
