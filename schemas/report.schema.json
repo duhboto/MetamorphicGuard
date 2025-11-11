@@ -1,135 +1,445 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Metamorphic Guard Report",
+  "$defs": {
+    "BaselineMetrics": {
+      "description": "Baseline evaluation metrics.",
+      "properties": {
+        "total": {
+          "title": "Total",
+          "type": "integer"
+        },
+        "passes": {
+          "title": "Passes",
+          "type": "integer"
+        },
+        "pass_rate": {
+          "title": "Pass Rate",
+          "type": "number"
+        },
+        "prop_violations": {
+          "items": {
+            "$ref": "#/$defs/Violation"
+          },
+          "title": "Prop Violations",
+          "type": "array"
+        },
+        "mr_violations": {
+          "items": {
+            "$ref": "#/$defs/Violation"
+          },
+          "title": "Mr Violations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "total",
+        "passes",
+        "pass_rate"
+      ],
+      "title": "BaselineMetrics",
+      "type": "object"
+    },
+    "CandidateMetrics": {
+      "description": "Candidate evaluation metrics.",
+      "properties": {
+        "total": {
+          "title": "Total",
+          "type": "integer"
+        },
+        "passes": {
+          "title": "Passes",
+          "type": "integer"
+        },
+        "pass_rate": {
+          "title": "Pass Rate",
+          "type": "number"
+        },
+        "prop_violations": {
+          "items": {
+            "$ref": "#/$defs/Violation"
+          },
+          "title": "Prop Violations",
+          "type": "array"
+        },
+        "mr_violations": {
+          "items": {
+            "$ref": "#/$defs/Violation"
+          },
+          "title": "Mr Violations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "total",
+        "passes",
+        "pass_rate"
+      ],
+      "title": "CandidateMetrics",
+      "type": "object"
+    },
+    "Decision": {
+      "description": "Adoption decision.",
+      "properties": {
+        "adopt": {
+          "title": "Adopt",
+          "type": "boolean"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        }
+      },
+      "required": [
+        "adopt"
+      ],
+      "title": "Decision",
+      "type": "object"
+    },
+    "JobMetadata": {
+      "description": "Job execution metadata.",
+      "properties": {
+        "duration_seconds": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duration Seconds"
+        },
+        "seed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed"
+        },
+        "n": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "N"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        }
+      },
+      "title": "JobMetadata",
+      "type": "object"
+    },
+    "TrustScores": {
+      "description": "Trust scores for RAG evaluations.",
+      "properties": {
+        "score": {
+          "title": "Score",
+          "type": "number"
+        },
+        "flags": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "title": "Flags",
+          "type": "object"
+        },
+        "count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Count"
+        },
+        "individual_scores": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Individual Scores"
+        },
+        "details": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Details"
+        }
+      },
+      "required": [
+        "score"
+      ],
+      "title": "TrustScores",
+      "type": "object"
+    },
+    "Violation": {
+      "description": "A property or metamorphic relation violation.",
+      "properties": {
+        "test_case": {
+          "title": "Test Case",
+          "type": "integer"
+        },
+        "property": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Property"
+        },
+        "relation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Relation"
+        },
+        "input": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input"
+        },
+        "output": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output"
+        },
+        "relation_output": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Relation Output"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        }
+      },
+      "required": [
+        "test_case"
+      ],
+      "title": "Violation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
   "description": "JSON schema for Metamorphic Guard evaluation reports",
-  "type": "object",
-  "required": ["task", "baseline", "candidate", "decision"],
   "properties": {
     "task": {
-      "type": "string",
-      "description": "Task name that was evaluated"
+      "title": "Task",
+      "type": "string"
     },
     "baseline": {
-      "type": "object",
-      "description": "Baseline evaluation results",
-      "required": ["total", "passes", "pass_rate"],
-      "properties": {
-        "total": {"type": "integer", "minimum": 0},
-        "passes": {"type": "integer", "minimum": 0},
-        "pass_rate": {"type": "number", "minimum": 0, "maximum": 1},
-        "prop_violations": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "test_case": {"type": "integer"},
-              "property": {"type": "string"},
-              "input": {"type": "string"},
-              "output": {"type": "string"},
-              "error": {"type": "string"}
-            }
-          }
-        },
-        "mr_violations": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "test_case": {"type": "integer"},
-              "relation": {"type": "string"},
-              "input": {"type": "string"},
-              "output": {"type": "string"},
-              "relation_output": {"type": "string"}
-            }
-          }
-        }
-      }
+      "$ref": "#/$defs/BaselineMetrics"
     },
     "candidate": {
-      "type": "object",
-      "description": "Candidate evaluation results",
-      "required": ["total", "passes", "pass_rate"],
-      "properties": {
-        "total": {"type": "integer", "minimum": 0},
-        "passes": {"type": "integer", "minimum": 0},
-        "pass_rate": {"type": "number", "minimum": 0, "maximum": 1},
-        "prop_violations": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "test_case": {"type": "integer"},
-              "property": {"type": "string"},
-              "input": {"type": "string"},
-              "output": {"type": "string"},
-              "error": {"type": "string"}
-            }
-          }
-        },
-        "mr_violations": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "test_case": {"type": "integer"},
-              "relation": {"type": "string"},
-              "input": {"type": "string"},
-              "output": {"type": "string"},
-              "relation_output": {"type": "string"}
-            }
-          }
-        }
-      }
+      "$ref": "#/$defs/CandidateMetrics"
     },
     "decision": {
-      "type": "object",
-      "description": "Adoption decision",
-      "required": ["adopt"],
-      "properties": {
-        "adopt": {"type": "boolean"},
-        "reason": {"type": "string"}
-      }
+      "$ref": "#/$defs/Decision"
     },
     "delta_pass_rate": {
-      "type": "number",
-      "description": "Difference in pass rates (candidate - baseline)"
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Delta Pass Rate"
     },
     "delta_ci": {
-      "type": "array",
-      "items": {"type": "number"},
-      "minItems": 2,
-      "maxItems": 2,
-      "description": "95% confidence interval for pass rate delta"
+      "anyOf": [
+        {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Delta Ci"
     },
     "relative_risk": {
-      "type": "number",
-      "description": "Relative risk (candidate pass rate / baseline pass rate)"
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Relative Risk"
     },
     "relative_risk_ci": {
-      "type": "array",
-      "items": {"type": "number"},
-      "minItems": 2,
-      "maxItems": 2,
-      "description": "95% confidence interval for relative risk"
+      "anyOf": [
+        {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Relative Risk Ci"
     },
     "config": {
-      "type": "object",
-      "description": "Configuration used for evaluation"
+      "title": "Config",
+      "type": "object"
     },
     "job_metadata": {
-      "type": "object",
-      "description": "Job execution metadata",
-      "properties": {
-        "duration_seconds": {"type": "number"},
-        "seed": {"type": "integer"},
-        "n": {"type": "integer"}
-      }
+      "anyOf": [
+        {
+          "$ref": "#/$defs/JobMetadata"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "monitors": {
-      "type": "object",
-      "description": "Monitor results",
-      "additionalProperties": true
+      "title": "Monitors",
+      "type": "object"
+    },
+    "policy_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Policy Version"
+    },
+    "trust_scores": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/TrustScores"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Trust Scores"
+    },
+    "llm_metrics": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Llm Metrics"
     }
-  }
+  },
+  "required": [
+    "task",
+    "baseline",
+    "candidate",
+    "decision"
+  ],
+  "title": "Metamorphic Guard Report",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
 }
-

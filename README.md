@@ -473,16 +473,28 @@ This produces standard JUnit XML that can be consumed by Jenkins, GitHub Actions
 
 #### JSON Schema
 
-Report JSON files conform to a JSON Schema available at `schemas/report.schema.json`. This enables:
+Report and configuration files conform to JSON Schemas for validation and type checking:
+
+- **Report Schema**: `schemas/report.schema.json` - Validates evaluation report JSON files
+- **Config Schema**: `schemas/config.schema.json` - Validates TOML configuration files (when converted to JSON)
+
+This enables:
 - Validation of report files
 - Type checking in integrations
 - IDE autocomplete for report consumers
+- Automated schema validation in CI/CD pipelines
 
 Validate a report against the schema:
 
 ```bash
 # Using ajv-cli (npm install -g ajv-cli)
 ajv validate -s schemas/report.schema.json -d report_20250101_120000.json
+```
+
+Schemas are automatically generated from Pydantic models and can be regenerated with:
+
+```bash
+python scripts/export_schemas.py
 ```
 
 Programmatic APIs (`metamorphic_guard.monitoring.resolve_monitors`) also pick up
