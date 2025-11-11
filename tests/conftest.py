@@ -23,12 +23,8 @@ def deterministic_env(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, 
     seed = 12345
     random.seed(seed)
     
-    # Also seed numpy.random if numpy is available (optional dependency)
-    try:
-        import numpy as np
-        np.random.seed(seed)
-    except ImportError:
-        pass  # numpy not installed, skip seeding
+    # Note: numpy.random seeding skipped since numpy is not a required dependency
+    # If numpy is used elsewhere, it should be seeded independently
     
     # Set environment variables for deterministic behavior
     monkeypatch.setenv("PYTHONHASHSEED", "0")
