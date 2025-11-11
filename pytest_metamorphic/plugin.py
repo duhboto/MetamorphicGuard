@@ -13,12 +13,14 @@ try:
     from metamorphic_guard.specs import get_task
     from metamorphic_guard.util import write_report
     from metamorphic_guard.junit import write_junit_xml
+    from metamorphic_guard.gate import decide_adopt
 except ImportError:
     # Graceful degradation if MG not installed
     run_eval = None  # type: ignore
     get_task = None  # type: ignore
     write_report = None  # type: ignore
     write_junit_xml = None  # type: ignore
+    decide_adopt = None  # type: ignore
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -77,6 +79,10 @@ def pytest_runtest_call(item: pytest.Item) -> None:
         )
     except Exception as e:
         pytest.fail(f"Metamorphic Guard evaluation failed: {e}")
+
+    # Make adoption decision if not already present
+    if "decision" not in result and decide_adopt is not None:
+        result["decision"] = decide_adopt(result, improve_delta=improve_delta)
 
     # Store result in item for later use
     item._metamorphic_result = result  # type: ignore
