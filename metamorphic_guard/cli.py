@@ -379,6 +379,12 @@ EVALUATE_OPTIONS = [
         show_default=True,
         help="Run evaluation N times and require consistent decisions (consensus). Reports flakiness if decisions differ.",
     ),
+    click.option(
+        "--shrink-violations/--no-shrink-violations",
+        default=False,
+        show_default=True,
+        help="Shrink failing test cases to minimal counterexamples for easier debugging.",
+    ),
 ]
 
 
@@ -436,6 +442,7 @@ def evaluate_command(
     policy: Path | None,
     power_target: float,
     stability: int,
+    shrink_violations: bool,
 ) -> None:
     """Compare baseline and candidate implementations using metamorphic testing."""
 
@@ -626,6 +633,7 @@ def evaluate_command(
                 min_pass_rate=min_pass_rate,
                 power_target=power_target,
                 policy_config=policy_payload,
+                shrink_violations=shrink_violations,
             )
             
             run_decision = run_result.get("decision", {})

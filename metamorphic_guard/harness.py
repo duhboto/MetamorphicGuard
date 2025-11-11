@@ -21,6 +21,11 @@ from .util import (
     sha256_file,
     write_failed_artifacts,
 )
+try:
+    from .shrink import shrink_input
+except ImportError:
+    # Shrinking not available
+    shrink_input = None
 
 
 def _serialize_for_report(value: Any) -> Any:
@@ -159,6 +164,7 @@ def run_eval(
     min_pass_rate: float = 0.80,
     power_target: float = 0.8,
     policy_config: Optional[Dict[str, Any]] = None,
+    shrink_violations: bool = False,
 ) -> Dict[str, Any]:
     """
     Run evaluation comparing baseline and candidate implementations.
@@ -248,6 +254,7 @@ def run_eval(
             executor=executor,
             executor_config=executor_config,
         ),
+        shrink_violations=shrink_violations,
     )
     candidate_metrics = _evaluate_results(
         candidate_results,
@@ -265,6 +272,7 @@ def run_eval(
             executor=executor,
             executor_config=executor_config,
         ),
+        shrink_violations=shrink_violations,
     )
 
     def _estimate_power(
@@ -590,6 +598,7 @@ def _evaluate_results(
     role: str,
     seed: int,
     rerun: Callable[[Tuple[Any, ...]], Dict[str, Any]],
+    shrink_violations: bool = False,
 ) -> Dict[str, Any]:
     """Evaluate results against properties and metamorphic relations."""
     passes = 0
@@ -745,6 +754,54 @@ def _evaluate_results(
         else:
             pass_indicators.append(0)
             increment_metric(role, "failure")
+
+    # Shrink violations if enabled
+    if shrink_violations and shrink_input is not None:
+        def _shrink_violation(violation: Dict[str, Any], original_args: Tuple[Any, ...]) -> Dict[str, Any]:
+            """Shrink a violation's input while preserving the failure."""
+            def test_fails(shrunken_args: Tuple[Any, ...]) -> bool:
+                """Test if shrunken args still fail."""
+                try:
+                    result = rerun(shrunken_args)
+                    if not result.get("success"):
+                        return True
+                    output = result.get("result")
+                    # Check properties
+                    for prop in spec.properties:
+                        if prop.mode == "hard":
+                            try:
+                                if not prop.check(output, *shrunken_args):
+                                    return True
+                            except Exception:
+                                return True
+                    return False
+                except Exception:
+                    return True
+            
+            try:
+                shrunk_args = shrink_input(original_args, test_fails)
+                if shrunk_args != original_args:
+                    violation["shrunk_input"] = spec.fmt_in(shrunk_args)
+                    violation["original_input"] = violation.get("input")
+                    violation["input"] = spec.fmt_in(shrunk_args)
+            except Exception:
+                # Shrinking failed, keep original
+                pass
+            return violation
+        
+        # Shrink prop violations
+        for violation in prop_violations:
+            test_case_idx = violation.get("test_case", 0)
+            if test_case_idx < len(test_inputs):
+                original_args = test_inputs[test_case_idx]
+                _shrink_violation(violation, original_args)
+        
+        # Shrink MR violations
+        for violation in mr_violations:
+            test_case_idx = violation.get("test_case", 0)
+            if test_case_idx < len(test_inputs):
+                original_args = test_inputs[test_case_idx]
+                _shrink_violation(violation, original_args)
 
     return {
         "passes": passes,
