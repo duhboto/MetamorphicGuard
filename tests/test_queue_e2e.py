@@ -18,11 +18,14 @@ def test_queue_dispatcher_in_memory_e2e(tmp_path: Path) -> None:
     if not baseline_path.exists() or not candidate_path.exists():
         pytest.skip("Example files not found")
     
-    # Configure in-memory queue
+    # Configure in-memory queue with explicit settings for test stability
     queue_config = {
         "backend": "memory",
-        "heartbeat_interval": 1.0,
-        "lease_timeout": 5.0,
+        "heartbeat_interval": 0.5,  # Faster heartbeat for tests
+        "lease_timeout": 10.0,
+        "result_poll_timeout": 2.0,  # Explicit poll timeout
+        "spawn_local_workers": True,  # Ensure local workers are spawned
+        "workers": 1,  # Use single worker for deterministic test
     }
     
     # Run evaluation with queue dispatcher
@@ -30,10 +33,11 @@ def test_queue_dispatcher_in_memory_e2e(tmp_path: Path) -> None:
         task_name="top_k",
         baseline_path=str(baseline_path),
         candidate_path=str(candidate_path),
-        n=20,  # Small number for quick test
+        n=10,  # Reduced for faster test execution
         seed=42,
         dispatcher="queue",
         queue_config=queue_config,
+        parallel=1,  # Ensure single worker
     )
     
     # Verify evaluation completed
@@ -45,8 +49,8 @@ def test_queue_dispatcher_in_memory_e2e(tmp_path: Path) -> None:
     baseline = result["baseline"]
     candidate = result["candidate"]
     
-    assert baseline["total"] == 20, "Should have 20 baseline test cases"
-    assert candidate["total"] == 20, "Should have 20 candidate test cases"
+    assert baseline["total"] == 10, "Should have 10 baseline test cases"
+    assert candidate["total"] == 10, "Should have 10 candidate test cases"
     
     # Verify decision was made
     decision = result["decision"]

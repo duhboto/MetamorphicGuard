@@ -104,20 +104,29 @@ class InMemoryQueueAdapter(QueueAdapter):
             data = self._task_queue.get(timeout=timeout)
             if isinstance(data, _Task):
                 if data.job_id != "__shutdown__":
-                    self._assignments[data.task_id] = worker_id
+                    # Update assignment under lock (after blocking get completes)
+                    with self._lock:
+                        self._assignments[data.task_id] = worker_id
                 return data
             return None
         except queue.Empty:
             return None
 
     def publish_result(self, result: _Result) -> None:
+        # Acquire queue reference under lock, then release before blocking put
         with self._lock:
-            result_queue = self._result_queues.setdefault(result.job_id, queue.Queue())
+            result_queue = self._result_queues.get(result.job_id)
+            if result_queue is None:
+                result_queue = queue.Queue()
+                self._result_queues[result.job_id] = result_queue
         result_queue.put(result)
 
     def consume_result(self, job_id: str, timeout: float | None = None) -> Optional[_Result]:
+        # Acquire queue reference under lock, then release before blocking get
         with self._lock:
-            result_queue = self._result_queues.setdefault(job_id, queue.Queue())
+            result_queue = self._result_queues.get(job_id)
+        if result_queue is None:
+            return None
         try:
             return result_queue.get(timeout=timeout)
         except queue.Empty:
