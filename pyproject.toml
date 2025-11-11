@@ -28,3 +28,18 @@ Documentation = "https://pypi.org/project/metamorphic-guard/"
 dev = [
     "pytest>=7.0.0",
 ]
+llm = [
+    "openai>=1.0.0",
+]
+
+[project.entry-points."metamorphic_guard.executors"]
+openai = "metamorphic_guard.executors.openai:OpenAIExecutor"
+
+[project.entry-points."metamorphic_guard.mutants"]
+paraphrase = "metamorphic_guard.mutants.builtin:ParaphraseMutant"
+negation_flip = "metamorphic_guard.mutants.builtin:NegationFlipMutant"
+role_swap = "metamorphic_guard.mutants.builtin:RoleSwapMutant"
+
+[project.entry-points."metamorphic_guard.judges"]
+length = "metamorphic_guard.judges.builtin:LengthJudge"
+no_pii = "metamorphic_guard.judges.builtin:NoPIIJudge"

@@ -28,6 +28,7 @@ _SNAPSHOT_CACHE: Dict[str, tuple[Path, bool]] = {}
 _SNAPSHOT_LOCK = threading.Lock()
 
 from .redaction import get_redactor
+from .plugins import executor_plugins
 
 def run_in_sandbox(
     file_path: str,
@@ -75,6 +76,19 @@ def run_in_sandbox(
         )
         return _finalize_result(raw_result, config)
 
+    # Check plugin registry for executor plugins
+    plugin_registry = executor_plugins()
+    plugin_def = plugin_registry.get(backend.lower())
+    if plugin_def is not None:
+        executor_instance = plugin_def.factory(config=config)
+        if hasattr(executor_instance, "execute"):
+            raw_result = executor_instance.execute(
+                file_path, func_name, args, timeout_s, mem_mb
+            )
+            return _finalize_result(raw_result, config)
+        raise TypeError(f"Executor plugin '{backend}' must have an 'execute' method.")
+
+    # Fall back to module:callable syntax
     executor_callable = _load_executor_callable(backend)
     call_kwargs: Dict[str, Any] = {}
     if config is not None:
