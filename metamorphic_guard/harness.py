@@ -373,14 +373,18 @@ def run_eval(
     }
     result["job_metadata"]["run_id"] = run_id
     
-    result["cases"] = [
-        {
-            "index": index,
-            "input": _serialize_for_report(args),
-            "formatted": spec.fmt_in(args),
-        }
-        for index, args in enumerate(test_inputs)
-    ]
+    baseline_clusters = baseline_metrics.get("cluster_labels") or []
+    result["cases"] = []
+    for index, args in enumerate(test_inputs):
+        cluster_value = baseline_clusters[index] if index < len(baseline_clusters) else index
+        result["cases"].append(
+            {
+                "index": index,
+                "input": _serialize_for_report(args),
+                "formatted": spec.fmt_in(args),
+                "cluster": _serialize_for_report(cluster_value),
+            }
+        )
 
     try:
         result["decision"] = decide_adopt(result, improve_delta=improve_delta, min_pass_rate=min_pass_rate)
@@ -558,6 +562,7 @@ def _evaluate_results(
     prop_violations: list[Dict[str, Any]] = []
     mr_violations: list[Dict[str, Any]] = []
     pass_indicators: list[int] = []
+    cluster_labels: list[Any] = []
     rerun_cache: Dict[str, Dict[str, Any]] = {}
     relation_stats: Dict[str, Dict[str, Any]] = {}
     for relation in spec.relations:
@@ -569,6 +574,8 @@ def _evaluate_results(
         }
 
     for idx, (result, args) in enumerate(zip(results, test_inputs)):
+        cluster_value = spec.cluster_key(args) if spec.cluster_key else idx
+        cluster_labels.append(cluster_value)
         if not result["success"]:
             pass_indicators.append(0)
             increment_metric(role, "failure")
@@ -711,6 +718,7 @@ def _evaluate_results(
         "prop_violations": prop_violations,
         "mr_violations": mr_violations,
         "pass_indicators": pass_indicators,
+        "cluster_labels": cluster_labels,
         "relation_stats": relation_stats,
     }
 
@@ -769,7 +777,17 @@ def _compute_delta_ci(
     method: str,
 ) -> List[float]:
     """Compute the pass-rate delta confidence interval using the requested method."""
-    method = method.lower()
+    method = method.lower().replace("-", "_")
+    clusters = baseline_metrics.get("cluster_labels")
+    if method == "bootstrap_cluster":
+        return _compute_bootstrap_ci(
+            baseline_metrics["pass_indicators"],
+            candidate_metrics["pass_indicators"],
+            alpha=alpha,
+            seed=seed,
+            samples=samples,
+            clusters=clusters,
+        )
     if method == "bootstrap":
         return _compute_bootstrap_ci(
             baseline_metrics["pass_indicators"],
@@ -777,6 +795,7 @@ def _compute_delta_ci(
             alpha=alpha,
             seed=seed,
             samples=samples,
+            clusters=None,
         )
     if method in {"newcombe", "wilson"}:
         return _compute_newcombe_ci(
@@ -796,6 +815,7 @@ def _compute_bootstrap_ci(
     alpha: float,
     seed: int,
     samples: int,
+    clusters: Optional[Sequence[Any]] = None,
 ) -> List[float]:
     """Compute a percentile bootstrap confidence interval for the pass-rate delta."""
     n = len(baseline_indicators)
@@ -804,6 +824,40 @@ def _compute_bootstrap_ci(
 
     rng = random.Random(seed)
     deltas: list[float] = []
+
+    if clusters:
+        cluster_indices: Dict[Any, List[int]] = {}
+        for idx, cluster_id in enumerate(clusters):
+            cluster_indices.setdefault(cluster_id, []).append(idx)
+        unique_clusters = list(cluster_indices.keys())
+        if not unique_clusters:
+            clusters = None
+        else:
+            for _ in range(max(1, samples)):
+                sampled_clusters = [
+                    unique_clusters[rng.randrange(len(unique_clusters))]
+                    for _ in range(len(unique_clusters))
+                ]
+                baseline_sample: List[int] = []
+                candidate_sample: List[int] = []
+                for cluster_id in sampled_clusters:
+                    indices = cluster_indices[cluster_id]
+                    baseline_sample.extend(baseline_indicators[i] for i in indices)
+                    candidate_sample.extend(candidate_indicators[i] for i in indices)
+                if not baseline_sample or len(baseline_sample) != len(candidate_sample):
+                    continue
+                p_baseline = sum(baseline_sample) / len(baseline_sample)
+                p_candidate = sum(candidate_sample) / len(candidate_sample)
+                deltas.append(p_candidate - p_baseline)
+            if deltas:
+                lower_quantile = alpha / 2
+                upper_quantile = 1 - alpha / 2
+                ci_lower = _percentile(deltas, lower_quantile)
+                ci_upper = _percentile(deltas, upper_quantile)
+                return [float(ci_lower), float(ci_upper)]
+            # Fall back to IID bootstrap if cluster sampling fails (e.g., empty samples).
+
+    deltas.clear()
 
     for _ in range(max(1, samples)):
         baseline_sample = [baseline_indicators[rng.randrange(n)] for _ in range(n)]

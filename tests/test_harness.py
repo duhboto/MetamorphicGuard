@@ -44,6 +44,25 @@ def test_bootstrap_ci_no_improvement():
     assert ci[0] <= 0 <= ci[1]
 
 
+def test_bootstrap_cluster_ci():
+    """Cluster-aware bootstrap should handle grouped observations."""
+    baseline = [1, 1, 0, 0] * 10
+    candidate = [1, 1, 1, 0] * 10
+    clusters = [0, 0, 1, 1] * 10
+
+    ci = _compute_bootstrap_ci(
+        baseline,
+        candidate,
+        alpha=0.1,
+        seed=42,
+        samples=200,
+        clusters=clusters,
+    )
+
+    assert len(ci) == 2
+    assert ci[0] <= ci[1]
+
+
 def test_evaluate_results():
     """Test result evaluation against properties."""
     # Create a simple spec
@@ -116,6 +135,40 @@ def test_evaluate_results_failure_handling():
     assert metrics["passes"] == 0
     assert metrics["total"] == 1
     assert metrics["pass_rate"] == 0.0
+
+
+def test_evaluate_results_cluster_labels():
+    """Cluster labels should follow spec.cluster_key."""
+    spec = Spec(
+        gen_inputs=lambda n, seed: [(0, 1), (1, 1), (2, 1)],
+        properties=[
+            Property(
+                check=lambda out, x, y: out == x + y,
+                description="Sum property"
+            )
+        ],
+        relations=[],
+        equivalence=multiset_equal,
+        cluster_key=lambda args: args[0] % 2,
+    )
+
+    results = [
+        {"success": True, "result": 1},
+        {"success": True, "result": 2},
+        {"success": True, "result": 3},
+    ]
+
+    metrics = _evaluate_results(
+        results,
+        spec,
+        spec.gen_inputs(3, 0),
+        violation_cap=5,
+        role="baseline",
+        seed=0,
+        rerun=lambda args: {"success": True, "result": None},
+    )
+
+    assert metrics["cluster_labels"] == [0, 1, 0]
 
 
 def test_metamorphic_relation_violations_detected():

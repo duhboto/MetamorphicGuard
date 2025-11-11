@@ -271,6 +271,55 @@ def solve(L, k):
         os.unlink(candidate)
 
 
+def test_cli_cluster_bootstrap(tmp_path):
+    runner = CliRunner()
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(
+            """
+def solve(L, k):
+    return sorted(L, reverse=True)[: min(len(L), k)]
+"""
+        )
+        baseline = f.name
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(
+            """
+def solve(L, k):
+    return sorted(L, reverse=True)[: min(len(L), k)]
+"""
+        )
+        candidate = f.name
+
+    try:
+        result = runner.invoke(
+            main,
+            [
+                "--task",
+                "top_k",
+                "--baseline",
+                baseline,
+                "--candidate",
+                candidate,
+                "--n",
+                "6",
+                "--seed",
+                "7",
+                "--min-delta",
+                "-0.5",
+                "--ci-method",
+                "bootstrap-cluster",
+                "--report-dir",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 0
+    finally:
+        os.unlink(baseline)
+        os.unlink(candidate)
+
+
 def test_cli_log_file_output(tmp_path):
     runner = CliRunner()
 

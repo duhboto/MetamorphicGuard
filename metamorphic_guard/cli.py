@@ -232,7 +232,7 @@ EVALUATE_OPTIONS = [
     ),
     click.option(
         "--ci-method",
-        type=click.Choice(["bootstrap", "newcombe", "wilson"], case_sensitive=False),
+        type=click.Choice(["bootstrap", "bootstrap-cluster", "newcombe", "wilson"], case_sensitive=False),
         default="newcombe",
         show_default=True,
         help="Method for the pass-rate delta confidence interval",

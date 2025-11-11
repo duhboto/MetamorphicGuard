@@ -3,7 +3,7 @@ Task specification framework with property and metamorphic relation definitions.
 """
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Hashable, List, Optional, Tuple
 import functools
 
 
@@ -35,6 +35,7 @@ class Spec:
     equivalence: Callable[[Any, Any], bool]
     fmt_in: Callable[[Tuple[Any, ...]], str] = lambda args: str(args)
     fmt_out: Callable[[Any], str] = lambda result: str(result)
+    cluster_key: Optional[Callable[[Tuple[Any, ...]], Hashable]] = None
 
 
 # Global task registry

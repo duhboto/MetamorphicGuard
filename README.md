@@ -30,6 +30,9 @@ Adopt?        ✅ Yes
 Reason        meets_gate
 Δ Pass Rate   0.0125
 Δ 95% CI      [0.0040, 0.0210]
+CI Method     bootstrap-cluster
+Power (target 0.80) 0.86
+Suggested n   520
 Policy        policy-v1
 Report        reports/report_2025-11-02T12-00-00.json
 ```
@@ -128,10 +131,12 @@ metamorphic-guard --help
 - `--timeout-s`: Timeout per test in seconds (default: 2.0)
 - `--mem-mb`: Memory limit in MB (default: 512)
 - `--min-delta`: Minimum improvement threshold (default: 0.02). `--improve-delta` is deprecated and will be removed in a future version.
+- `--min-pass-rate`: Minimum candidate pass-rate required for adoption (default: 0.80).
 - `--violation-cap`: Maximum violations to report (default: 25)
 - `--parallel`: Number of worker processes used to drive the sandbox (default: 1)
 - `--bootstrap-samples`: Resamples used for percentile bootstrap CI (default: 1000)
-- `--ci-method`: Confidence interval method for pass-rate delta (`bootstrap`, `newcombe`, `wilson`). See "Confidence Interval Methods" section below for guidance.
+- `--ci-method`: Confidence interval method for pass-rate delta (`bootstrap`, `bootstrap-cluster`, `newcombe`, `wilson`). See [Confidence Interval Methods](#confidence-interval-methods) for guidance.
+- `--power-target`: Desired statistical power used when estimating recommended sample sizes (default: 0.8). The CLI prints the observed power and a suggested `n` for the current thresholds.
 - `--rr-ci-method`: Confidence interval method for relative risk (`log`). Use when baseline pass-rate is near 0 or 1, or when you need a ratio-based comparison. The log method uses a log-normal approximation appropriate for ratio statistics.
 - `--alpha`: Significance level for confidence intervals (default: 0.05)
 - `--report-dir`: Destination directory for JSON reports (defaults to auto-discovery)
@@ -141,7 +146,7 @@ metamorphic-guard --help
 - `--export-violations`: Emit a JSON summary of property/MR failures to a given path
 - `--otlp-endpoint`: OpenTelemetry OTLP endpoint URL for trace export (e.g., `http://localhost:4317`)
 - `--html-report`: Write an interactive-ready HTML summary alongside the JSON report
-- `--junit-xml`: Write JUnit XML output for CI integration (e.g., `--junit-xml test-results.xml`)
+- `--junit-report` / `--junit-xml`: Write JUnit XML output for CI integration (e.g., `--junit-report test-results.xml`)
 - `--dispatcher`: Execution dispatcher (`local` threads or experimental `queue`)
 - `--queue-config`: JSON configuration for queue-backed dispatchers (experimental)
 - `--monitor`: Enable built-in monitors such as `latency`
@@ -193,6 +198,23 @@ modeling real ranking or pricing systems:
 Each report now includes hashes for the generator function, properties, metamorphic
 relations, and formatter callables (`spec_fingerprint`). This makes it possible to
 prove precisely which oracles were active during a run.
+
+#### Cluster Keys
+
+If your generator emits several test cases per seed (e.g., batched mutants or MR families), supply a `cluster_key` that maps each argument tuple to a bucket:
+
+```python
+Spec(
+    gen_inputs=my_inputs,
+    properties=[...],
+    relations=[...],
+    equivalence=multiset_equal,
+    cluster_key=lambda args: args[0]["seed"],
+)
+```
+
+- Cluster labels flow into reports (`cases[].cluster`) and allow `--ci-method bootstrap-cluster` to resample entire groups.
+- Leave `cluster_key` unset (default) when trials are independent and identically distributed.
 
 ### Config Files
 
@@ -411,7 +433,8 @@ Metamorphic Guard supports multiple methods for computing confidence intervals o
 
 | Method | Description | When to Use |
 |--------|-------------|-------------|
-| `bootstrap` | Percentile bootstrap resampling | Default choice. Works well for any sample size, accounts for correlation between baseline and candidate. Recommended for most cases. |
+| `bootstrap` | Percentile bootstrap resampling | Default choice for IID trials. Works well for any sample size, accounts for correlation between baseline and candidate. |
+| `bootstrap-cluster` | Bootstrap that resamples entire clusters determined by `Spec.cluster_key` | Use when multiple trials share a seed, MR family, or other grouping. Prevents optimistic CIs when tests are correlated. |
 | `newcombe` | Newcombe's hybrid score method | Good for small samples or when you need a closed-form solution. Based on Wilson score intervals. |
 | `wilson` | Wilson score interval | Alternative closed-form method. Similar to Newcombe but uses a different approach. |
 
@@ -422,6 +445,12 @@ Metamorphic Guard supports multiple methods for computing confidence intervals o
 - Provides accurate coverage even when pass rates are near 0 or 1
 
 For relative risk (candidate/baseline ratio), the `log` method uses a log-normal approximation, which is appropriate for ratio statistics.
+
+#### Cluster Keys & Power Guidance
+
+- Provide `Spec.cluster_key` when multiple trials belong to the same scenario (e.g., identical generator seed or MR bundle). When `--ci-method bootstrap-cluster` is selected, Metamorphic Guard resamples whole clusters instead of individual trials, preserving correlations.
+- Reports now include `statistics.power_estimate` and `statistics.recommended_n`; the CLI mirrors these values so you can judge whether an evaluation was sufficiently powered for the current `--power-target`.
+- Every JSON report ships with a replay bundle (`*_cases.json`) plus a copy-pastable CLI command, making it trivial to re-run or debug any evaluation.
 
 ### Plugin Ecosystem
 
@@ -466,7 +495,7 @@ metamorphic-guard evaluate --task demo --baseline baseline.py --candidate candid
 Generate JUnit XML output for CI dashboards:
 
 ```bash
-metamorphic-guard evaluate --task demo --baseline baseline.py --candidate candidate.py --junit-xml test-results.xml
+metamorphic-guard evaluate --task demo --baseline baseline.py --candidate candidate.py --junit-report test-results.xml
 ```
 
 This produces standard JUnit XML that can be consumed by Jenkins, GitHub Actions, GitLab CI, and other CI systems.
