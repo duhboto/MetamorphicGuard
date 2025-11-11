@@ -1,6 +1,6 @@
 # Metamorphic Guard
 
-[![PyPI](https://img.shields.io/pypi/v/metamorphic-guard.svg)](https://pypi.org/project/metamorphic-guard/) [![Python](https://img.shields.io/pypi/pyversions/metamorphic-guard.svg?label=python)](https://pypi.org/project/metamorphic-guard/) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT) [![Build](https://github.com/duhboto/MetamorphicGuard/actions/workflows/test.yml/badge.svg)](https://github.com/duhboto/MetamorphicGuard/actions/workflows/test.yml)
+[![PyPI](https://img.shields.io/pypi/v/metamorphic-guard.svg)](https://pypi.org/project/metamorphic-guard/) [![Python](https://img.shields.io/pypi/pyversions/metamorphic-guard.svg?label=python)](https://pypi.org/project/metamorphic-guard/) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT) [![Build](https://github.com/duhboto/MetamorphicGuard/actions/workflows/test.yml/badge.svg)](https://github.com/duhboto/MetamorphicGuard/actions/workflows/test.yml) [![Release](https://github.com/duhboto/MetamorphicGuard/actions/workflows/publish.yml/badge.svg)](https://github.com/duhboto/MetamorphicGuard/actions/workflows/publish.yml)
 
 A Python library that compares two program versions—*baseline* and *candidate*—by running property and metamorphic tests, computing confidence intervals on pass-rate differences, and deciding whether to adopt the candidate.
 
@@ -127,7 +127,7 @@ metamorphic-guard --help
 - `--seed`: Random seed for reproducibility (default: 42)
 - `--timeout-s`: Timeout per test in seconds (default: 2.0)
 - `--mem-mb`: Memory limit in MB (default: 512)
-- `--improve-delta`: Minimum improvement threshold (default: 0.02)
+- `--min-delta`: Minimum improvement threshold (default: 0.02). `--improve-delta` is deprecated and will be removed in a future version.
 - `--violation-cap`: Maximum violations to report (default: 25)
 - `--parallel`: Number of worker processes used to drive the sandbox (default: 1)
 - `--bootstrap-samples`: Resamples used for percentile bootstrap CI (default: 1000)
@@ -387,7 +387,7 @@ you scale out with remote workers:
 metamorphic-guard --dispatcher queue \
   --queue-config '{"backend":"redis","url":"redis://localhost:6379/0"}' \
   --monitor latency \
-  --task top_k --baseline baseline.py --candidate candidate.py --improve-delta 0.0
+  --task top_k --baseline baseline.py --candidate candidate.py --min-delta 0.0
 
 # On worker machines
 metamorphic-guard-worker --backend redis --queue-config '{"url":"redis://localhost:6379/0"}'
@@ -581,7 +581,7 @@ The system generates JSON reports in `reports/report_<timestamp>.json`:
     "timeout_s": 2.0,
     "mem_mb": 512,
     "alpha": 0.05,
-    "improve_delta": 0.02,
+    "min_delta": 0.02,
     "violation_cap": 25,
     "parallel": 1,
     "bootstrap_samples": 1000,
