@@ -45,6 +45,14 @@ otel = [
 openai = "metamorphic_guard.executors.openai:OpenAIExecutor"
 anthropic = "metamorphic_guard.executors.anthropic:AnthropicExecutor"
 
+[project.entry-points."metamorphic_guard.monitors"]
+latency = "metamorphic_guard.monitoring:LatencyMonitor"
+success_rate = "metamorphic_guard.monitoring:SuccessRateMonitor"
+fairness = "metamorphic_guard.monitoring:FairnessGapMonitor"
+resource = "metamorphic_guard.monitoring:ResourceUsageMonitor"
+llm_cost = "metamorphic_guard.monitoring:LLMCostMonitor"
+test_monitor = "tests.fixtures.plugins.test_monitor:TestMonitor"
+
 [project.entry-points."metamorphic_guard.mutants"]
 paraphrase = "metamorphic_guard.mutants.builtin:ParaphraseMutant"
 negation_flip = "metamorphic_guard.mutants.builtin:NegationFlipMutant"

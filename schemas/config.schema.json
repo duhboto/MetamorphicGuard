@@ -1,0 +1,305 @@
+{
+  "$defs": {
+    "AlertSettings": {
+      "properties": {
+        "webhooks": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Webhooks",
+          "type": "array"
+        }
+      },
+      "title": "AlertSettings",
+      "type": "object"
+    },
+    "QueueSettings": {
+      "properties": {
+        "backend": {
+          "default": "redis",
+          "title": "Backend",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "batch_size": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Batch Size"
+        },
+        "compress": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Compress"
+        }
+      },
+      "title": "QueueSettings",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "task": {
+      "title": "Task",
+      "type": "string"
+    },
+    "baseline": {
+      "title": "Baseline",
+      "type": "string"
+    },
+    "candidate": {
+      "title": "Candidate",
+      "type": "string"
+    },
+    "n": {
+      "default": 400,
+      "minimum": 1,
+      "title": "N",
+      "type": "integer"
+    },
+    "seed": {
+      "default": 42,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "timeout_s": {
+      "default": 2.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Timeout S",
+      "type": "number"
+    },
+    "mem_mb": {
+      "default": 512,
+      "exclusiveMinimum": 0,
+      "title": "Mem Mb",
+      "type": "integer"
+    },
+    "alpha": {
+      "default": 0.05,
+      "exclusiveMaximum": 1.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Alpha",
+      "type": "number"
+    },
+    "improve_delta": {
+      "default": 0.02,
+      "title": "Improve Delta",
+      "type": "number"
+    },
+    "violation_cap": {
+      "default": 25,
+      "minimum": 1,
+      "title": "Violation Cap",
+      "type": "integer"
+    },
+    "parallel": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Parallel",
+      "type": "integer"
+    },
+    "bootstrap_samples": {
+      "default": 1000,
+      "minimum": 1,
+      "title": "Bootstrap Samples",
+      "type": "integer"
+    },
+    "ci_method": {
+      "default": "bootstrap",
+      "title": "Ci Method",
+      "type": "string"
+    },
+    "rr_ci_method": {
+      "default": "log",
+      "title": "Rr Ci Method",
+      "type": "string"
+    },
+    "monitors": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Monitors",
+      "type": "array"
+    },
+    "dispatcher": {
+      "default": "local",
+      "title": "Dispatcher",
+      "type": "string"
+    },
+    "queue": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/QueueSettings"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "alerts": {
+      "$ref": "#/$defs/AlertSettings"
+    },
+    "executor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Executor"
+    },
+    "executor_config": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Executor Config"
+    },
+    "policy_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Policy Version"
+    },
+    "log_json": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Log Json"
+    },
+    "log_file": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Log File"
+    },
+    "metrics_enabled": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Metrics Enabled"
+    },
+    "metrics_port": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Metrics Port"
+    },
+    "metrics_host": {
+      "default": "0.0.0.0",
+      "title": "Metrics Host",
+      "type": "string"
+    },
+    "failed_artifact_limit": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Failed Artifact Limit"
+    },
+    "failed_artifact_ttl_days": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Failed Artifact Ttl Days"
+    },
+    "sandbox_plugins": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sandbox Plugins"
+    }
+  },
+  "required": [
+    "task",
+    "baseline",
+    "candidate"
+  ],
+  "title": "Metamorphic Guard Configuration",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "JSON schema for Metamorphic Guard configuration files (TOML)"
+}
