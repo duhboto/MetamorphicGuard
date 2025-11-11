@@ -3,7 +3,7 @@ Task specification framework with property and metamorphic relation definitions.
 """
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 import functools
 
 
@@ -22,6 +22,8 @@ class MetamorphicRelation:
     transform: Callable[..., Tuple[Any, ...]]
     expect: str = "equal"  # For v1, only "equal" is supported
     accepts_rng: bool = False
+    category: Optional[str] = None
+    description: Optional[str] = None
 
 
 @dataclass

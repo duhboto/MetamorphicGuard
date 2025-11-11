@@ -126,6 +126,9 @@ def solve(L, k):
             stats = report_data.get("statistics")
             assert stats is not None
             assert "power_estimate" in stats
+            relation_cov = report_data.get("relation_coverage")
+            assert relation_cov
+            assert relation_cov["relations"]
             violations_file = Path(report_dir) / "violations.json"
             assert violations_file.exists()
             violations_payload = json.loads(violations_file.read_text())
@@ -650,6 +653,7 @@ def solve(L, k):
         policy_payload = report.get("policy")
         assert policy_payload
         assert policy_payload["gating"]["min_delta"] == 0.05
+        assert report.get("relation_coverage")
     finally:
         baseline.unlink()
         candidate.unlink()

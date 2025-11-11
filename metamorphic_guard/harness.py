@@ -406,6 +406,80 @@ def run_eval(
         "alpha": alpha,
     }
 
+    relation_summary: List[Dict[str, Any]] = []
+    category_totals: Dict[str, Dict[str, Any]] = {}
+
+    def _pass_rate(total: int, failures: int) -> Optional[float]:
+        if total <= 0:
+            return None
+        return (total - failures) / total
+
+    baseline_relation_stats = baseline_metrics.get("relation_stats", {})
+    candidate_relation_stats = candidate_metrics.get("relation_stats", {})
+
+    for relation in spec.relations:
+        name = relation.name
+        baseline_entry = baseline_relation_stats.get(name, {})
+        candidate_entry = candidate_relation_stats.get(name, {})
+
+        category = (
+            baseline_entry.get("category")
+            or candidate_entry.get("category")
+            or relation.category
+            or "uncategorized"
+        )
+        description = relation.description or baseline_entry.get("description") or candidate_entry.get("description")
+
+        base_total = baseline_entry.get("total", 0)
+        base_fail = baseline_entry.get("failures", 0)
+        cand_total = candidate_entry.get("total", 0)
+        cand_fail = candidate_entry.get("failures", 0)
+
+        relation_summary.append(
+            {
+                "name": name,
+                "category": category,
+                "description": description,
+                "baseline": {
+                    "total": base_total,
+                    "failures": base_fail,
+                    "pass_rate": _pass_rate(base_total, base_fail),
+                },
+                "candidate": {
+                    "total": cand_total,
+                    "failures": cand_fail,
+                    "pass_rate": _pass_rate(cand_total, cand_fail),
+                },
+            }
+        )
+
+        cat_entry = category_totals.setdefault(
+            category,
+            {
+                "relations": 0,
+                "baseline_total": 0,
+                "baseline_failures": 0,
+                "candidate_total": 0,
+                "candidate_failures": 0,
+            },
+        )
+        cat_entry["relations"] += 1
+        cat_entry["baseline_total"] += base_total
+        cat_entry["baseline_failures"] += base_fail
+        cat_entry["candidate_total"] += cand_total
+        cat_entry["candidate_failures"] += cand_fail
+
+    for cat_entry in category_totals.values():
+        cat_entry["baseline_pass_rate"] = _pass_rate(cat_entry["baseline_total"], cat_entry["baseline_failures"])
+        cat_entry["candidate_pass_rate"] = _pass_rate(cat_entry["candidate_total"], cat_entry["candidate_failures"])
+
+    if relation_summary:
+        result["relation_coverage"] = {
+            "relations": relation_summary,
+            "categories": category_totals,
+        }
+        result["statistics"]["relation_categories"] = category_totals
+
     if policy_config:
         result["policy"] = _serialize_for_report(policy_config)
 
@@ -476,6 +550,14 @@ def _evaluate_results(
     mr_violations: list[Dict[str, Any]] = []
     pass_indicators: list[int] = []
     rerun_cache: Dict[str, Dict[str, Any]] = {}
+    relation_stats: Dict[str, Dict[str, Any]] = {}
+    for relation in spec.relations:
+        relation_stats[relation.name] = {
+            "category": relation.category or "uncategorized",
+            "description": relation.description,
+            "total": 0,
+            "failures": 0,
+        }
 
     for idx, (result, args) in enumerate(zip(results, test_inputs)):
         if not result["success"]:
@@ -530,6 +612,16 @@ def _evaluate_results(
 
         mr_passed = True
         for relation_index, relation in enumerate(spec.relations):
+            stats_entry = relation_stats.setdefault(
+                relation.name,
+                {
+                    "category": relation.category or "uncategorized",
+                    "description": relation.description,
+                    "total": 0,
+                    "failures": 0,
+                },
+            )
+            stats_entry["total"] += 1
             relation_rng = None
             if relation.accepts_rng:
                 relation_rng = _relation_rng(seed, idx, relation_index, relation.name)
@@ -540,6 +632,7 @@ def _evaluate_results(
                     transformed_args = relation.transform(*args)
             except Exception as exc:
                 mr_passed = False
+                stats_entry["failures"] += 1
                 if len(mr_violations) < violation_cap:
                     mr_violations.append(
                         {
@@ -560,6 +653,7 @@ def _evaluate_results(
                 rerun_cache[cache_key] = relation_result
             if not relation_result["success"]:
                 mr_passed = False
+                stats_entry["failures"] += 1
                 if len(mr_violations) < violation_cap:
                     mr_violations.append(
                         {
@@ -580,6 +674,7 @@ def _evaluate_results(
 
             if not equivalent:
                 mr_passed = False
+                stats_entry["failures"] += 1
                 if len(mr_violations) < violation_cap:
                     mr_violations.append(
                         {
@@ -607,6 +702,7 @@ def _evaluate_results(
         "prop_violations": prop_violations,
         "mr_violations": mr_violations,
         "pass_indicators": pass_indicators,
+        "relation_stats": relation_stats,
     }
 
 

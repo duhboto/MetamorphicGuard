@@ -617,6 +617,23 @@ def evaluate_command(
             if stats.get("recommended_n"):
                 click.echo(f"Suggested n for target power: {stats['recommended_n']}")
 
+        relation_coverage = result.get("relation_coverage") or {}
+        categories = relation_coverage.get("categories") or {}
+        if categories:
+            click.echo("Relation coverage (candidate pass rate):")
+            for category, cat_stats in categories.items():
+                candidate_total = cat_stats.get("candidate_total", 0)
+                candidate_failures = cat_stats.get("candidate_failures", 0)
+                candidate_pass_rate = cat_stats.get("candidate_pass_rate")
+                if candidate_pass_rate is None:
+                    rate_str = "n/a"
+                else:
+                    rate_str = f"{candidate_pass_rate:.3f}"
+                click.echo(
+                    f"  {category}: {rate_str} "
+                    f"(failures {candidate_failures}/{candidate_total})"
+                )
+
         if ci_method.lower() == "bootstrap":
             baseline_rate = result["baseline"]["pass_rate"]
             candidate_rate = result["candidate"]["pass_rate"]
