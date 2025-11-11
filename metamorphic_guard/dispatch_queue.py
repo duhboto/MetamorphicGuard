@@ -8,7 +8,7 @@ import time
 import uuid
 import zlib
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 from .monitoring import Monitor, MonitorRecord
 from .dispatch import Dispatcher, RunCase
@@ -86,7 +86,7 @@ class QueueAdapter:
 class InMemoryQueueAdapter(QueueAdapter):
     """Queue adapter backed by in-process queues."""
 
-    def __init__(self) -> None:
+    def __init__(self, heartbeat_config: Optional[Dict[str, Any]] = None) -> None:
         self._task_queue: "queue.Queue[_Task]" = queue.Queue()
         self._result_queues: Dict[str, "queue.Queue[_Result]"] = {}
         self._result_lock = threading.Lock()
@@ -95,6 +95,17 @@ class InMemoryQueueAdapter(QueueAdapter):
         self._shutdown = False
         self._heartbeats: Dict[str, float] = {}
         self._assignments: Dict[str, str] = {}
+        
+        # Optional enhanced heartbeat management
+        self._heartbeat_manager = None
+        if heartbeat_config:
+            from .heartbeat_manager import HeartbeatManager, HeartbeatConfig
+            config = HeartbeatConfig(
+                timeout_seconds=heartbeat_config.get("timeout_seconds", 45.0),
+                circuit_breaker_threshold=heartbeat_config.get("circuit_breaker_threshold", 3),
+                check_interval=heartbeat_config.get("check_interval", 5.0),
+            )
+            self._heartbeat_manager = HeartbeatManager(config)
 
     def publish_task(self, task: _Task) -> None:
         if self._shutdown:
@@ -159,10 +170,16 @@ class InMemoryQueueAdapter(QueueAdapter):
     def register_worker(self, worker_id: str) -> None:
         with self._heartbeat_lock:
             self._heartbeats[worker_id] = time.monotonic()
+        
+        if self._heartbeat_manager:
+            self._heartbeat_manager.register_worker(worker_id)
 
     def worker_assign(self, worker_id: str, task_id: str) -> None:
         with self._assignment_lock:
             self._assignments[task_id] = worker_id
+        
+        if self._heartbeat_manager:
+            self._heartbeat_manager.record_task_assignment(worker_id, task_id)
 
     def worker_heartbeats(self) -> Dict[str, float]:
         with self._heartbeat_lock:
@@ -182,6 +199,24 @@ class InMemoryQueueAdapter(QueueAdapter):
     def worker_count(self) -> int:
         with self._heartbeat_lock:
             return len(self._heartbeats)
+    
+    def check_stale_workers(self) -> Set[str]:
+        """Check for stale/lost workers using heartbeat manager."""
+        if self._heartbeat_manager:
+            return self._heartbeat_manager.check_stale_workers()
+        return set()
+    
+    def is_worker_lost(self, worker_id: str) -> bool:
+        """Check if a worker is marked as lost."""
+        if self._heartbeat_manager:
+            return self._heartbeat_manager.is_worker_lost(worker_id)
+        return False
+    
+    def get_lost_workers(self) -> Set[str]:
+        """Get set of lost worker IDs."""
+        if self._heartbeat_manager:
+            return self._heartbeat_manager.get_lost_workers()
+        return set()
 
 
 class RedisQueueAdapter(QueueAdapter):
@@ -325,8 +360,18 @@ class QueueDispatcher(Dispatcher):
         self.config = config or {}
         backend = self.config.get("backend", "memory")
         backend_lower = backend.lower()
+        
+        # Extract heartbeat config if provided
+        heartbeat_config = None
+        if "heartbeat_timeout" in self.config or "circuit_breaker_threshold" in self.config:
+            heartbeat_config = {
+                "timeout_seconds": self.config.get("heartbeat_timeout", 45.0),
+                "circuit_breaker_threshold": self.config.get("circuit_breaker_threshold", 3),
+                "check_interval": self.config.get("heartbeat_check_interval", 5.0),
+            }
+        
         if backend_lower == "memory":
-            self.adapter = InMemoryQueueAdapter()
+            self.adapter = InMemoryQueueAdapter(heartbeat_config=heartbeat_config)
         elif backend_lower == "redis":
             self.adapter = RedisQueueAdapter(self.config)
         else:
@@ -470,6 +515,11 @@ class QueueDispatcher(Dispatcher):
                     last_metrics_sample = now
 
                 if enable_requeue:
+                    # Use enhanced heartbeat manager if available
+                    lost_workers = set()
+                    if hasattr(self.adapter, "check_stale_workers"):
+                        lost_workers = self.adapter.check_stale_workers()
+                    
                     heartbeats = self.adapter.worker_heartbeats()
                     for task_id, deadline in list(deadlines.items()):
                         task = tasks[task_id]
@@ -478,11 +528,23 @@ class QueueDispatcher(Dispatcher):
                             continue
                         assigned = self.adapter.get_assignment(task_id)
                         heartbeat_age = None
+                        worker_is_lost = False
+                        
                         if assigned:
-                            heartbeat = heartbeats.get(assigned)
-                            if heartbeat is not None:
-                                heartbeat_age = now - heartbeat
-                        if now > deadline or (heartbeat_age is not None and heartbeat_age > heartbeat_timeout):
+                            # Check if worker is marked as lost
+                            if hasattr(self.adapter, "is_worker_lost"):
+                                worker_is_lost = self.adapter.is_worker_lost(assigned)
+                            
+                            if not worker_is_lost:
+                                heartbeat = heartbeats.get(assigned)
+                                if heartbeat is not None:
+                                    heartbeat_age = now - heartbeat
+                            
+                            # Mark as lost if in lost_workers set
+                            if assigned in lost_workers:
+                                worker_is_lost = True
+                        
+                        if now > deadline or worker_is_lost or (heartbeat_age is not None and heartbeat_age > heartbeat_timeout):
                             self.adapter.pop_assignment(task_id)
                             sorted_indices = sorted(outstanding)
                             args_chunk = [test_inputs[i] for i in sorted_indices]
