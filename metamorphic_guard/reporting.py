@@ -4,6 +4,7 @@ import html
 import json
 from pathlib import Path
 from typing import Any, Dict, Sequence
+import xml.etree.ElementTree as ET
 
 
 def render_html_report(payload: Dict[str, Any], destination: Path) -> Path:
@@ -67,6 +68,8 @@ def render_html_report(payload: Dict[str, Any], destination: Path) -> Path:
 
     fairness_chart = _extract_fairness_chart(monitors)
     resource_chart = _extract_resource_chart(monitors)
+    relation_block = _render_relation_coverage(payload.get("relation_coverage"))
+    replay_block = _render_replay_block(payload.get("replay"))
 
     fairness_block = (
         """
@@ -144,6 +147,10 @@ def render_html_report(payload: Dict[str, Any], destination: Path) -> Path:
   <h2>Job Metadata</h2>
   <pre>{html.escape(str(job))}</pre>
 
+  {replay_block}
+
+  {relation_block}
+
   <h2>Baseline Violations</h2>
   {_format_violations(baseline)}
 
@@ -160,6 +167,137 @@ def render_html_report(payload: Dict[str, Any], destination: Path) -> Path:
 """
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(html_content, encoding="utf-8")
+    return destination
+
+
+def render_junit_report(
+    payload: Dict[str, Any],
+    destination: Path,
+    suite_name: str | None = None,
+) -> Path:
+    """
+    Render a JUnit XML report for CI consumption.
+
+    Each test case corresponds to an evaluation input. Failures capture the first
+    related violation for quick debugging while embedding the full violation
+    payload in the failure body.
+    """
+
+    cases = payload.get("cases") or []
+    candidate = payload.get("candidate") or {}
+    decision = payload.get("decision") or {}
+    statistics = payload.get("statistics") or {}
+
+    pass_indicators = list(candidate.get("pass_indicators") or [])
+    candidate_total = int(candidate.get("total") or len(cases))
+    candidate_passes = int(candidate.get("passes") or sum(x for x in pass_indicators if x))
+    failures_expected = max(candidate_total - candidate_passes, 0)
+
+    suite_attrs = {
+        "name": suite_name or payload.get("task") or "MetamorphicGuard",
+        "tests": str(candidate_total),
+        "failures": str(failures_expected),
+        "errors": "0",
+        "skipped": "0",
+    }
+    suite = ET.Element("testsuite", suite_attrs)
+
+    properties = ET.SubElement(suite, "properties")
+
+    def _append_property(name: str, value: Any) -> None:
+        if value is None:
+            return
+        if isinstance(value, (dict, list)):
+            serialized = json.dumps(value, sort_keys=True)
+        else:
+            serialized = str(value)
+        ET.SubElement(properties, "property", {"name": name, "value": serialized})
+
+    _append_property("decision.adopt", decision.get("adopt"))
+    _append_property("decision.reason", decision.get("reason"))
+    _append_property("delta.pass_rate", payload.get("delta_pass_rate"))
+    _append_property("delta.ci", payload.get("delta_ci"))
+    _append_property("relative_risk", payload.get("relative_risk"))
+    _append_property("relative_risk_ci", payload.get("relative_risk_ci"))
+    for key, value in statistics.items():
+        _append_property(f"statistics.{key}", value)
+
+    violations = (candidate.get("prop_violations") or []) + (
+        candidate.get("mr_violations") or []
+    )
+
+    violations_by_case: Dict[int, list[Dict[str, Any]]] = {}
+    for violation in violations:
+        if not isinstance(violation, dict):
+            continue
+        idx = violation.get("test_case")
+        if idx is None:
+            continue
+        violations_by_case.setdefault(int(idx), []).append(violation)
+
+    def _case_passed(case_index: int) -> bool:
+        if case_index < len(pass_indicators):
+            return bool(pass_indicators[case_index])
+        if violations_by_case.get(case_index):
+            return False
+        return True
+
+    task_name = payload.get("task") or "MetamorphicGuard"
+
+    for position, case in enumerate(cases):
+        idx = int(case.get("index", position))
+        name = str(case.get("formatted") or f"case_{idx}")
+        testcase = ET.SubElement(
+            suite,
+            "testcase",
+            {
+                "classname": str(task_name),
+                "name": name,
+                "time": "0",
+            },
+        )
+
+        if _case_passed(idx):
+            continue
+
+        case_violations = violations_by_case.get(idx) or []
+        messages: list[str] = []
+        details: list[str] = []
+        for violation in case_violations:
+            if "relation" in violation:
+                messages.append(f"MR {violation['relation']} failed")
+            elif "property" in violation:
+                messages.append(f"Property {violation['property']} failed")
+            else:
+                messages.append("Evaluation failed")
+            details.append(json.dumps(violation, sort_keys=True, indent=2))
+
+        message = "; ".join(messages) if messages else "Evaluation failed"
+        failure = ET.SubElement(
+            testcase,
+            "failure",
+            {
+                "message": message,
+                "type": "failure",
+            },
+        )
+        failure.text = "\n".join(details) if details else ""
+
+    # Attach summary output to assist with quick triage.
+    summary = {
+        "decision": decision,
+        "statistics": statistics,
+        "delta_pass_rate": payload.get("delta_pass_rate"),
+        "delta_ci": payload.get("delta_ci"),
+        "relative_risk": payload.get("relative_risk"),
+        "relative_risk_ci": payload.get("relative_risk_ci"),
+    }
+    system_out = ET.SubElement(suite, "system-out")
+    system_out.text = json.dumps(summary, sort_keys=True, indent=2)
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    tree = ET.ElementTree(suite)
+    tree.write(destination, encoding="utf-8", xml_declaration=True)
     return destination
 
 
@@ -192,6 +330,133 @@ def _format_monitors(monitors: Dict[str, Any] | Sequence[Any]) -> str:
             "</div>"
         )
     return "".join(blocks)
+
+
+def _render_relation_coverage(coverage: Dict[str, Any] | None) -> str:
+    if not coverage:
+        return ""
+
+    relations = coverage.get("relations") or []
+    categories = coverage.get("categories") or {}
+
+    relation_rows = []
+    for relation in relations:
+        relation_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(relation.get('name', '')))}</td>"
+            f"<td>{html.escape(str(relation.get('category', '')))}</td>"
+            f"<td>{html.escape(str(relation.get('description', '') or ''))}</td>"
+            f"<td>{relation.get('baseline', {}).get('total', 0)}</td>"
+            f"<td>{relation.get('baseline', {}).get('failures', 0)}</td>"
+            f"<td>{_format_optional_float(relation.get('baseline', {}).get('pass_rate'))}</td>"
+            f"<td>{relation.get('candidate', {}).get('total', 0)}</td>"
+            f"<td>{relation.get('candidate', {}).get('failures', 0)}</td>"
+            f"<td>{_format_optional_float(relation.get('candidate', {}).get('pass_rate'))}</td>"
+            "</tr>"
+        )
+
+    category_rows = []
+    for category, stats in categories.items():
+        category_rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(category))}</td>"
+            f"<td>{stats.get('relations', 0)}</td>"
+            f"<td>{stats.get('baseline_total', 0)}</td>"
+            f"<td>{stats.get('baseline_failures', 0)}</td>"
+            f"<td>{_format_optional_float(stats.get('baseline_pass_rate'))}</td>"
+            f"<td>{stats.get('candidate_total', 0)}</td>"
+            f"<td>{stats.get('candidate_failures', 0)}</td>"
+            f"<td>{_format_optional_float(stats.get('candidate_pass_rate'))}</td>"
+            "</tr>"
+        )
+
+    relations_table = ""
+    if relation_rows:
+        relations_table = (
+            "<h2>Metamorphic Relation Coverage</h2>"
+            "<table>"
+            "<tr>"
+            "<th>Relation</th><th>Category</th><th>Description</th>"
+            "<th>Baseline Total</th><th>Baseline Failures</th><th>Baseline Pass Rate</th>"
+            "<th>Candidate Total</th><th>Candidate Failures</th><th>Candidate Pass Rate</th>"
+            "</tr>"
+            + "".join(relation_rows)
+            + "</table>"
+        )
+
+    categories_table = ""
+    if category_rows:
+        categories_table = (
+            "<h3>Coverage by Category</h3>"
+            "<table>"
+            "<tr>"
+            "<th>Category</th><th>Relations</th>"
+            "<th>Baseline Total</th><th>Baseline Failures</th><th>Baseline Pass Rate</th>"
+            "<th>Candidate Total</th><th>Candidate Failures</th><th>Candidate Pass Rate</th>"
+            "</tr>"
+            + "".join(category_rows)
+            + "</table>"
+        )
+
+    if not relations_table and not categories_table:
+        return ""
+
+    return relations_table + categories_table
+
+
+def _format_optional_float(value: Any) -> str:
+    if value is None:
+        return "n/a"
+    try:
+        return f"{float(value):.3f}"
+    except (TypeError, ValueError):
+        return html.escape(str(value))
+
+
+def _render_replay_block(replay: Dict[str, Any] | None) -> str:
+    if not replay:
+        return ""
+
+    seed = replay.get("seed")
+    cases = replay.get("cases")
+    explicit = replay.get("explicit_inputs")
+    baseline_path = replay.get("baseline_path")
+    candidate_path = replay.get("candidate_path")
+    task = replay.get("task")
+
+    items = []
+    if seed is not None:
+        items.append(f"<li><strong>Seed:</strong> {html.escape(str(seed))}</li>")
+    if cases is not None:
+        items.append(f"<li><strong>Cases:</strong> {html.escape(str(cases))}</li>")
+    items.append(f"<li><strong>Explicit inputs provided:</strong> {explicit}</li>")
+    if baseline_path:
+        items.append(f"<li><strong>Baseline:</strong> {html.escape(str(baseline_path))}</li>")
+    if candidate_path:
+        items.append(f"<li><strong>Candidate:</strong> {html.escape(str(candidate_path))}</li>")
+
+    command = " ".join(
+        [
+            "metamorphic-guard",
+            "--task",
+            html.escape(str(task or "")),
+            "--baseline",
+            html.escape(str(baseline_path or "<baseline.py>")),
+            "--candidate",
+            html.escape(str(candidate_path or "<candidate.py>")),
+            "--replay-input",
+            "<cases.json>",
+        ]
+    ).strip()
+
+    return (
+        "<h2>Reproduction</h2>"
+        "<ul>"
+        f"{''.join(items)}"
+        "</ul>"
+        "<p>Replay command (update paths as needed):</p>"
+        f"<pre><code>{command}</code></pre>"
+    )
 
 
 def _render_monitor_summary(summary: Any) -> str:

@@ -63,7 +63,7 @@ def test_html_report_generation(tmp_path: Path) -> None:
     assert "<html" in html_content.lower() or "<!doctype" in html_content.lower(), \
         "HTML report should be valid HTML"
     
-    # Check for baseline/candidate metrics
+    # Check for baseline/candidate metrics and coverage section
     baseline_pass_rate = result.get("baseline", {}).get("pass_rate", 0.0)
     candidate_pass_rate = result.get("candidate", {}).get("pass_rate", 0.0)
     
@@ -77,6 +77,9 @@ def test_html_report_generation(tmp_path: Path) -> None:
            f"{candidate_pass_rate:.2f}" in html_content or \
            f"{candidate_pass_rate:.3f}" in html_content, \
            f"HTML report should contain candidate pass rate: {candidate_pass_rate}"
+
+    assert "Metamorphic Relation Coverage" in html_content
+    assert "Reproduction" in html_content
 
 
 def test_html_report_from_json(tmp_path: Path) -> None:

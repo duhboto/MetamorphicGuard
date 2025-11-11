@@ -4,6 +4,7 @@ import json
 import os
 import re
 import tempfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -98,6 +99,7 @@ def solve(L, k):
                 '--executor-config', '{}',
                 '--export-violations', str(Path(report_dir) / "violations.json"),
                 '--html-report', str(Path(report_dir) / "report.html"),
+                '--junit-report', str(Path(report_dir) / "report.xml"),
                 '--policy-version', 'test-policy',
             ])
 
@@ -146,6 +148,14 @@ def solve(L, k):
             assert "<html" in html_content.lower()
             assert "chart.umd.min.js" in html_content
             assert "pass-rate-chart" in html_content
+
+            junit_report_path = Path(report_dir) / "report.xml"
+            assert junit_report_path.exists()
+            junit_tree = ET.parse(junit_report_path)
+            junit_root = junit_tree.getroot()
+            assert junit_root.tag == "testsuite"
+            assert int(junit_root.attrib["tests"]) == len(report_data["cases"])
+            assert junit_root.find("system-out") is not None
 
     finally:
         os.unlink(baseline_file)
@@ -202,6 +212,60 @@ def solve(L, k):
         )
 
         assert result.exit_code == 0
+    finally:
+        os.unlink(baseline)
+        os.unlink(candidate)
+
+
+def test_cli_junit_xml_alias(tmp_path):
+    runner = CliRunner()
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(
+            """
+def solve(L, k):
+    return sorted(L, reverse=True)[: min(len(L), k)]
+"""
+        )
+        baseline = f.name
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(
+            """
+def solve(L, k):
+    return sorted(L, reverse=True)[: min(len(L), k)]
+"""
+        )
+        candidate = f.name
+
+    junit_path = tmp_path / "alias.xml"
+
+    try:
+        result = runner.invoke(
+            main,
+            [
+                "--task",
+                "top_k",
+                "--baseline",
+                baseline,
+                "--candidate",
+                candidate,
+                "--n",
+                "4",
+                "--min-delta",
+                "-0.5",
+                "--ci-method",
+                "newcombe",
+                "--report-dir",
+                str(tmp_path),
+                "--junit-xml",
+                str(junit_path),
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert junit_path.exists()
+        assert ET.parse(junit_path).getroot().tag == "testsuite"
     finally:
         os.unlink(baseline)
         os.unlink(candidate)

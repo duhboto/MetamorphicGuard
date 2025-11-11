@@ -9,8 +9,7 @@ from .config import ConfigLoadError, load_config
 from .harness import run_eval
 from .specs import list_tasks
 from .util import write_report
-from .reporting import render_html_report
-from .junit import write_junit_xml
+from .reporting import render_html_report, render_junit_report
 from .monitoring import resolve_monitors
 from .plugins import plugin_registry
 from .notifications import collect_alerts, send_webhook_alerts
@@ -283,10 +282,11 @@ EVALUATE_OPTIONS = [
         help="Optional destination for an HTML summary report.",
     ),
     click.option(
-        "--junit-xml",
+        "--junit-report",
+        "--junit-xml",  # Deprecated alias
         type=click.Path(dir_okay=False, writable=True, path_type=Path),
         default=None,
-        help="Optional destination for JUnit XML output (for CI integration).",
+        help="Optional destination for a JUnit XML report (for CI integration).",
     ),
     click.option(
         "--queue-config",
@@ -410,7 +410,7 @@ def evaluate_command(
     executor_config: str | None,
     export_violations: Path | None,
     html_report: Path | None,
-    junit_xml: Path | None,
+    junit_report: Path | None,
     queue_config: str | None,
     monitor_names: Sequence[str],
     alert_webhooks: Sequence[str],
@@ -680,9 +680,9 @@ def evaluate_command(
             click.echo("Replay command:")
             click.echo("  " + " ".join(replay_cmd))
 
-        if junit_xml is not None:
-            write_junit_xml(result, junit_xml)
-            click.echo(f"JUnit XML written to {junit_xml}")
+        if junit_report is not None:
+            render_junit_report(result, junit_report)
+            click.echo(f"JUnit report written to {junit_report}")
 
         monitor_alerts = collect_alerts(result.get("monitors", {}))
         if alert_webhooks:
