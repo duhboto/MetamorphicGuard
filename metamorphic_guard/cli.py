@@ -276,6 +276,12 @@ EVALUATE_OPTIONS = [
         help="JSON configuration for the queue dispatcher (experimental).",
     ),
     click.option(
+        "--replay-input",
+        type=click.Path(exists=True, dir_okay=False, path_type=Path),
+        default=None,
+        help="Replay explicit test case inputs from a JSON file.",
+    ),
+    click.option(
         "--monitor",
         "monitor_names",
         multiple=True,
@@ -398,6 +404,7 @@ def evaluate_command(
     failed_artifact_ttl_days: Optional[int],
     policy_version: Optional[str],
     otlp_endpoint: Optional[str],
+    replay_input: Path | None,
 ) -> None:
     """Compare baseline and candidate implementations using metamorphic testing."""
 
@@ -449,10 +456,39 @@ def evaluate_command(
                     err=True,
                 )
 
+        explicit_inputs = None
+        if replay_input is not None:
+            try:
+                payload = json.loads(replay_input.read_text(encoding="utf-8"))
+            except Exception as exc:
+                raise click.ClickException(f"Failed to read replay input JSON: {exc}") from exc
+
+            if isinstance(payload, dict) and "cases" in payload:
+                cases_payload = payload["cases"]
+            else:
+                cases_payload = payload
+
+            if not isinstance(cases_payload, list):
+                raise click.ClickException("Replay input JSON must be a list or an object with a 'cases' list.")
+
+            explicit_inputs = []
+            for entry in cases_payload:
+                if isinstance(entry, dict) and "input" in entry:
+                    raw_args = entry["input"]
+                else:
+                    raw_args = entry
+
+                if not isinstance(raw_args, (list, tuple)):
+                    raise click.ClickException("Each replayed case must be a sequence (list/tuple) of arguments.")
+
+                explicit_inputs.append(tuple(raw_args))
+
+        effective_n = len(explicit_inputs) if explicit_inputs is not None else n
+
         click.echo(f"Running evaluation: {task}")
         click.echo(f"Baseline: {baseline}")
         click.echo(f"Candidate: {candidate}")
-        click.echo(f"Test cases: {n}, Seed: {seed}")
+        click.echo(f"Test cases: {effective_n}, Seed: {seed}")
         click.echo(f"Parallel workers: {parallel}")
         click.echo(f"CI method: {ci_method}")
         click.echo(f"RR CI method: {rr_ci_method}")
@@ -511,10 +547,10 @@ def evaluate_command(
             failed_artifact_limit=failed_artifact_limit,
             failed_artifact_ttl_days=failed_artifact_ttl_days,
             policy_version=policy_version,
+            explicit_inputs=explicit_inputs,
         )
 
-        decision = decide_adopt(result, improve_delta=min_delta)
-        result["decision"] = decision
+        decision = result.get("decision", {})
         result.setdefault("config", {})["sandbox_plugins"] = bool(sandbox_plugins)
 
         report_path = write_report(result, directory=report_dir)

@@ -111,6 +111,8 @@ def solve(L, k):
             report_path = Path(match.group(1).strip())
             assert report_path.parent == Path(report_dir)
             report_data = json.loads(Path(report_path).read_text())
+            assert "decision" in report_data
+            assert report_data["decision"]["adopt"] is True
             # CI method should be deterministic (newcombe) for tests
             assert report_data["config"]["ci_method"] in ("bootstrap", "newcombe")
             assert "spec_fingerprint" in report_data
@@ -119,6 +121,8 @@ def solve(L, k):
             assert "relative_risk_ci" in report_data
             assert report_data["config"].get("policy_version") == "test-policy"
             assert report_data["config"].get("sandbox_plugins") is False
+            assert len(report_data.get("cases", [])) == 10
+            assert report_data["cases"][0]["index"] == 0
             violations_file = Path(report_dir) / "violations.json"
             assert violations_file.exists()
             violations_payload = json.loads(violations_file.read_text())
@@ -338,6 +342,7 @@ def test_cli_config_file(tmp_path):
             assert report_data["seed"] == 99
             assert report_data["config"].get("sandbox_plugins") is True
             assert report_data["config"].get("policy_version") == "policy-v1"
+            assert "decision" in report_data
     finally:
         os.unlink(baseline_file)
         os.unlink(candidate_file)
@@ -404,6 +409,7 @@ def test_cli_config_override(tmp_path):
             report = json.loads(report_path.read_text())
             assert report["n"] == 10  # Overridden from config default of 12
             assert report["seed"] == 7  # Overridden from config default of 11
+            assert "decision" in report
     finally:
         os.unlink(baseline_file)
         os.unlink(candidate_file)
@@ -493,6 +499,79 @@ def test_cli_latency_monitor(tmp_path):
             data = json.loads(report_path.read_text())
             assert "monitors" in data
             assert "LatencyMonitor" in data["monitors"]
+            assert "decision" in data
     finally:
         os.unlink(baseline_file)
         os.unlink(candidate_file)
+
+
+def test_cli_replay_input(tmp_path):
+    runner = CliRunner()
+
+    baseline = tmp_path / "baseline.py"
+    candidate = tmp_path / "candidate.py"
+    baseline.write_text(
+        """
+def solve(L, k):
+    return sorted(L)[: min(len(L), k)]
+""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """
+def solve(L, k):
+    return sorted(L, reverse=True)[: min(len(L), k)]
+""",
+        encoding="utf-8",
+    )
+
+    report_dir = tmp_path / "reports"
+    result = runner.invoke(
+        main,
+        [
+            "--task",
+            "top_k",
+            "--baseline",
+            str(baseline),
+            "--candidate",
+            str(candidate),
+            "--n",
+            "4",
+            "--min-delta",
+            "-0.5",
+            "--ci-method",
+            "newcombe",
+            "--report-dir",
+            str(report_dir),
+        ],
+    )
+    assert result.exit_code == 0
+
+    report_files = list(report_dir.glob("report_*.json"))
+    assert report_files, "Expected report file to be created"
+    report_data = json.loads(report_files[0].read_text())
+    cases_path = tmp_path / "replay_cases.json"
+    cases_path.write_text(json.dumps(report_data["cases"], indent=2), encoding="utf-8")
+
+    replay_result = runner.invoke(
+        main,
+        [
+            "--task",
+            "top_k",
+            "--baseline",
+            str(baseline),
+            "--candidate",
+            str(candidate),
+            "--seed",
+            "99",
+            "--min-delta",
+            "-0.5",
+            "--ci-method",
+            "newcombe",
+            "--replay-input",
+            str(cases_path),
+            "--report-dir",
+            str(tmp_path / "replay_reports"),
+        ],
+    )
+    assert replay_result.exit_code == 0

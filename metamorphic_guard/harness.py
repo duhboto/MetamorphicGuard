@@ -5,6 +5,7 @@ Test harness for running evaluations and computing bootstrap confidence interval
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import random
 import uuid
@@ -20,6 +21,22 @@ from .util import (
     sha256_file,
     write_failed_artifacts,
 )
+
+
+def _serialize_for_report(value: Any) -> Any:
+    """
+    Convert an arbitrary object into a JSON-friendly structure.
+    Non-serializable objects are represented via repr().
+    """
+    try:
+        json.dumps(value)
+        return value
+    except (TypeError, ValueError):
+        if isinstance(value, dict):
+            return {str(k): _serialize_for_report(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple, set)):
+            return [_serialize_for_report(item) for item in value]
+        return repr(value)
 from .dispatch import Dispatcher, ensure_dispatcher
 from .monitoring import Monitor, MonitorContext
 from .observability import add_log_context, increment_metric, log_event
@@ -138,6 +155,7 @@ def run_eval(
     failed_artifact_limit: Optional[int] = None,
     failed_artifact_ttl_days: Optional[int] = None,
     policy_version: Optional[str] = None,
+    explicit_inputs: Optional[List[Tuple[Any, ...]]] = None,
 ) -> Dict[str, Any]:
     """
     Run evaluation comparing baseline and candidate implementations.
@@ -145,7 +163,12 @@ def run_eval(
     Returns comprehensive metrics including bootstrap confidence intervals.
     """
     spec = get_task(task_name)
-    test_inputs = spec.gen_inputs(n, seed)
+
+    if explicit_inputs is not None:
+        test_inputs = [tuple(case) for case in explicit_inputs]
+        n = len(test_inputs)
+    else:
+        test_inputs = spec.gen_inputs(n, seed)
 
     worker_count = max(1, parallel or 1)
     dispatcher_obj = ensure_dispatcher(dispatcher, worker_count, queue_config)
@@ -279,9 +302,9 @@ def run_eval(
             "ci_method": ci_method,
             "rr_ci_method": rr_ci_method,
             "executor": executor,
-            "executor_config": executor_config,
+            "executor_config": _serialize_for_report(executor_config),
             "dispatcher": getattr(dispatcher_obj, "kind", "local"),
-            "queue_config": queue_config,
+            "queue_config": _serialize_for_report(queue_config),
         },
         "hashes": {
             "baseline": baseline_hash,
@@ -311,6 +334,15 @@ def run_eval(
     }
     result["job_metadata"]["run_id"] = run_id
     
+    result["cases"] = [
+        {
+            "index": index,
+            "input": _serialize_for_report(args),
+            "formatted": spec.fmt_in(args),
+        }
+        for index, args in enumerate(test_inputs)
+    ]
+
     try:
         result["decision"] = decide_adopt(result, improve_delta=improve_delta)
     except Exception as exc:
