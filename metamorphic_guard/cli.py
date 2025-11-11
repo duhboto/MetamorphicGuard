@@ -339,6 +339,12 @@ EVALUATE_OPTIONS = [
         default=None,
         help="Optional policy version identifier recorded in evaluation reports.",
     ),
+    click.option(
+        "--otlp-endpoint",
+        type=str,
+        default=None,
+        help="OpenTelemetry OTLP endpoint URL (e.g., 'http://localhost:4317') for trace export.",
+    ),
 ]
 
 
@@ -390,6 +396,7 @@ def evaluate_command(
     failed_artifact_limit: Optional[int],
     failed_artifact_ttl_days: Optional[int],
     policy_version: Optional[str],
+    otlp_endpoint: Optional[str],
 ) -> None:
     """Compare baseline and candidate implementations using metamorphic testing."""
 
@@ -415,6 +422,31 @@ def evaluate_command(
                 )
             except RuntimeError as exc:
                 raise click.ClickException(str(exc)) from exc
+        
+        # Configure OpenTelemetry if endpoint provided
+        if otlp_endpoint:
+            try:
+                from .telemetry import configure_telemetry
+                from . import __version__
+                
+                configured = configure_telemetry(
+                    endpoint=otlp_endpoint,
+                    service_name="metamorphic-guard",
+                    service_version=__version__,
+                    enabled=True,
+                )
+                if configured:
+                    click.echo(f"OpenTelemetry tracing enabled: {otlp_endpoint}", err=True)
+                else:
+                    click.echo(
+                        "Warning: OpenTelemetry not available. Install with: pip install metamorphic-guard[otel]",
+                        err=True,
+                    )
+            except ImportError:
+                click.echo(
+                    "Warning: OpenTelemetry not available. Install with: pip install metamorphic-guard[otel]",
+                    err=True,
+                )
 
         click.echo(f"Running evaluation: {task}")
         click.echo(f"Baseline: {baseline}")
@@ -558,6 +590,21 @@ def evaluate_command(
             policy_version=policy_version,
             sandbox_plugins=sandbox_plugins,
         )
+
+        # Export trace to OpenTelemetry if enabled
+        if otlp_endpoint:
+            try:
+                from .telemetry import trace_evaluation
+                trace_evaluation(
+                    task_name=task,
+                    baseline_path=baseline,
+                    candidate_path=candidate,
+                    n=n,
+                    result=result,
+                )
+            except Exception:
+                # Silently fail if telemetry export fails
+                pass
 
         if decision["adopt"]:
             click.echo("✅ Candidate accepted!")

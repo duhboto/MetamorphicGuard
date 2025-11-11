@@ -41,6 +41,14 @@ Metamorphic Guard evaluates candidate implementations against baseline versions 
 3. **Statistical Analysis**: Computing bootstrap confidence intervals on pass-rate differences
 4. **Adoption Gating**: Making data-driven decisions about whether to adopt candidates
 
+## Quick Start Tutorial
+
+New to Metamorphic Guard? Check out our [First PR Gate Tutorial](docs/first-pr-gate-tutorial.md) for a complete walkthrough:
+- Setting up your first evaluation
+- Creating baseline and candidate implementations
+- Integrating with GitHub Actions
+- Generating reports and badges
+
 ## Reference Projects in This Repository
 
 Metamorphic Guard ships with three companion projects that demonstrate how teams can fold the library into their delivery workflows and produce auditable evidence:
@@ -117,6 +125,7 @@ metamorphic-guard --help
 - `--executor-config`: JSON object with executor-specific settings (e.g. CPU, image)
 - `--config`: Path to a TOML file providing defaults for the above options
 - `--export-violations`: Emit a JSON summary of property/MR failures to a given path
+- `--otlp-endpoint`: OpenTelemetry OTLP endpoint URL for trace export (e.g., `http://localhost:4317`)
 - `--html-report`: Write an interactive-ready HTML summary alongside the JSON report
 - `--junit-xml`: Write JUnit XML output for CI integration (e.g., `--junit-xml test-results.xml`)
 - `--dispatcher`: Execution dispatcher (`local` threads or experimental `queue`)
@@ -392,7 +401,41 @@ Pass `--sandbox-plugins` during evaluation (or set `sandbox_plugins = true` in c
   harness default to `reports/failed_cases/`; these JSON snapshots capture violations and config for debugging.
 - Retention controls: `--failed-artifact-limit` caps how many snapshots are retained and
   `--failed-artifact-ttl-days` prunes entries older than the configured horizon.
-- Queue telemetry ships out-of-the-box: `metamorphic_queue_pending_tasks` (tasks waiting),
+- ### OpenTelemetry Integration
+
+For distributed tracing and observability, Metamorphic Guard can export traces to OpenTelemetry:
+
+```bash
+metamorphic-guard evaluate \
+  --task top_k \
+  --baseline baseline.py \
+  --candidate candidate.py \
+  --otlp-endpoint http://localhost:4317
+```
+
+This exports traces containing:
+- Evaluation metadata (task, baseline, candidate, n)
+- Decision and reasoning
+- Pass rates and deltas
+- LLM metrics (cost, tokens) if applicable
+- Trust scores if applicable
+- Individual test case traces
+
+Install OpenTelemetry dependencies:
+
+```bash
+pip install metamorphic-guard[otel]
+```
+
+Or manually:
+
+```bash
+pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-grpc
+```
+
+Traces can be visualized in Grafana, Jaeger, or any OTLP-compatible backend.
+
+Queue telemetry ships out-of-the-box: `metamorphic_queue_pending_tasks` (tasks waiting),
   `metamorphic_queue_inflight_cases` (cases outstanding), and `metamorphic_queue_active_workers`
   (live heartbeat count) alongside throughput counters (`*_cases_dispatched_total`, `*_cases_completed_total`,
   `*_cases_requeued_total`).
