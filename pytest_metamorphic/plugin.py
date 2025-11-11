@@ -27,7 +27,7 @@ def pytest_configure(config: pytest.Config) -> None:
     """Register the metamorphic marker."""
     config.addinivalue_line(
         "markers",
-        "metamorphic(task, baseline, candidate, n=100, seed=42): Run Metamorphic Guard evaluation as a test",
+        "metamorphic(task, baseline, candidate, n=100, seed=42, expect_adopt=True): Run Metamorphic Guard evaluation as a test",
     )
 
 
@@ -61,6 +61,7 @@ def pytest_runtest_call(item: pytest.Item) -> None:
     timeout_s = marker.kwargs.get("timeout_s", 2.0)
     mem_mb = marker.kwargs.get("mem_mb", 512)
     improve_delta = marker.kwargs.get("improve_delta", 0.02)
+    expect_adopt = marker.kwargs.get("expect_adopt", True)  # Default: expect adoption to succeed
 
     if not task_name or not baseline_path or not candidate_path:
         pytest.fail("metamorphic marker requires 'task', 'baseline', and 'candidate' parameters")
@@ -91,11 +92,18 @@ def pytest_runtest_call(item: pytest.Item) -> None:
     decision = result.get("decision", {})
     adopt = decision.get("adopt", False)
 
-    if not adopt:
+    if not adopt and expect_adopt:
+        # Adoption failed but we expected it to succeed
         delta = result.get("delta_pass_rate", 0.0)
         reason = decision.get("reason", "unknown")
         pytest.fail(
             f"Metamorphic Guard adoption gate failed: {reason} (Δ pass rate: {delta:.4f})"
+        )
+    elif adopt and not expect_adopt:
+        # Adoption succeeded but we expected it to fail
+        delta = result.get("delta_pass_rate", 0.0)
+        pytest.fail(
+            f"Metamorphic Guard adoption gate unexpectedly passed (expected failure) (Δ pass rate: {delta:.4f})"
         )
 
 

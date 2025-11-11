@@ -24,9 +24,10 @@ def test_top_k_improved():
     candidate="examples/top_k_bad.py",
     n=50,
     seed=42,
+    expect_adopt=False,  # Expect adoption to fail (bad candidate should be rejected)
 )
 def test_top_k_bad_should_fail():
-    """Example test that should fail due to bad candidate."""
-    # This test should fail because the bad candidate doesn't meet the gate
+    """Example test that verifies bad candidate is correctly rejected."""
+    # This test passes when the adoption gate correctly rejects the bad candidate
     pass
 
