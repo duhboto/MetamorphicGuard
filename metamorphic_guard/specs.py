@@ -54,13 +54,48 @@ def task(name: str):
 
 def get_task(name: str) -> Spec:
     """Get a registered task specification."""
-    if name not in _TASK_REGISTRY:
-        raise ValueError(f"Task '{name}' not found in registry. Available: {list(_TASK_REGISTRY.keys())}")
+    # First check built-in registry
+    if name in _TASK_REGISTRY:
+        spec_func = _TASK_REGISTRY[name]
+        return spec_func()
     
-    spec_func = _TASK_REGISTRY[name]
-    return spec_func()
+    # Then check plugin registry
+    try:
+        from .plugins import task_plugins
+        
+        plugin_registry = task_plugins()
+        plugin_def = plugin_registry.get(name.lower())
+        if plugin_def is not None:
+            # Plugin factory should return a Spec or a callable that returns a Spec
+            factory = plugin_def.factory
+            if callable(factory):
+                result = factory()
+                if isinstance(result, Spec):
+                    return result
+                # If it's a callable that returns Spec, call it
+                if callable(result):
+                    return result()
+            raise TypeError(f"Task plugin '{name}' must return a Spec")
+    except ImportError:
+        pass
+    
+    # Not found in either registry
+    available = list(_TASK_REGISTRY.keys())
+    try:
+        from .plugins import task_plugins
+        available.extend(list(task_plugins().keys()))
+    except ImportError:
+        pass
+    
+    raise ValueError(f"Task '{name}' not found in registry. Available: {available}")
 
 
 def list_tasks() -> List[str]:
-    """List all registered task names."""
-    return list(_TASK_REGISTRY.keys())
+    """List all registered task names (built-in + plugins)."""
+    tasks = list(_TASK_REGISTRY.keys())
+    try:
+        from .plugins import task_plugins
+        tasks.extend(list(task_plugins().keys()))
+    except ImportError:
+        pass
+    return sorted(set(tasks))

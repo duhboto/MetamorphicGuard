@@ -12,6 +12,8 @@ PLUGIN_GROUP_DISPATCHERS = "metamorphic_guard.dispatchers"
 PLUGIN_GROUP_EXECUTORS = "metamorphic_guard.executors"
 PLUGIN_GROUP_MUTANTS = "metamorphic_guard.mutants"
 PLUGIN_GROUP_JUDGES = "metamorphic_guard.judges"
+PLUGIN_GROUP_TASKS = "metamorphic_guard.tasks"
+PLUGIN_GROUP_RELATIONS = "metamorphic_guard.relations"
 
 
 @dataclass(frozen=True)
@@ -139,6 +141,18 @@ def judge_plugins() -> Mapping[str, PluginDefinition]:
     return _load_entry_points(PLUGIN_GROUP_JUDGES)
 
 
+@lru_cache(maxsize=None)
+def task_plugins() -> Mapping[str, PluginDefinition]:
+    """Load task plugins from entry points."""
+    return _load_entry_points(PLUGIN_GROUP_TASKS)
+
+
+@lru_cache(maxsize=None)
+def relation_plugins() -> Mapping[str, PluginDefinition]:
+    """Load relation plugins from entry points."""
+    return _load_entry_points(PLUGIN_GROUP_RELATIONS)
+
+
 def plugin_registry(kind: Optional[str] = None) -> Dict[str, PluginDefinition]:
     """Return a mapping of plugin name -> definition for the requested kind."""
 
@@ -154,5 +168,9 @@ def plugin_registry(kind: Optional[str] = None) -> Dict[str, PluginDefinition]:
         registry.update(mutant_plugins())
     if normalized in {"judge", "all"}:
         registry.update(judge_plugins())
+    if normalized in {"task", "all"}:
+        registry.update(task_plugins())
+    if normalized in {"relation", "all"}:
+        registry.update(relation_plugins())
     return registry
 

@@ -58,14 +58,40 @@ def sha256_file(path: str) -> str:
     raise FileNotFoundError(f"Path not found: {path}")
 
 
-def write_report(payload: dict, *, directory: str | Path | None = None) -> str:
+def write_report(payload: dict, *, directory: str | Path | None = None, validate: bool = True) -> str:
     """
     Write a JSON report to disk and return its path.
 
     The destination directory can be supplied explicitly, provided via the
     METAMORPHIC_GUARD_REPORT_DIR environment variable, or discovered by looking
     for a project root that contains a pyproject.toml/.git marker.
+
+    Args:
+        payload: Report data dictionary
+        directory: Optional destination directory
+        validate: If True, validate the report against the schema before writing
+
+    Returns:
+        Path to the written report file
     """
+    # Validate report if requested
+    if validate:
+        try:
+            from .report_schema import validate_report
+
+            validate_report(payload)
+        except ImportError:
+            # Pydantic not available, skip validation
+            pass
+        except Exception as e:
+            import warnings
+
+            warnings.warn(
+                f"Report validation failed (continuing anyway): {e}",
+                UserWarning,
+                stacklevel=2,
+            )
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"report_{timestamp}.json"
 
