@@ -1030,6 +1030,283 @@ def report_command(json_report: Path, output: Path | None) -> None:
         sys.exit(1)
 
 
+@main.command("replay")
+@click.option("--from", "report_file", required=True, type=click.Path(exists=True, path_type=Path), help="JSON report file to replay")
+@click.option("--baseline", type=str, default=None, help="Override baseline path (default: from report)")
+@click.option("--candidate", type=str, default=None, help="Override candidate path (default: from report)")
+@click.option("--execute/--no-execute", default=False, show_default=True, help="Execute the replay evaluation (default: print command only)")
+@click.pass_context
+def replay_command(
+    ctx: click.Context,
+    report_file: Path,
+    baseline: str | None,
+    candidate: str | None,
+    execute: bool,
+) -> None:
+    """
+    Replay an evaluation from a JSON report file.
+    
+    Extracts seed, test cases, and configuration from a previous evaluation report
+    and either prints the replay command or executes it.
+    
+    Examples:
+    
+    \b
+    # Print replay command
+    metamorphic-guard replay --from reports/report_20240101_120000.json
+    
+    \b
+    # Execute replay immediately
+    metamorphic-guard replay --from reports/report_20240101_120000.json --execute
+    """
+    import json as json_lib
+    
+    try:
+        with open(report_file, "r", encoding="utf-8") as f:
+            report_data = json_lib.load(f)
+    except json_lib.JSONDecodeError as e:
+        click.echo(f"Error: Invalid JSON in {report_file}: {e}", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"Error reading {report_file}: {e}", err=True)
+        sys.exit(1)
+    
+    # Extract replay information
+    replay_info = report_data.get("replay") or {}
+    task_name = replay_info.get("task") or report_data.get("task")
+    seed = replay_info.get("seed") or report_data.get("seed", 42)
+    
+    # Get baseline/candidate paths
+    baseline_path = baseline
+    candidate_path = candidate
+    
+    if not baseline_path:
+        baseline_path = replay_info.get("baseline_path")
+    if not candidate_path:
+        candidate_path = replay_info.get("candidate_path")
+    
+    if not baseline_path or not candidate_path:
+        click.echo("Error: Could not determine baseline/candidate paths from report", err=True)
+        click.echo("  Use --baseline and --candidate to specify paths", err=True)
+        sys.exit(1)
+    
+    # Get cases
+    cases = report_data.get("cases", [])
+    if not cases:
+        click.echo("Error: No test cases found in report", err=True)
+        sys.exit(1)
+    
+    # Create temporary cases file
+    import tempfile
+    cases_file = Path(tempfile.mkdtemp()) / "replay_cases.json"
+    cases_file.write_text(json_lib.dumps(cases, indent=2), encoding="utf-8")
+    
+    # Get configuration from report
+    config = report_data.get("config", {})
+    min_delta = config.get("min_delta", 0.02)
+    min_pass_rate = config.get("min_pass_rate", 0.80)
+    ci_method = config.get("ci_method", "newcombe")
+    alpha = config.get("alpha", 0.05)
+    
+    # Build replay command
+    replay_cmd = [
+        "metamorphic-guard",
+        "evaluate",
+        "--task", task_name,
+        "--baseline", baseline_path,
+        "--candidate", candidate_path,
+        "--seed", str(seed),
+        "--replay-input", str(cases_file),
+        "--min-delta", str(min_delta),
+        "--min-pass-rate", str(min_pass_rate),
+        "--ci-method", ci_method,
+        "--alpha", str(alpha),
+    ]
+    
+    if execute:
+        click.echo(f"Replaying evaluation from {report_file}")
+        click.echo(f"Task: {task_name}, Seed: {seed}, Cases: {len(cases)}")
+        click.echo("")
+        
+        # Invoke evaluate command
+        try:
+            # Remove 'metamorphic-guard' from command and invoke
+            ctx.invoke(
+                evaluate_command,
+                task=task_name,
+                baseline=baseline_path,
+                candidate=candidate_path,
+                n=len(cases),  # Will be overridden by replay-input
+                seed=seed,
+                timeout_s=config.get("timeout_s", 2.0),
+                mem_mb=config.get("mem_mb", 512),
+                alpha=alpha,
+                min_delta=min_delta,
+                min_pass_rate=min_pass_rate,
+                violation_cap=config.get("violation_cap", 25),
+                parallel=config.get("parallel", 1),
+                bootstrap_samples=config.get("bootstrap_samples", 1000),
+                ci_method=ci_method,
+                rr_ci_method=config.get("rr_ci_method", "log"),
+                report_dir=None,
+                dispatcher=config.get("dispatcher", "local"),
+                executor=None,
+                executor_config=None,
+                export_violations=None,
+                html_report=None,
+                junit_report=None,
+                queue_config=None,
+                monitor_names=[],
+                alert_webhooks=[],
+                sandbox_plugins=None,
+                log_file=None,
+                log_json=None,
+                metrics_enabled=None,
+                metrics_port=None,
+                metrics_host="0.0.0.0",
+                failed_artifact_limit=None,
+                failed_artifact_ttl_days=None,
+                policy_version=None,
+                otlp_endpoint=None,
+                replay_input=cases_file,
+                policy=None,
+                power_target=config.get("power_target", 0.8),
+                stability=config.get("stability", 1),
+                shrink_violations=config.get("shrink_violations", False),
+            )
+        except Exception as e:
+            click.echo(f"Error during replay: {e}", err=True)
+            sys.exit(1)
+        finally:
+            # Clean up temp file
+            try:
+                cases_file.unlink()
+                cases_file.parent.rmdir()
+            except Exception:
+                pass
+    else:
+        click.echo("Replay command:")
+        click.echo("  " + " ".join(replay_cmd))
+        click.echo("")
+        click.echo("To execute this replay, run:")
+        click.echo(f"  metamorphic-guard replay --from {report_file} --execute")
+
+
+@main.command("power")
+@click.option("--baseline-rate", required=True, type=float, help="Expected baseline pass rate (0-1)")
+@click.option("--lift", type=float, default=None, help="Expected improvement (pass-rate delta). If not provided, calculates MDE.")
+@click.option("--n", type=int, default=None, help="Sample size (number of test cases). If not provided, calculates required n.")
+@click.option("--alpha", default=0.05, show_default=True, help="Significance level")
+@click.option("--power-target", default=0.8, show_default=True, help="Desired statistical power")
+@click.option("--min-delta", default=0.02, show_default=True, help="Minimum detectable effect threshold")
+def power_command(
+    baseline_rate: float,
+    lift: float | None,
+    n: int | None,
+    alpha: float,
+    power_target: float,
+    min_delta: float,
+) -> None:
+    """
+    Calculate statistical power or required sample size for pass-rate comparisons.
+    
+    Examples:
+    
+    \b
+    # Calculate required sample size for 2% lift detection
+    metamorphic-guard power --baseline-rate 0.92 --lift 0.02
+    
+    \b
+    # Calculate power for given sample size
+    metamorphic-guard power --baseline-rate 0.92 --lift 0.02 --n 400
+    
+    \b
+    # Calculate minimum detectable effect for given sample size
+    metamorphic-guard power --baseline-rate 0.92 --n 400
+    """
+    from .power import calculate_power, calculate_sample_size, estimate_mde
+    
+    if not (0 <= baseline_rate <= 1):
+        click.echo("Error: baseline-rate must be between 0 and 1", err=True)
+        sys.exit(1)
+    
+    if lift is not None and not (0 <= lift <= 1):
+        click.echo("Error: lift must be between 0 and 1", err=True)
+        sys.exit(1)
+    
+    if n is not None and n <= 0:
+        click.echo("Error: n must be positive", err=True)
+        sys.exit(1)
+    
+    click.echo("=" * 60)
+    click.echo("Power Analysis")
+    click.echo("=" * 60)
+    click.echo(f"Baseline pass rate: {baseline_rate:.3f}")
+    click.echo(f"Alpha (significance level): {alpha}")
+    click.echo(f"Power target: {power_target}")
+    click.echo(f"Minimum detectable effect: {min_delta}")
+    click.echo("")
+    
+    if lift is not None:
+        candidate_rate = min(1.0, baseline_rate + lift)
+        click.echo(f"Expected improvement: {lift:.3f} (candidate rate: {candidate_rate:.3f})")
+        
+        if n is None:
+            # Calculate required sample size
+            try:
+                required_n = calculate_sample_size(
+                    baseline_rate=baseline_rate,
+                    min_delta=lift,
+                    alpha=alpha,
+                    power_target=power_target,
+                )
+                click.echo(f"\nRequired sample size (n): {required_n}")
+                click.echo(f"  To detect Δ ≥ {lift:.3f} with {power_target:.0%} power at α={alpha}")
+            except ValueError as e:
+                click.echo(f"Error: {e}", err=True)
+                sys.exit(1)
+        else:
+            # Calculate power for given sample size
+            power = calculate_power(
+                baseline_rate=baseline_rate,
+                candidate_rate=candidate_rate,
+                sample_size=n,
+                alpha=alpha,
+                min_delta=min_delta,
+            )
+            click.echo(f"\nSample size (n): {n}")
+            click.echo(f"Statistical power: {power:.3f} ({power:.1%})")
+            if power < power_target:
+                click.echo(f"⚠️  Power below target ({power_target:.1%})", err=True)
+            else:
+                click.echo(f"✓ Power meets target ({power_target:.1%})")
+    else:
+        # Calculate MDE for given sample size
+        if n is None:
+            click.echo("Error: Either --lift or --n must be provided", err=True)
+            sys.exit(1)
+        
+        try:
+            mde = estimate_mde(
+                baseline_rate=baseline_rate,
+                sample_size=n,
+                alpha=alpha,
+                power_target=power_target,
+            )
+            click.echo(f"\nSample size (n): {n}")
+            click.echo(f"Minimum detectable effect (MDE): {mde:.3f} ({mde:.1%})")
+            click.echo(f"  With {n} cases, you can detect improvements ≥ {mde:.3f} with {power_target:.0%} power")
+            
+            if mde > min_delta:
+                click.echo(f"⚠️  MDE ({mde:.3f}) exceeds threshold ({min_delta:.3f})", err=True)
+                click.echo(f"   Consider increasing n or lowering --min-delta")
+        except ValueError as e:
+            click.echo(f"Error: {e}", err=True)
+            sys.exit(1)
+    
+    click.echo("")
+
+
 @main.command("stability-audit")
 @click.option("--task", required=True, help="Task name to evaluate")
 @click.option("--baseline", required=True, help="Path to baseline implementation")
