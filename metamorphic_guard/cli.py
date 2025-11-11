@@ -644,13 +644,41 @@ def evaluate_command(
                     err=True,
                 )
 
-        report_path = write_report(result, directory=report_dir)
+        report_path = Path(write_report(result, directory=report_dir))
 
         if export_violations is not None:
             _write_violation_report(export_violations, result)
 
         if html_report is not None:
             render_html_report(result, html_report)
+
+        replay_info = result.get("replay") or {}
+        cases_path = None
+        if report_dir:
+            cases_path = report_path.with_name(report_path.stem + "_cases.json")
+            cases_path.write_text(json.dumps(result.get("cases", []), indent=2), encoding="utf-8")
+            click.echo(f"Replay cases saved to: {cases_path}")
+
+        if replay_info and cases_path is not None:
+            replay_cmd = [
+                "metamorphic-guard",
+                "--task",
+                replay_info.get("task", task),
+                "--baseline",
+                baseline,
+                "--candidate",
+                candidate,
+                "--replay-input",
+                str(cases_path),
+                "--min-delta",
+                str(min_delta),
+                "--min-pass-rate",
+                str(min_pass_rate),
+                "--ci-method",
+                ci_method,
+            ]
+            click.echo("Replay command:")
+            click.echo("  " + " ".join(replay_cmd))
 
         if junit_xml is not None:
             write_junit_xml(result, junit_xml)

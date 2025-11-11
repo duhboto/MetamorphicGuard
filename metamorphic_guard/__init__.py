@@ -47,11 +47,15 @@ def top_k_spec() -> Spec:
                 transform=permute_input,
                 expect="equal",
                 accepts_rng=True,
+                category="permutation_invariance",
+                description="Permutation of input list should not change top-k result",
             ),
             MetamorphicRelation(
                 name="add_noise_below_min", 
                 transform=add_noise_below_min,
                 expect="equal",
+                category="noise_invariance",
+                description="Adding noise below kth element should not affect top-k result",
             )
         ],
         equivalence=multiset_equal,

@@ -129,6 +129,11 @@ def solve(L, k):
             relation_cov = report_data.get("relation_coverage")
             assert relation_cov
             assert relation_cov["relations"]
+            cases_path = report_path.with_name(report_path.stem + "_cases.json")
+            assert cases_path.exists()
+            cases_payload = json.loads(cases_path.read_text())
+            assert len(cases_payload) == 10
+            assert "Replay command" in result.output
             violations_file = Path(report_dir) / "violations.json"
             assert violations_file.exists()
             violations_payload = json.loads(violations_file.read_text())
@@ -553,7 +558,7 @@ def solve(L, k):
     )
     assert result.exit_code == 0
 
-    report_files = list(report_dir.glob("report_*.json"))
+    report_files = sorted(p for p in report_dir.glob("report_*.json") if not p.name.endswith("_cases.json"))
     assert report_files, "Expected report file to be created"
     report_data = json.loads(report_files[0].read_text())
     cases_path = tmp_path / "replay_cases.json"
@@ -644,7 +649,7 @@ def solve(L, k):
         assert "Using policy file" in result.output
         assert "Power estimate" in result.output
 
-        report_files = list(report_dir.glob("report_*.json"))
+        report_files = sorted(p for p in report_dir.glob("report_*.json") if not p.name.endswith("_cases.json"))
         assert report_files, "Expected report file created"
         report = json.loads(report_files[0].read_text())
         assert report["decision"]["adopt"] is False
@@ -654,6 +659,10 @@ def solve(L, k):
         assert policy_payload
         assert policy_payload["gating"]["min_delta"] == 0.05
         assert report.get("relation_coverage")
+        cases_path = report_files[0].with_name(report_files[0].stem + "_cases.json")
+        assert cases_path.exists()
+        assert json.loads(cases_path.read_text())
+        assert "Replay command" in result.output
     finally:
         baseline.unlink()
         candidate.unlink()

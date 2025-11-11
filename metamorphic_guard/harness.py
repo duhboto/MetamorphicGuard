@@ -390,6 +390,15 @@ def run_eval(
             "reason": f"gate_error: {exc}",
         }
 
+    result["replay"] = {
+        "seed": seed,
+        "cases": len(test_inputs),
+        "explicit_inputs": bool(explicit_inputs),
+        "baseline_path": baseline_path,
+        "candidate_path": candidate_path,
+        "task": task_name,
+    }
+
     power_estimate, recommended_n = _estimate_power(
         baseline_metrics["pass_rate"],
         candidate_metrics["pass_rate"],
