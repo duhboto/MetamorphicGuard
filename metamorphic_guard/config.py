@@ -26,7 +26,7 @@ class EvaluatorConfig(BaseModel):
     timeout_s: float = Field(default=2.0, gt=0)
     mem_mb: int = Field(default=512, gt=0)
     alpha: float = Field(default=0.05, gt=0, lt=1)
-    improve_delta: float = Field(default=0.02)
+    min_delta: float = Field(default=0.02, alias="improve_delta")  # improve_delta is deprecated
     violation_cap: int = Field(default=25, ge=1)
     parallel: int = Field(default=1, ge=1)
     bootstrap_samples: int = Field(default=1000, ge=1)

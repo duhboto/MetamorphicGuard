@@ -127,7 +127,7 @@ def _load_config_defaults(ctx: click.Context, param: click.Parameter, value: Opt
             "timeout_s": config.timeout_s,
             "mem_mb": config.mem_mb,
             "alpha": config.alpha,
-            "improve_delta": config.improve_delta,
+            "improve_delta": config.min_delta,  # Use min_delta (improve_delta is deprecated)
             "violation_cap": config.violation_cap,
             "parallel": config.parallel,
             "bootstrap_samples": config.bootstrap_samples,
