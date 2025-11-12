@@ -3,6 +3,7 @@ import textwrap
 import threading
 import time
 
+from metamorphic_guard.dispatch import LocalDispatcher
 from metamorphic_guard.dispatch_queue import (
     InMemoryQueueAdapter,
     QueueDispatcher,
@@ -15,6 +16,80 @@ from metamorphic_guard.dispatch_queue import (
 def dummy_run_case(index, args):
     data = {"success": True, "duration_ms": 1.0, "result": args[0]}
     return data
+
+
+def test_local_dispatcher_traces_when_telemetry_enabled(monkeypatch):
+    calls = []
+
+    def fake_trace_test_case(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(
+        "metamorphic_guard.telemetry.trace_test_case",
+        fake_trace_test_case,
+        raising=True,
+    )
+    monkeypatch.setattr(
+        "metamorphic_guard.telemetry.is_telemetry_enabled",
+        lambda: True,
+        raising=True,
+    )
+
+    dispatcher = LocalDispatcher(workers=1)
+    inputs = [(42,)]
+
+    def run_case(index, args):
+        return {
+            "success": True,
+            "duration_ms": 4.2,
+            "result": args[0],
+            "tokens_total": 99,
+            "cost_usd": 0.123,
+        }
+
+    dispatcher.execute(
+        test_inputs=inputs,
+        run_case=run_case,
+        role="candidate",
+        monitors=[],
+        call_spec=None,
+    )
+
+    assert len(calls) == 1
+    payload = calls[0]
+    assert payload["case_index"] == 0
+    assert payload["role"] == "candidate"
+    assert payload["duration_ms"] == 4.2
+    assert payload["success"] is True
+    assert payload["tokens"] == 99
+    assert payload["cost_usd"] == 0.123
+
+
+def test_local_dispatcher_skips_tracing_when_disabled(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(
+        "metamorphic_guard.telemetry.trace_test_case",
+        lambda **kwargs: calls.append(kwargs),
+        raising=True,
+    )
+    monkeypatch.setattr(
+        "metamorphic_guard.telemetry.is_telemetry_enabled",
+        lambda: False,
+        raising=True,
+    )
+
+    dispatcher = LocalDispatcher(workers=1)
+
+    dispatcher.execute(
+        test_inputs=[(1,)],
+        run_case=lambda index, args: {"success": True, "duration_ms": 1.0, "result": 0},
+        role="baseline",
+        monitors=[],
+        call_spec=None,
+    )
+
+    assert calls == []
 
 
 def test_queue_dispatcher_memory_backend():

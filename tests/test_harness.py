@@ -2,6 +2,8 @@
 Tests for harness evaluation and bootstrap CI calculation.
 """
 
+from pathlib import Path
+
 import pytest
 
 from metamorphic_guard.harness import (
@@ -9,6 +11,7 @@ from metamorphic_guard.harness import (
     _compute_delta_ci,
     _compute_relative_risk,
     _evaluate_results,
+    run_eval,
 )
 from metamorphic_guard.specs import MetamorphicRelation, Property, Spec
 from metamorphic_guard.stability import multiset_equal
@@ -309,6 +312,34 @@ def test_relation_rerun_cache():
     )
 
     assert call_counter["count"] == 1
+
+
+def test_run_eval_applies_relation_correction_holm():
+    repo_root = Path(__file__).resolve().parents[1]
+    baseline = repo_root / "examples" / "top_k_baseline.py"
+    candidate = repo_root / "examples" / "top_k_improved.py"
+
+    result = run_eval(
+        task_name="top_k",
+        baseline_path=str(baseline),
+        candidate_path=str(candidate),
+        n=12,
+        seed=7,
+        bootstrap_samples=200,
+        relation_correction="holm",
+    )
+
+    coverage = result.get("relation_coverage")
+    assert coverage is not None
+    correction = coverage.get("correction")
+    assert correction is not None
+    assert correction["method"] == "holm-bonferroni"
+    assert correction["alpha"] == pytest.approx(0.05)
+
+    for relation in coverage["relations"]:
+        assert "p_value" in relation
+        assert "adjusted_p_value" in relation
+        assert "significant" in relation
 def test_newcombe_ci_difference():
     baseline_metrics = {
         "passes": 60,

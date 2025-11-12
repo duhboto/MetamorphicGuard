@@ -213,6 +213,8 @@ def apply_sequential_correction(
     delta_ci: List[float],
     config: SequentialTestConfig,
     look_number: Optional[int] = None,
+    *,
+    recompute_ci: Optional[Callable[[float], List[float]]] = None,
 ) -> Tuple[List[float], float]:
     """
     Apply sequential testing correction to confidence interval.
@@ -222,6 +224,12 @@ def apply_sequential_correction(
         config: Sequential test configuration
         look_number: Override look number
         
+    Args:
+        delta_ci: Original confidence interval [lower, upper]
+        config: Sequential test configuration
+        look_number: Override look number
+        recompute_ci: Callable that recomputes the CI given an adjusted alpha
+
     Returns:
         (adjusted_ci, adjusted_alpha) tuple
     """
@@ -230,22 +238,14 @@ def apply_sequential_correction(
     
     adjusted_alpha = compute_sequential_alpha(config, look_number)
     
-    # Adjust CI width based on adjusted alpha
-    # This is a simplified approach - full implementation would recompute CI
-    # with adjusted alpha, but we approximate by scaling the interval
+    if recompute_ci is None:
+        raise ValueError(
+            "recompute_ci must be provided when sequential corrections are enabled."
+        )
+
+    adjusted_ci = recompute_ci(adjusted_alpha)
+    if not isinstance(adjusted_ci, (list, tuple)) or len(adjusted_ci) != 2:
+        raise ValueError("recompute_ci must return a 2-element sequence [lower, upper].")
     
-    original_width = delta_ci[1] - delta_ci[0]
-    center = (delta_ci[0] + delta_ci[1]) / 2
-    
-    # Scale factor based on alpha ratio
-    # More conservative alpha -> wider CI
-    scale_factor = config.alpha / adjusted_alpha if adjusted_alpha > 0 else 1.0
-    adjusted_width = original_width * scale_factor
-    
-    adjusted_ci = [
-        center - adjusted_width / 2,
-        center + adjusted_width / 2,
-    ]
-    
-    return (adjusted_ci, adjusted_alpha)
+    return (list(adjusted_ci), adjusted_alpha)
 

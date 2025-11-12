@@ -115,8 +115,8 @@ def solve(L, k):
             report_data = json.loads(Path(report_path).read_text())
             assert "decision" in report_data
             assert report_data["decision"]["adopt"] is True
-            # CI method should be deterministic (newcombe) for tests
-            assert report_data["config"]["ci_method"] in ("bootstrap", "newcombe")
+            # CI method should reflect explicit flag
+            assert report_data["config"]["ci_method"] == "newcombe"
             assert "spec_fingerprint" in report_data
             assert "environment" in report_data
             assert "relative_risk" in report_data
@@ -135,6 +135,13 @@ def solve(L, k):
             stats = report_data.get("statistics")
             assert stats is not None
             assert "power_estimate" in stats
+            paired = stats.get("paired")
+            assert paired is not None
+            assert paired["total"] == 10
+            assert paired["baseline_only"] == 0
+            assert paired["candidate_only"] == 0
+            assert paired["discordant"] == 0
+            assert pytest.approx(paired["mcnemar_p"], rel=1e-6) == 1.0
             relation_cov = report_data.get("relation_coverage")
             assert relation_cov
             assert relation_cov["relations"]
@@ -167,6 +174,74 @@ def solve(L, k):
     finally:
         os.unlink(baseline_file)
         os.unlink(candidate_file)
+
+
+def test_cli_mr_fwer_flag(tmp_path):
+    runner = CliRunner()
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        f.write(
+            """
+def solve(L, k):
+    if not L or k <= 0:
+        return []
+    return sorted(L, reverse=True)[: min(k, len(L))]
+"""
+        )
+        baseline = f.name
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        f.write(
+            """
+def solve(L, k):
+    if not L or k <= 0:
+        return []
+    return sorted(L, reverse=True)[: min(k, len(L))]
+"""
+        )
+        candidate = f.name
+
+    try:
+        report_dir = tmp_path / "reports"
+        result = runner.invoke(
+            main,
+            [
+                "--task",
+                "top_k",
+                "--baseline",
+                baseline,
+                "--candidate",
+                candidate,
+                "--n",
+                "8",
+                "--min-delta",
+                "-0.5",
+                "--mr-fwer",
+                "--report-dir",
+                str(report_dir),
+            ],
+        )
+
+        assert result.exit_code == 0
+        report_path = next(
+            (path for path in report_dir.glob("report_*.json") if "_cases" not in path.name),
+            None,
+        )
+        assert report_path is not None, "Expected JSON report file"
+        payload = json.loads(report_path.read_text())
+
+        coverage = payload.get("relation_coverage")
+        assert coverage is not None
+        correction = coverage.get("correction")
+        assert correction is not None
+        assert correction["method"] == "holm-bonferroni"
+        for relation in coverage["relations"]:
+            assert "p_value" in relation
+            assert "adjusted_p_value" in relation
+            assert "significant" in relation
+    finally:
+        os.unlink(baseline)
+        os.unlink(candidate)
 
 
 def test_cli_log_json_and_artifact_flags(tmp_path):
@@ -786,6 +861,75 @@ def solve(L, k):
     finally:
         baseline.unlink()
         candidate.unlink()
+
+
+def test_cli_policy_preset_noninferiority(tmp_path):
+    runner = CliRunner()
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(
+            "def solve(L, k):\n"
+            "    if not L or k <= 0:\n"
+            "        return []\n"
+            "    return sorted(L, reverse=True)[:min(len(L), k)]\n"
+        )
+        baseline_file = f.name
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(
+            "def solve(L, k):\n"
+            "    if not L or k <= 0:\n"
+            "        return []\n"
+            "    return sorted(L, reverse=True)[:min(len(L), k)]\n"
+        )
+        candidate_file = f.name
+
+    try:
+        with tempfile.TemporaryDirectory() as report_dir:
+            result = runner.invoke(
+                main,
+                [
+                    "--task",
+                    "top_k",
+                    "--baseline",
+                    baseline_file,
+                    "--candidate",
+                    candidate_file,
+                    "--n",
+                    "8",
+                    "--ci-method",
+                    "bootstrap",
+                    "--policy",
+                    "noninferiority:margin=0.01",
+                    "--report-dir",
+                    report_dir,
+                ],
+            )
+
+            assert result.exit_code == 0
+            match = re.search(r"Report saved to: (.+)", result.output)
+            assert match
+            report_path = Path(match.group(1).strip())
+            report_data = json.loads(report_path.read_text())
+
+            assert report_data["config"]["policy_rule"]["type"] == "preset"
+            assert report_data["config"]["policy_rule"]["name"] == "noninferiority"
+            assert report_data["config"]["policy_version"] == "noninferiority"
+            assert report_data["config"]["ci_method"] == "bootstrap"
+            assert report_data["config"]["improve_delta"] == pytest.approx(-0.01, rel=1e-6)
+            assert report_data["decision"]["adopt"] is True
+
+            policy_section = report_data.get("policy")
+            assert policy_section["source"] == "preset"
+            assert policy_section["parameters"]["margin"] == pytest.approx(0.01, rel=1e-6)
+            paired = report_data["statistics"]["paired"]
+            assert paired["baseline_only"] == 0
+            assert paired["candidate_only"] == 0
+            assert paired["discordant"] == 0
+            assert paired["total"] == 8
+    finally:
+        os.unlink(baseline_file)
+        os.unlink(candidate_file)
 
 
 def test_cli_stability_runs(tmp_path):

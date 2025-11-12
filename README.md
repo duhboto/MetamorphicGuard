@@ -139,7 +139,7 @@ metamorphic-guard --help
 - `--violation-cap`: Maximum violations to report (default: 25)
 - `--parallel`: Number of worker processes used to drive the sandbox (default: 1)
 - `--bootstrap-samples`: Resamples used for percentile bootstrap CI (default: 1000)
-- `--ci-method`: Confidence interval method for pass-rate delta (`bootstrap`, `bootstrap-bca`, `bootstrap-cluster`, `bootstrap-cluster-bca`, `newcombe`, `wilson`). See [Confidence Interval Methods](#confidence-interval-methods) for guidance.
+- `--ci-method`: Confidence interval method for pass-rate delta (`bootstrap`, `bootstrap-bca`, `bootstrap-cluster`, `bootstrap-cluster-bca`, `newcombe`, `wilson`). Default: `bootstrap`. See [Confidence Interval Methods](#confidence-interval-methods) for guidance.
 - `--power-target`: Desired statistical power used when estimating recommended sample sizes (default: 0.8). The CLI prints the observed power and a suggested `n` for the current thresholds.
 - `--rr-ci-method`: Confidence interval method for relative risk (`log`). Use when baseline pass-rate is near 0 or 1, or when you need a ratio-based comparison. The log method uses a log-normal approximation appropriate for ratio statistics.
 - `--alpha`: Significance level for confidence intervals (default: 0.05)
@@ -151,10 +151,12 @@ metamorphic-guard --help
 - `--otlp-endpoint`: OpenTelemetry OTLP endpoint URL for trace export (e.g., `http://localhost:4317`)
 - `--html-report`: Write an interactive-ready HTML summary alongside the JSON report
 - `--junit-report` / `--junit-xml`: Write JUnit XML output for CI integration (e.g., `--junit-report test-results.xml`)
-- `--policy`: Path to a policy file (`.toml` or `.yaml`) that overrides thresholds (see [Policy as Code](#policy-as-code))
+- `--policy`: Policy to apply. Provide a path to a policy file (`.toml`/`.yaml`) or use presets like `noninferiority:margin=0.00` / `superiority:margin=0.02` (see [Policy as Code](#policy-as-code))
 - `--dispatcher`: Execution dispatcher (`local` threads or experimental `queue`)
 - `--queue-config`: JSON configuration for queue-backed dispatchers (experimental)
 - `--monitor`: Enable built-in monitors such as `latency`
+- `--mr-fwer`: Apply Holm-Bonferroni multiple-comparison correction across metamorphic relations.
+- `--mr-fdr`: Apply Benjamini-Hochberg false-discovery-rate correction across metamorphic relations.
 
 ## Example Implementations
 
@@ -467,9 +469,21 @@ For relative risk (candidate/baseline ratio), the `log` method uses a log-normal
 - Reports now include `statistics.power_estimate` and `statistics.recommended_n`; the CLI mirrors these values so you can judge whether an evaluation was sufficiently powered for the current `--power-target`.
 - Every JSON report ships with a replay bundle (`*_cases.json`) plus a copy-pastable CLI command, making it trivial to re-run or debug any evaluation.
 
+#### Paired Analysis Diagnostics
+
+- Because baseline and candidate run on the same cases, the report records paired contingency counts under `statistics.paired` (`baseline_only`, `candidate_only`, `discordant`, etc.).
+- A McNemar test with continuity correction (`mcnemar_p`) is included to flag churn (many baseline-only vs candidate-only passes) even when the overall delta nets to zero.
+- The CLI prints the discordant counts and McNemar p-value after each evaluation so reviewers can see whether improvements are concentrated or noisy.
+
 ### Policy as Code
 
 Policies describe guard-rail thresholds (minimum delta, pass-rate floor, etc.) and live alongside code so changes are auditable. Metamorphic Guard accepts `.toml` or `.yaml` policy files via `--policy` or the `policy` key in config files. Example:
+
+```bash
+metamorphic-guard evaluate ... --policy noninferiority:margin=0.01
+```
+
+The inline preset above enforces a non-inferiority margin (CI lower bound may dip up to 1%). Swap to `superiority:margin=0.02` to require a 2% lift. Presets can also override `pass_rate`, `alpha`, `power`, and `violation_cap`. Provide a structured policy file when you need richer multi-dimensional gates (quality/cost/latency/trust), governance metadata, or team-specific thresholds.
 
 ```toml
 name = "policy-v1"

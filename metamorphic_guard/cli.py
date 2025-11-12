@@ -143,10 +143,15 @@ def _load_config_defaults(ctx: click.Context, param: click.Parameter, value: Opt
             "failed_artifact_ttl_days": config.failed_artifact_ttl_days,
             "sandbox_plugins": config.sandbox_plugins,
         "power_target": config.power_target,
-        "policy": Path(config.policy) if config.policy else None,
+        "policy": str(config.policy) if config.policy else None,
         "stability": config.stability,
         }
     )
+
+    if config.relation_correction == "holm":
+        default_map["mr_fwer"] = True
+    elif config.relation_correction == "fdr":
+        default_map["mr_fdr"] = True
 
     if config.queue is not None:
         default_map["queue_config"] = json.dumps(config.queue.dict(exclude_none=True))
@@ -154,6 +159,158 @@ def _load_config_defaults(ctx: click.Context, param: click.Parameter, value: Opt
         default_map["executor_config"] = json.dumps(config.executor_config)
 
     ctx.default_map = default_map
+
+
+def _parse_policy_preset(value: str) -> Dict[str, Any]:
+    raw = value.strip()
+    if not raw:
+        raise click.ClickException("Policy preset cannot be empty.")
+
+    name, _, param_str = raw.partition(":")
+    name = name.strip().lower()
+    if name not in {"noninferiority", "superiority"}:
+        raise click.ClickException(
+            f"Unknown policy preset '{name}'. Supported presets: noninferiority, superiority."
+        )
+
+    params: Dict[str, str] = {}
+    if param_str:
+        for token in param_str.split(","):
+            token = token.strip()
+            if not token:
+                continue
+            key, sep, val = token.partition("=")
+            if not sep:
+                raise click.ClickException(
+                    f"Invalid policy preset parameter '{token}'. Expected key=value."
+                )
+            params[key.strip().lower()] = val.strip()
+
+    def _get_float(key: str, default: Optional[float] = None) -> Optional[float]:
+        if key not in params:
+            return default
+        try:
+            return float(params[key])
+        except ValueError:
+            raise click.ClickException(f"Policy preset parameter '{key}' must be numeric.")
+
+    margin = _get_float("margin", 0.0) or 0.0
+    pass_rate = _get_float("pass_rate")
+    alpha_override = _get_float("alpha")
+    power_override = _get_float("power")
+
+    violation_cap: Optional[int] = None
+    if "violation_cap" in params:
+        try:
+            violation_cap = int(params["violation_cap"])
+        except ValueError:
+            raise click.ClickException("Policy preset parameter 'violation_cap' must be an integer.")
+
+    min_delta = margin if name == "superiority" else -margin
+
+    gating: Dict[str, Any] = {"min_delta": min_delta}
+    if pass_rate is not None:
+        gating["min_pass_rate"] = pass_rate
+    if alpha_override is not None:
+        gating["alpha"] = alpha_override
+    if power_override is not None:
+        gating["power_target"] = power_override
+    if violation_cap is not None:
+        gating["violation_cap"] = violation_cap
+
+    quality_policy: Dict[str, Any] = {"min_delta": min_delta}
+    if pass_rate is not None:
+        quality_policy["min_pass_rate"] = pass_rate
+
+    parameters: Dict[str, Any] = {"margin": margin}
+    if pass_rate is not None:
+        parameters["pass_rate"] = pass_rate
+    if alpha_override is not None:
+        parameters["alpha"] = alpha_override
+    if power_override is not None:
+        parameters["power"] = power_override
+    if violation_cap is not None:
+        parameters["violation_cap"] = violation_cap
+
+    label_parts = [f"margin={margin:.4f}"]
+    if pass_rate is not None:
+        label_parts.append(f"pass_rate={pass_rate:.4f}")
+    if alpha_override is not None:
+        label_parts.append(f"alpha={alpha_override:.4f}")
+    if power_override is not None:
+        label_parts.append(f"power={power_override:.4f}")
+    if violation_cap is not None:
+        label_parts.append(f"violation_cap={violation_cap}")
+
+    descriptor = {
+        "type": "preset",
+        "name": name,
+        "parameters": parameters,
+        "label": f"{name}({', '.join(label_parts)})" if label_parts else name,
+    }
+
+    return {
+        "source": "preset",
+        "name": name,
+        "parameters": parameters,
+        "gating": gating,
+        "policy": {"quality": quality_policy},
+        "descriptor": descriptor,
+    }
+
+
+def _resolve_policy_option(value: str) -> Dict[str, Any]:
+    candidate = value.strip()
+    if not candidate:
+        raise click.ClickException("Policy value cannot be empty.")
+
+    path = Path(candidate)
+    if path.exists():
+        if not path.is_file():
+            raise click.ClickException(f"Policy path must be a file: {path}")
+        payload = load_policy_file(path)
+        payload["source"] = "file"
+
+        descriptor: Dict[str, Any] = {"type": "file", "path": str(path)}
+        raw_section = payload.get("raw", {})
+        if isinstance(raw_section, dict):
+            policy_name = raw_section.get("name")
+            if isinstance(policy_name, str):
+                descriptor["name"] = policy_name
+                descriptor["label"] = policy_name
+        payload["descriptor"] = descriptor
+
+        gating_cfg = payload.get("gating", {})
+        normalized_gating: Dict[str, Any] = {}
+        for key, val in gating_cfg.items():
+            if key == "violation_cap":
+                try:
+                    normalized_gating[key] = int(val)
+                except (TypeError, ValueError):
+                    raise click.ClickException("Policy value 'violation_cap' must be an integer.")
+            else:
+                try:
+                    normalized_gating[key] = float(val)
+                except (TypeError, ValueError):
+                    raise click.ClickException(f"Policy value '{key}' must be numeric.")
+        payload["gating"] = normalized_gating
+
+        policy_dict: Dict[str, Any] = {}
+        if isinstance(raw_section, dict) and isinstance(raw_section.get("policy"), dict):
+            policy_dict = raw_section["policy"]  # type: ignore[assignment]
+        else:
+            quality_policy: Dict[str, Any] = {}
+            if "min_delta" in normalized_gating:
+                quality_policy["min_delta"] = normalized_gating["min_delta"]
+            if "min_pass_rate" in normalized_gating:
+                quality_policy["min_pass_rate"] = normalized_gating["min_pass_rate"]
+            if quality_policy:
+                policy_dict["quality"] = quality_policy
+
+        payload["policy"] = policy_dict
+        return payload
+
+    return _parse_policy_preset(candidate)
 
 
 def _write_violation_report(path: Path, result: Dict[str, Any]) -> None:
@@ -241,9 +398,12 @@ EVALUATE_OPTIONS = [
     ),
     click.option(
         "--policy",
-        type=click.Path(exists=True, dir_okay=False, path_type=Path),
+        type=str,
         default=None,
-        help="Path to a TOML policy file defining gate thresholds.",
+        help=(
+            "Policy to apply. Provide a TOML path or use presets like "
+            "'noninferiority:margin=0.00' or 'superiority:margin=0.02'."
+        ),
     ),
     click.option(
         "--bootstrap-samples",
@@ -265,7 +425,7 @@ EVALUATE_OPTIONS = [
             ],
             case_sensitive=False,
         ),
-        default="newcombe",
+        default="bootstrap",
         show_default=True,
         help="Method for the pass-rate delta confidence interval",
     ),
@@ -337,6 +497,18 @@ EVALUATE_OPTIONS = [
         "monitor_names",
         multiple=True,
         help="Enable built-in monitors (e.g., 'latency').",
+    ),
+    click.option(
+        "--mr-fwer",
+        is_flag=True,
+        default=False,
+        help="Apply Holm-Bonferroni correction to metamorphic relation p-values.",
+    ),
+    click.option(
+        "--mr-fdr",
+        is_flag=True,
+        default=False,
+        help="Apply Benjamini-Hochberg FDR correction to metamorphic relation p-values.",
     ),
     click.option(
         "--alert-webhook",
@@ -468,6 +640,8 @@ def evaluate_command(
     junit_report: Path | None,
     queue_config: str | None,
     monitor_names: Sequence[str],
+    mr_fwer: bool,
+    mr_fdr: bool,
     alert_webhooks: Sequence[str],
     sandbox_plugins: Optional[bool],
     allow_unsafe_plugins: bool,
@@ -481,7 +655,7 @@ def evaluate_command(
     policy_version: Optional[str],
     otlp_endpoint: Optional[str],
     replay_input: Path | None,
-    policy: Path | None,
+    policy: str | None,
     power_target: float,
     stability: int,
     shrink_violations: bool,
@@ -568,11 +742,12 @@ def evaluate_command(
         policy_payload = None
         if policy is not None:
             try:
-                policy_payload = load_policy_file(policy)
+                policy_payload = _resolve_policy_option(policy)
             except PolicyLoadError as exc:
                 raise click.ClickException(str(exc)) from exc
 
             gating_cfg = policy_payload.get("gating", {})
+
             def _maybe_float(value: Any, label: str) -> float:
                 try:
                     return float(value)
@@ -593,7 +768,17 @@ def evaluate_command(
                 except (TypeError, ValueError):
                     raise click.ClickException("Policy value 'violation_cap' must be an integer.")
 
-            click.echo(f"Using policy file: {policy}")
+            descriptor = policy_payload.get("descriptor", {})
+            if policy_payload.get("source") == "preset":
+                label = descriptor.get("label") or policy_payload.get("name") or policy
+                click.echo(f"Using policy preset: {label}")
+            else:
+                click.echo(f"Using policy file: {descriptor.get('path', policy)}")
+
+            if not policy_version:
+                derived_version = descriptor.get("name") or descriptor.get("label") or policy_payload.get("name")
+                if isinstance(derived_version, str):
+                    policy_version = derived_version
 
         click.echo(f"Running evaluation: {task}")
         click.echo(f"Baseline: {baseline}")
@@ -628,6 +813,14 @@ def evaluate_command(
         if allow_unsafe_plugins:
             effective_sandbox = False
             click.echo("⚠️  Warning: Unsafe plugins enabled (sandboxing disabled)", err=True)
+
+        if mr_fwer and mr_fdr:
+            raise click.ClickException("Cannot combine --mr-fwer and --mr-fdr.")
+        relation_correction = None
+        if mr_fwer:
+            relation_correction = "holm"
+        elif mr_fdr:
+            relation_correction = "fdr"
 
         monitor_objects = []
         if monitor_names:
@@ -685,6 +878,7 @@ def evaluate_command(
                 sequential_method=sequential_method,
                 max_looks=max_looks,
                 look_number=look_number,
+                relation_correction=relation_correction,
             )
             
             run_decision = run_result.get("decision", {})
@@ -736,6 +930,8 @@ def evaluate_command(
 
         decision = result.get("decision", {})
         result.setdefault("config", {})["sandbox_plugins"] = effective_sandbox
+        if relation_correction:
+            result["config"]["relation_correction"] = relation_correction
         stats = result.get("statistics") or {}
         if stats:
             click.echo(
@@ -745,10 +941,24 @@ def evaluate_command(
             )
             if stats.get("recommended_n"):
                 click.echo(f"Suggested n for target power: {stats['recommended_n']}")
+            paired_stats = stats.get("paired")
+            if paired_stats:
+                click.echo(
+                    "Discordant (baseline>candidate / candidate>baseline): "
+                    f"{paired_stats.get('baseline_only', 0)}/"
+                    f"{paired_stats.get('candidate_only', 0)} "
+                    f"(McNemar p={paired_stats.get('mcnemar_p', 1.0):.3f})"
+                )
 
         relation_coverage = result.get("relation_coverage") or {}
         categories = relation_coverage.get("categories") or {}
         if categories:
+            correction_info = relation_coverage.get("correction")
+            if correction_info:
+                click.echo(
+                    f"Relation correction: {correction_info.get('method')} "
+                    f"(alpha={correction_info.get('alpha')})"
+                )
             click.echo("Relation coverage (candidate pass rate):")
             for category, cat_stats in categories.items():
                 candidate_total = cat_stats.get("candidate_total", 0)

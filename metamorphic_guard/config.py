@@ -33,7 +33,8 @@ class EvaluatorConfig(BaseModel):
     violation_cap: int = Field(default=25, ge=1)
     parallel: int = Field(default=1, ge=1)
     bootstrap_samples: int = Field(default=1000, ge=1)
-    ci_method: str = Field(default="newcombe")
+    ci_method: str = Field(default="bootstrap")
+    relation_correction: Optional[str] = Field(default=None)
     rr_ci_method: str = Field(default="log")
     monitors: List[str] = Field(default_factory=list)
     dispatcher: str = Field(default="local")
@@ -68,6 +69,20 @@ class EvaluatorConfig(BaseModel):
         if not value:
             return []
         return [item.strip() for item in value]
+
+    @field_validator("relation_correction")
+    @classmethod
+    def _normalize_relation_correction(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if not normalized or normalized in {"none", "null"}:
+            return None
+        if normalized in {"holm", "holm-bonferroni"}:
+            return "holm"
+        if normalized in {"fdr", "bh", "benjamini-hochberg"}:
+            return "fdr"
+        raise ValueError("relation_correction must be one of: holm, fdr, none.")
 
 
 class ConfigLoadError(Exception):

@@ -10,6 +10,7 @@ import math
 import random
 import uuid
 from statistics import NormalDist
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .sandbox import run_in_sandbox
@@ -46,6 +47,7 @@ from .dispatch import Dispatcher, ensure_dispatcher
 from .monitoring import Monitor, MonitorContext
 from .observability import add_log_context, increment_metric, log_event
 from .gate import decide_adopt
+from .multiple_comparisons import apply_multiple_comparisons_correction
 
 
 def _compute_trust_scores(
@@ -137,48 +139,35 @@ def _compute_trust_scores(
     return None
 
 
-def run_eval(
+@dataclass
+class ExecutionPlan:
+    spec: Spec
+    test_inputs: List[Tuple[Any, ...]]
+    dispatcher: Dispatcher
+    monitors: List[Monitor]
+    worker_count: int
+    run_id: str
+
+    @property
+    def total_cases(self) -> int:
+        return len(self.test_inputs)
+
+
+def _prepare_execution_plan(
+    *,
     task_name: str,
-    baseline_path: str,
-    candidate_path: str,
-    n: int = 400,
-    seed: int = 42,
-    timeout_s: float = 2.0,
-    mem_mb: int = 512,
-    alpha: float = 0.05,
-    violation_cap: int = 25,
-    parallel: int | None = None,
-    improve_delta: float = 0.02,
-    bootstrap_samples: int = 1000,
-    ci_method: str = "bootstrap",
-    rr_ci_method: str = "log",
-    executor: str | None = None,
-    executor_config: Dict[str, Any] | None = None,
-    dispatcher: Dispatcher | str | None = None,
-    queue_config: Dict[str, Any] | None = None,
-    monitors: Sequence[Monitor] | None = None,
-    failed_artifact_limit: Optional[int] = None,
-    failed_artifact_ttl_days: Optional[int] = None,
-    policy_version: Optional[str] = None,
-    explicit_inputs: Optional[List[Tuple[Any, ...]]] = None,
-    min_pass_rate: float = 0.80,
-    power_target: float = 0.8,
-    policy_config: Optional[Dict[str, Any]] = None,
-    shrink_violations: bool = False,
-    sequential_method: str = "none",
-    max_looks: int = 1,
-    look_number: int = 1,
-) -> Dict[str, Any]:
-    """
-    Run evaluation comparing baseline and candidate implementations.
-
-    Returns comprehensive metrics including bootstrap confidence intervals.
-    """
-    spec = get_task(task_name)
-
+    spec: Spec,
+    n: int,
+    seed: int,
+    parallel: Optional[int],
+    dispatcher: Dispatcher | str | None,
+    queue_config: Dict[str, Any] | None,
+    monitors: Sequence[Monitor] | None,
+    explicit_inputs: Optional[List[Tuple[Any, ...]]],
+    executor: Optional[str],
+) -> ExecutionPlan:
     if explicit_inputs is not None:
         test_inputs = [tuple(case) for case in explicit_inputs]
-        n = len(test_inputs)
     else:
         test_inputs = spec.gen_inputs(n, seed)
 
@@ -187,7 +176,7 @@ def run_eval(
 
     monitor_objs = list(monitors or [])
     if monitor_objs:
-        context = MonitorContext(task=task_name, total_cases=n)
+        context = MonitorContext(task=task_name, total_cases=len(test_inputs))
         for monitor in monitor_objs:
             monitor.start(context)
 
@@ -196,11 +185,31 @@ def run_eval(
     log_event(
         "run_eval_start",
         task=task_name,
-        total_cases=n,
+        total_cases=len(test_inputs),
         dispatcher=getattr(dispatcher_obj, "kind", "local"),
         executor=executor,
     )
 
+    return ExecutionPlan(
+        spec=spec,
+        test_inputs=list(test_inputs),
+        dispatcher=dispatcher_obj,
+        monitors=monitor_objs,
+        worker_count=worker_count,
+        run_id=run_id,
+    )
+
+
+def _execute_implementations(
+    plan: ExecutionPlan,
+    *,
+    baseline_path: str,
+    candidate_path: str,
+    timeout_s: float,
+    mem_mb: int,
+    executor: Optional[str],
+    executor_config: Dict[str, Any] | None,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     def make_runner(file_path: str) -> Callable[[int, Tuple[Any, ...]], Dict[str, Any]]:
         def _run_case(index: int, call_args: Tuple[Any, ...]) -> Dict[str, Any]:
             return run_in_sandbox(
@@ -212,13 +221,18 @@ def run_eval(
                 executor=executor,
                 executor_config=executor_config,
             )
+
         return _run_case
+
+    dispatcher_obj = plan.dispatcher
+    monitors = plan.monitors
+    test_inputs = plan.test_inputs
 
     baseline_results = dispatcher_obj.execute(
         test_inputs=test_inputs,
         run_case=make_runner(baseline_path),
         role="baseline",
-        monitors=monitor_objs,
+        monitors=monitors,
         call_spec=_build_call_spec(
             baseline_path,
             timeout_s=timeout_s,
@@ -231,7 +245,7 @@ def run_eval(
         test_inputs=test_inputs,
         run_case=make_runner(candidate_path),
         role="candidate",
-        monitors=monitor_objs,
+        monitors=monitors,
         call_spec=_build_call_spec(
             candidate_path,
             timeout_s=timeout_s,
@@ -240,7 +254,25 @@ def run_eval(
             executor_config=executor_config,
         ),
     )
+    return baseline_results, candidate_results
 
+
+def _evaluate_roles(
+    *,
+    spec: Spec,
+    test_inputs: Sequence[Tuple[Any, ...]],
+    baseline_results: Sequence[Dict[str, Any]],
+    candidate_results: Sequence[Dict[str, Any]],
+    baseline_path: str,
+    candidate_path: str,
+    timeout_s: float,
+    mem_mb: int,
+    violation_cap: int,
+    seed: int,
+    executor: Optional[str],
+    executor_config: Dict[str, Any] | None,
+    shrink_violations: bool,
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     baseline_metrics = _evaluate_results(
         baseline_results,
         spec,
@@ -276,6 +308,215 @@ def run_eval(
             executor_config=executor_config,
         ),
         shrink_violations=shrink_violations,
+    )
+    return baseline_metrics, candidate_metrics
+
+
+def _summarize_relations(
+    spec: Spec,
+    baseline_metrics: Dict[str, Any],
+    candidate_metrics: Dict[str, Any],
+    *,
+    alpha: float,
+    relation_correction: Optional[str],
+) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]], Optional[Dict[str, Any]]]:
+    relation_summary: List[Dict[str, Any]] = []
+    relation_p_values: List[float] = []
+    category_totals: Dict[str, Dict[str, Any]] = {}
+
+    def _pass_rate(total: int, failures: int) -> Optional[float]:
+        if total <= 0:
+            return None
+        return (total - failures) / total
+
+    baseline_relation_stats = baseline_metrics.get("relation_stats", {})
+    candidate_relation_stats = candidate_metrics.get("relation_stats", {})
+
+    for relation in spec.relations:
+        name = relation.name
+        baseline_entry = baseline_relation_stats.get(name, {})
+        candidate_entry = candidate_relation_stats.get(name, {})
+
+        category = (
+            baseline_entry.get("category")
+            or candidate_entry.get("category")
+            or relation.category
+            or "uncategorized"
+        )
+        description = (
+            relation.description
+            or baseline_entry.get("description")
+            or candidate_entry.get("description")
+        )
+
+        base_total = baseline_entry.get("total", 0)
+        base_fail = baseline_entry.get("failures", 0)
+        cand_total = candidate_entry.get("total", 0)
+        cand_fail = candidate_entry.get("failures", 0)
+
+        base_passes = base_total - base_fail
+        cand_passes = cand_total - cand_fail
+        p_value = _two_proportion_p_value(
+            base_passes,
+            base_total,
+            cand_passes,
+            cand_total,
+        )
+        relation_p_values.append(p_value)
+
+        relation_summary.append(
+            {
+                "name": name,
+                "category": category,
+                "description": description,
+                "baseline": {
+                    "total": base_total,
+                    "failures": base_fail,
+                    "pass_rate": _pass_rate(base_total, base_fail),
+                },
+                "candidate": {
+                    "total": cand_total,
+                    "failures": cand_fail,
+                    "pass_rate": _pass_rate(cand_total, cand_fail),
+                },
+                "p_value": p_value,
+            }
+        )
+
+        cat_entry = category_totals.setdefault(
+            category,
+            {
+                "relations": 0,
+                "baseline_total": 0,
+                "baseline_failures": 0,
+                "candidate_total": 0,
+                "candidate_failures": 0,
+            },
+        )
+        cat_entry["relations"] += 1
+        cat_entry["baseline_total"] += base_total
+        cat_entry["baseline_failures"] += base_fail
+        cat_entry["candidate_total"] += cand_total
+        cat_entry["candidate_failures"] += cand_fail
+
+    for cat_entry in category_totals.values():
+        cat_entry["baseline_pass_rate"] = _pass_rate(
+            cat_entry["baseline_total"], cat_entry["baseline_failures"]
+        )
+        cat_entry["candidate_pass_rate"] = _pass_rate(
+            cat_entry["candidate_total"], cat_entry["candidate_failures"]
+        )
+
+    correction_metadata: Optional[Dict[str, Any]] = None
+    if relation_summary and relation_correction and relation_p_values:
+        correction_method = "holm" if relation_correction == "holm" else "fdr"
+        corrected = apply_multiple_comparisons_correction(
+            relation_p_values,
+            method=correction_method,
+            alpha=alpha,
+        )
+        for index, adjusted_p, significant in corrected:
+            relation_summary[index]["adjusted_p_value"] = adjusted_p
+            relation_summary[index]["significant"] = significant
+        correction_metadata = {
+            "method": "holm-bonferroni"
+            if relation_correction == "holm"
+            else "benjamini-hochberg",
+            "alpha": alpha,
+        }
+
+    return relation_summary, category_totals, correction_metadata
+
+
+def run_eval(
+    task_name: str,
+    baseline_path: str,
+    candidate_path: str,
+    n: int = 400,
+    seed: int = 42,
+    timeout_s: float = 2.0,
+    mem_mb: int = 512,
+    alpha: float = 0.05,
+    violation_cap: int = 25,
+    parallel: int | None = None,
+    improve_delta: float = 0.02,
+    bootstrap_samples: int = 1000,
+    ci_method: str = "bootstrap",
+    rr_ci_method: str = "log",
+    executor: str | None = None,
+    executor_config: Dict[str, Any] | None = None,
+    dispatcher: Dispatcher | str | None = None,
+    queue_config: Dict[str, Any] | None = None,
+    monitors: Sequence[Monitor] | None = None,
+    failed_artifact_limit: Optional[int] = None,
+    failed_artifact_ttl_days: Optional[int] = None,
+    policy_version: Optional[str] = None,
+    explicit_inputs: Optional[List[Tuple[Any, ...]]] = None,
+    min_pass_rate: float = 0.80,
+    power_target: float = 0.8,
+    policy_config: Optional[Dict[str, Any]] = None,
+    shrink_violations: bool = False,
+    sequential_method: str = "none",
+    max_looks: int = 1,
+    look_number: int = 1,
+    relation_correction: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Run evaluation comparing baseline and candidate implementations.
+
+    Returns comprehensive metrics including bootstrap confidence intervals.
+    """
+    spec = get_task(task_name)
+
+    plan = _prepare_execution_plan(
+        task_name=task_name,
+        spec=spec,
+        n=n,
+        seed=seed,
+        parallel=parallel,
+        dispatcher=dispatcher,
+        queue_config=queue_config,
+        monitors=monitors,
+        explicit_inputs=explicit_inputs,
+        executor=executor,
+    )
+
+    test_inputs = plan.test_inputs
+    n = plan.total_cases
+    worker_count = plan.worker_count
+    dispatcher_obj = plan.dispatcher
+    monitor_objs = plan.monitors
+    run_id = plan.run_id
+
+    baseline_results, candidate_results = _execute_implementations(
+        plan,
+        baseline_path=baseline_path,
+        candidate_path=candidate_path,
+        timeout_s=timeout_s,
+        mem_mb=mem_mb,
+        executor=executor,
+        executor_config=executor_config,
+    )
+
+    baseline_metrics, candidate_metrics = _evaluate_roles(
+        spec=spec,
+        test_inputs=test_inputs,
+        baseline_results=baseline_results,
+        candidate_results=candidate_results,
+        baseline_path=baseline_path,
+        candidate_path=candidate_path,
+        timeout_s=timeout_s,
+        mem_mb=mem_mb,
+        violation_cap=violation_cap,
+        seed=seed,
+        executor=executor,
+        executor_config=executor_config,
+        shrink_violations=shrink_violations,
+    )
+
+    paired_stats = _compute_paired_stats(
+        baseline_metrics.get("pass_indicators", []),
+        candidate_metrics.get("pass_indicators", []),
     )
 
     def _estimate_power(
@@ -326,6 +567,16 @@ def run_eval(
         method=ci_method,
     )
 
+    def _recompute_delta_ci(new_alpha: float) -> List[float]:
+        return _compute_delta_ci(
+            baseline_metrics,
+            candidate_metrics,
+            alpha=new_alpha,
+            seed=seed,
+            samples=bootstrap_samples,
+            method=ci_method,
+        )
+
     # Apply sequential testing correction if enabled
     effective_alpha = alpha
     if sequential_method != "none" and max_looks > 1:
@@ -337,7 +588,11 @@ def run_eval(
             max_looks=max_looks,
             look_number=look_number,
         )
-        delta_ci, effective_alpha = apply_sequential_correction(delta_ci, seq_config)
+        delta_ci, effective_alpha = apply_sequential_correction(
+            delta_ci,
+            seq_config,
+            recompute_ci=_recompute_delta_ci,
+        )
 
     baseline_hash = sha256_file(baseline_path)
     candidate_hash = sha256_file(candidate_path)
@@ -372,6 +627,7 @@ def run_eval(
             "executor_config": _serialize_for_report(executor_config),
             "dispatcher": getattr(dispatcher_obj, "kind", "local"),
             "queue_config": _serialize_for_report(queue_config),
+            "relation_correction": relation_correction,
         },
         "hashes": {
             "baseline": baseline_hash,
@@ -400,6 +656,11 @@ def run_eval(
         "job_metadata": collect_job_metadata(),
     }
     result["job_metadata"]["run_id"] = run_id
+
+    if policy_config:
+        descriptor = policy_config.get("descriptor")
+        if descriptor:
+            result["config"]["policy_rule"] = _serialize_for_report(descriptor)
     
     baseline_clusters = baseline_metrics.get("cluster_labels") or []
     result["cases"] = []
@@ -415,7 +676,15 @@ def run_eval(
         )
 
     try:
-        result["decision"] = decide_adopt(result, improve_delta=improve_delta, min_pass_rate=min_pass_rate)
+        policy_gate = None
+        if policy_config:
+            policy_gate = policy_config.get("policy")
+        result["decision"] = decide_adopt(
+            result,
+            improve_delta=improve_delta,
+            min_pass_rate=min_pass_rate,
+            policy=policy_gate,
+        )
     except Exception as exc:
         result["decision"] = {
             "adopt": False,
@@ -446,80 +715,29 @@ def run_eval(
         "min_delta": improve_delta,
         "alpha": alpha,
     }
+    if paired_stats:
+        result["statistics"]["paired"] = paired_stats
 
-    relation_summary: List[Dict[str, Any]] = []
-    category_totals: Dict[str, Dict[str, Any]] = {}
-
-    def _pass_rate(total: int, failures: int) -> Optional[float]:
-        if total <= 0:
-            return None
-        return (total - failures) / total
-
-    baseline_relation_stats = baseline_metrics.get("relation_stats", {})
-    candidate_relation_stats = candidate_metrics.get("relation_stats", {})
-
-    for relation in spec.relations:
-        name = relation.name
-        baseline_entry = baseline_relation_stats.get(name, {})
-        candidate_entry = candidate_relation_stats.get(name, {})
-
-        category = (
-            baseline_entry.get("category")
-            or candidate_entry.get("category")
-            or relation.category
-            or "uncategorized"
-        )
-        description = relation.description or baseline_entry.get("description") or candidate_entry.get("description")
-
-        base_total = baseline_entry.get("total", 0)
-        base_fail = baseline_entry.get("failures", 0)
-        cand_total = candidate_entry.get("total", 0)
-        cand_fail = candidate_entry.get("failures", 0)
-
-        relation_summary.append(
-            {
-                "name": name,
-                "category": category,
-                "description": description,
-                "baseline": {
-                    "total": base_total,
-                    "failures": base_fail,
-                    "pass_rate": _pass_rate(base_total, base_fail),
-                },
-                "candidate": {
-                    "total": cand_total,
-                    "failures": cand_fail,
-                    "pass_rate": _pass_rate(cand_total, cand_fail),
-                },
-            }
-        )
-
-        cat_entry = category_totals.setdefault(
-            category,
-            {
-                "relations": 0,
-                "baseline_total": 0,
-                "baseline_failures": 0,
-                "candidate_total": 0,
-                "candidate_failures": 0,
-            },
-        )
-        cat_entry["relations"] += 1
-        cat_entry["baseline_total"] += base_total
-        cat_entry["baseline_failures"] += base_fail
-        cat_entry["candidate_total"] += cand_total
-        cat_entry["candidate_failures"] += cand_fail
-
-    for cat_entry in category_totals.values():
-        cat_entry["baseline_pass_rate"] = _pass_rate(cat_entry["baseline_total"], cat_entry["baseline_failures"])
-        cat_entry["candidate_pass_rate"] = _pass_rate(cat_entry["candidate_total"], cat_entry["candidate_failures"])
+    relation_summary, category_totals, correction_metadata = _summarize_relations(
+        spec,
+        baseline_metrics,
+        candidate_metrics,
+        alpha=alpha,
+        relation_correction=relation_correction,
+    )
 
     if relation_summary:
-        result["relation_coverage"] = {
+        relation_coverage_payload: Dict[str, Any] = {
             "relations": relation_summary,
             "categories": category_totals,
         }
+        if correction_metadata:
+            relation_coverage_payload["correction"] = correction_metadata
+
+        result["relation_coverage"] = relation_coverage_payload
         result["statistics"]["relation_categories"] = category_totals
+        if correction_metadata:
+            result["statistics"]["relation_correction"] = correction_metadata
 
     if policy_config:
         result["policy"] = _serialize_for_report(policy_config)
@@ -835,6 +1053,61 @@ def _evaluate_results(
     }
 
 
+def _compute_paired_stats(
+    baseline_indicators: Sequence[int],
+    candidate_indicators: Sequence[int],
+) -> Optional[Dict[str, Any]]:
+    if not baseline_indicators or not candidate_indicators:
+        return None
+
+    total = min(len(baseline_indicators), len(candidate_indicators))
+    if total <= 0:
+        return None
+
+    both_pass = both_fail = baseline_only = candidate_only = 0
+    baseline_sum = candidate_sum = 0
+
+    for b, c in zip(baseline_indicators, candidate_indicators):
+        if b:
+            baseline_sum += 1
+        if c:
+            candidate_sum += 1
+
+        if b and c:
+            both_pass += 1
+        elif b and not c:
+            baseline_only += 1
+        elif not b and c:
+            candidate_only += 1
+        else:
+            both_fail += 1
+
+    discordant = baseline_only + candidate_only
+    delta = (candidate_sum - baseline_sum) / total
+
+    if discordant == 0:
+        chi2 = 0.0
+        p_value = 1.0
+    else:
+        diff = abs(baseline_only - candidate_only)
+        numerator = max(diff - 1.0, 0.0)
+        chi2 = (numerator * numerator) / discordant
+        p_value = math.erfc(math.sqrt(max(chi2, 0.0)) / math.sqrt(2.0))
+
+    return {
+        "total": total,
+        "both_pass": both_pass,
+        "both_fail": both_fail,
+        "baseline_only": baseline_only,
+        "candidate_only": candidate_only,
+        "discordant": discordant,
+        "delta": delta,
+        "mcnemar_chi2": chi2,
+        "mcnemar_p": p_value,
+        "method": "mcnemar_cc",
+    }
+
+
 def _relation_rng(
     seed: int,
     case_index: int,
@@ -961,6 +1234,7 @@ def _compute_bootstrap_ci(
             baseline_indicators=baseline_indicators,
             candidate_indicators=candidate_indicators,
             alpha=alpha,
+            clusters=clusters,
         )
 
     lower_quantile = alpha / 2
@@ -1013,11 +1287,10 @@ def _generate_bootstrap_deltas(
         # fallback to iid if clusters missing/empty
 
     for _ in range(max(1, samples)):
-        baseline_sample = [baseline_indicators[rng.randrange(n)] for _ in range(n)]
-        candidate_sample = [candidate_indicators[rng.randrange(n)] for _ in range(n)]
-        p_baseline = sum(baseline_sample) / n
-        p_candidate = sum(candidate_sample) / n
-        deltas.append(p_candidate - p_baseline)
+        indices = [rng.randrange(n) for _ in range(n)]
+        baseline_sum = sum(baseline_indicators[i] for i in indices)
+        candidate_sum = sum(candidate_indicators[i] for i in indices)
+        deltas.append((candidate_sum - baseline_sum) / n)
 
     return deltas
 
@@ -1029,6 +1302,7 @@ def _compute_bca_interval(
     baseline_indicators: Sequence[int],
     candidate_indicators: Sequence[int],
     alpha: float,
+    clusters: Optional[Sequence[Any]] = None,
 ) -> List[float]:
     """Compute the bias-corrected and accelerated (BCa) interval for bootstrap deltas."""
     if not deltas:
@@ -1047,32 +1321,53 @@ def _compute_bca_interval(
 
     # Acceleration via jackknife
     n = len(baseline_indicators)
-    if n <= 1:
-        acceleration = 0.0
-    else:
-        jackknife: List[float] = []
-        total_baseline = sum(baseline_indicators)
-        total_candidate = sum(candidate_indicators)
-        for i in range(n):
-            baseline_loo_total = total_baseline - baseline_indicators[i]
-            candidate_loo_total = total_candidate - candidate_indicators[i]
-            denom = n - 1
+    total_baseline = sum(baseline_indicators)
+    total_candidate = sum(candidate_indicators)
+
+    jackknife: List[float] = []
+
+    cluster_map: Dict[Any, List[int]] | None = None
+    if clusters:
+        cluster_map = {}
+        for idx, cluster_id in enumerate(clusters):
+            cluster_map.setdefault(cluster_id, []).append(idx)
+        # Only keep clusters that have valid indices
+        cluster_groups = [indices for indices in cluster_map.values() if indices]
+        for indices in cluster_groups:
+            denom = n - len(indices)
             if denom <= 0:
                 continue
-            p_b = baseline_loo_total / denom
-            p_c = candidate_loo_total / denom
+            baseline_loo_total = total_baseline - sum(baseline_indicators[i] for i in indices)
+            candidate_loo_total = total_candidate - sum(candidate_indicators[i] for i in indices)
+            p_b = baseline_loo_total / denom if denom else 0.0
+            p_c = candidate_loo_total / denom if denom else 0.0
             jackknife.append(p_c - p_b)
-        if len(jackknife) < 2:
+
+    if not jackknife:
+        if n <= 1:
             acceleration = 0.0
         else:
-            mean_jackknife = sum(jackknife) / len(jackknife)
-            num = sum((mean_jackknife - jk) ** 3 for jk in jackknife)
-            denom = sum((mean_jackknife - jk) ** 2 for jk in jackknife)
-            denom_pow = denom ** 1.5 if denom > 0 else 0.0
-            if denom_pow == 0:
-                acceleration = 0.0
-            else:
-                acceleration = num / (6.0 * denom_pow)
+            for i in range(n):
+                denom = n - 1
+                if denom <= 0:
+                    continue
+                baseline_loo_total = total_baseline - baseline_indicators[i]
+                candidate_loo_total = total_candidate - candidate_indicators[i]
+                p_b = baseline_loo_total / denom if denom else 0.0
+                p_c = candidate_loo_total / denom if denom else 0.0
+                jackknife.append(p_c - p_b)
+
+    if len(jackknife) < 2:
+        acceleration = 0.0
+    else:
+        mean_jackknife = sum(jackknife) / len(jackknife)
+        num = sum((mean_jackknife - jk) ** 3 for jk in jackknife)
+        denom_sq = sum((mean_jackknife - jk) ** 2 for jk in jackknife)
+        denom_pow = denom_sq ** 1.5 if denom_sq > 0 else 0.0
+        if denom_pow == 0:
+            acceleration = 0.0
+        else:
+            acceleration = num / (6.0 * denom_pow)
 
     def _adjusted_quantile(prob: float) -> float:
         if prob <= 0.0:
@@ -1172,6 +1467,33 @@ def _compute_relative_risk(
     lower = math.exp(ln_rr - z * se)
     upper = math.exp(ln_rr + z * se)
     return rr, [float(lower), float(upper)]
+
+
+def _two_proportion_p_value(
+    successes_a: int,
+    total_a: int,
+    successes_b: int,
+    total_b: int,
+) -> float:
+    """Two-sided z-test for difference in proportions."""
+    if total_a <= 0 or total_b <= 0:
+        return 1.0
+
+    p_a = successes_a / total_a
+    p_b = successes_b / total_b
+    pooled_successes = successes_a + successes_b
+    pooled_total = total_a + total_b
+    if pooled_total <= 0:
+        return 1.0
+
+    pooled = pooled_successes / pooled_total
+    variance = pooled * (1 - pooled) * (1 / total_a + 1 / total_b)
+    if variance <= 0:
+        return 1.0
+
+    z = abs(p_a - p_b) / math.sqrt(variance)
+    p_value = 2 * (1 - NormalDist().cdf(z))
+    return max(0.0, min(1.0, float(p_value)))
 
 
 def _percentile(values: Sequence[float], q: float) -> float:

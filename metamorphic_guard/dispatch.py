@@ -61,22 +61,35 @@ class LocalDispatcher(Dispatcher):
                 monitor.record(record)
             
             # Export trace to OpenTelemetry if enabled
+            trace_test_case = None
+            is_telemetry_enabled = None
             try:
-                from ..telemetry import trace_test_case, is_telemetry_enabled
-                if is_telemetry_enabled():
-                    tokens = result.get("tokens_total")
-                    cost_usd = result.get("cost_usd")
-                    trace_test_case(
-                        case_index=index,
-                        role=role,
-                        duration_ms=duration,
-                        success=success,
-                        tokens=tokens,
-                        cost_usd=cost_usd,
-                    )
-            except Exception:
-                # Silently fail if telemetry export fails
-                pass
+                from .telemetry import (
+                    trace_test_case as _trace_test_case,
+                    is_telemetry_enabled as _is_telemetry_enabled,
+                )
+                trace_test_case = _trace_test_case
+                is_telemetry_enabled = _is_telemetry_enabled
+            except ImportError:
+                trace_test_case = None
+                is_telemetry_enabled = None
+
+            if trace_test_case is not None and is_telemetry_enabled is not None:
+                try:
+                    if is_telemetry_enabled():
+                        tokens = result.get("tokens_total")
+                        cost_usd = result.get("cost_usd")
+                        trace_test_case(
+                            case_index=index,
+                            role=role,
+                            duration_ms=duration,
+                            success=success,
+                            tokens=tokens,
+                            cost_usd=cost_usd,
+                        )
+                except Exception:
+                    # Silently fail if telemetry export fails
+                    pass
             
             return result
 

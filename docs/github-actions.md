@@ -98,7 +98,7 @@ baseline = "baseline.py"
 candidate = "candidate.py"
 n = 1000
 stability = 3
-ci_method = "newcombe"
+ci_method = "bootstrap"
 min_delta = 0.05
 min_pass_rate = 0.90
 ```
