@@ -17,16 +17,21 @@ Defines the task being evaluated:
 - **Equivalence**: Function to compare outputs
 - **Formatters**: Input/output formatting functions
 - **Cluster Key**: Optional function for grouping related test cases
+- **Metrics**: Optional list of `Metric` descriptors that extract continuous/cost objectives from each successful run
 
 **Example**:
 ```python
-from metamorphic_guard import Spec, Property, MetamorphicRelation
+from metamorphic_guard import Spec, Property, MetamorphicRelation, Metric
 
 spec = Spec(
     gen_inputs=lambda n, seed: [(i,) for i in range(n)],
     properties=[Property(check=lambda out, x: out > 0, description="Positive")],
     relations=[MetamorphicRelation(name="double", transform=lambda x: (x * 2,))],
     equivalence=lambda a, b: a == b,
+    metrics=[
+        Metric(name="mean_gain", extract=lambda out, args: out - args[0], kind="mean"),
+        Metric(name="total_cost", extract=lambda out, args: args[0] * 0.01, kind="sum", higher_is_better=False),
+    ],
 )
 ```
 
@@ -114,13 +119,37 @@ def decide_adopt(
 
 Pydantic model for evaluation reports:
 - Baseline/candidate metrics
+- Continuous metric summaries declared via `Spec.metrics` (means, sums, paired deltas, ratios)
 - Decision and reasoning
 - Confidence intervals
 - Violations
-- Provenance metadata
+- Provenance metadata (library/build info, sandbox configuration fingerprints, executor settings)
 - Stability runs (if enabled)
 
 **Swappability**: Extend `Report` model or add custom report generators.
+
+---
+
+#### Metric Aggregation
+
+`Spec.metrics` allows continuous/paired objectives to be computed alongside pass/fail counts.  
+Each `Metric` defines:
+
+- `extract(output, args) -> float`: derived value for a successful run.
+- `kind`: `"mean"` or `"sum"` aggregation strategy.
+- `higher_is_better`: signals whether positive deltas are desirable.
+
+`run_eval` serialises metric summaries under `result["metrics"]`, including paired deltas and ratios when both baseline and candidate emit values. This enables downstream dashboards to reason about cost, latency, fairness gaps, or arbitrary performance scores without leaving the harness.
+
+#### Sandbox Provenance
+
+Every report now embeds sandbox metadata (`provenance.sandbox`):
+
+- Executor name and resource limits (`timeout_s`, `mem_mb`)
+- Sanitized call specs for baseline/candidate (path, entrypoint, executor overrides)
+- SHA-256 fingerprints of call-spec payloads and executor configuration
+
+These fingerprints make it possible to attest which runtime configuration produced a report, even after secrets or transient settings are redacted.
 
 ---
 

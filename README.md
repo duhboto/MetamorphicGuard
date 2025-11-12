@@ -574,6 +574,7 @@ Reports include a `provenance` section with auditability metadata:
 - Metamorphic relation identifiers (`mr_ids`)
 - Task specification fingerprint (`spec_fingerprint`)
 - Runtime environment details (`environment`)
+- Sandbox configuration details (`sandbox.executor`, time/memory limits, call-spec fingerprints, executor config hash)
 
 This enables:
 - Validation of report files

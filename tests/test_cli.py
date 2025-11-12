@@ -128,6 +128,11 @@ def solve(L, k):
             assert "mr_ids" in provenance
             assert "spec_fingerprint" in provenance
             assert "python_version" in provenance
+            sandbox_info = provenance.get("sandbox")
+            assert sandbox_info is not None
+            assert sandbox_info["executor"] == "local"
+            assert "call_spec_fingerprint" in sandbox_info
+            assert "baseline" in sandbox_info["call_spec_fingerprint"]
             assert report_data["config"].get("policy_version") == "test-policy"
             assert report_data["config"].get("sandbox_plugins") is True  # Default is secure-by-default
             assert len(report_data.get("cases", [])) == 10

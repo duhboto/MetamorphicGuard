@@ -3,6 +3,7 @@ Tests for harness evaluation and bootstrap CI calculation.
 """
 
 from pathlib import Path
+import textwrap
 
 import pytest
 
@@ -13,7 +14,7 @@ from metamorphic_guard.harness import (
     _evaluate_results,
     run_eval,
 )
-from metamorphic_guard.specs import MetamorphicRelation, Property, Spec
+from metamorphic_guard.specs import Metric, MetamorphicRelation, Property, Spec, task
 from metamorphic_guard.stability import multiset_equal
 
 
@@ -340,6 +341,89 @@ def test_run_eval_applies_relation_correction_holm():
         assert "p_value" in relation
         assert "adjusted_p_value" in relation
         assert "significant" in relation
+
+
+@task("metric_demo")
+def metric_demo_spec():
+    return Spec(
+        gen_inputs=lambda n, seed: [(i,) for i in range(n)],
+        properties=[
+            Property(
+                check=lambda out, x: isinstance(out, dict) and "value" in out and "cost" in out,
+                description="Output contains value and cost",
+            )
+        ],
+        relations=[],
+        equivalence=lambda a, b: a == b,
+        metrics=[
+            Metric(
+                name="value_mean",
+                extract=lambda output, args: output["value"],
+                kind="mean",
+                higher_is_better=True,
+            ),
+            Metric(
+                name="total_cost",
+                extract=lambda output, args: output["cost"],
+                kind="sum",
+                higher_is_better=False,
+            ),
+        ],
+    )
+
+
+def test_run_eval_collects_metrics(tmp_path):
+    baseline_code = textwrap.dedent(
+        """
+        def solve(x):
+            value = float(x)
+            return {"value": value, "cost": value + 2.0}
+        """
+    )
+    candidate_code = textwrap.dedent(
+        """
+        def solve(x):
+            value = float(x)
+            return {"value": value + 0.5, "cost": value + 1.5}
+        """
+    )
+
+    baseline_file = tmp_path / "baseline_metrics.py"
+    candidate_file = tmp_path / "candidate_metrics.py"
+    baseline_file.write_text(baseline_code, encoding="utf-8")
+    candidate_file.write_text(candidate_code, encoding="utf-8")
+
+    result = run_eval(
+        task_name="metric_demo",
+        baseline_path=str(baseline_file),
+        candidate_path=str(candidate_file),
+        n=5,
+        seed=42,
+        improve_delta=0.0,
+    )
+
+    metrics = result.get("metrics")
+    assert metrics is not None
+
+    value_metric = metrics["value_mean"]
+    assert value_metric["baseline"]["mean"] == pytest.approx(2.0, rel=1e-6)
+    assert value_metric["candidate"]["mean"] == pytest.approx(2.5, rel=1e-6)
+    assert value_metric["delta"]["difference"] == pytest.approx(0.5, rel=1e-6)
+    assert value_metric["delta"]["paired_mean"] == pytest.approx(0.5, rel=1e-6)
+
+    cost_metric = metrics["total_cost"]
+    assert cost_metric["baseline"]["sum"] == pytest.approx(20.0, rel=1e-6)
+    assert cost_metric["candidate"]["sum"] == pytest.approx(17.5, rel=1e-6)
+    assert cost_metric["delta"]["difference"] == pytest.approx(-2.5, rel=1e-6)
+    assert cost_metric["delta"]["paired_mean"] == pytest.approx(-0.5, rel=1e-6)
+    assert cost_metric["delta"]["ratio"] == pytest.approx(0.875, rel=1e-6)
+
+    provenance = result.get("provenance")
+    assert provenance is not None
+    sandbox_info = provenance.get("sandbox")
+    assert sandbox_info is not None
+    assert sandbox_info["executor"] == "local"
+    assert sandbox_info["call_spec_fingerprint"]["baseline"]
 def test_newcombe_ci_difference():
     baseline_metrics = {
         "passes": 60,

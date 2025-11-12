@@ -91,6 +91,9 @@ class Provenance(BaseModel):
     environment: Optional[Dict[str, str]] = Field(
         None, description="Runtime environment metadata"
     )
+    sandbox: Optional[Dict[str, Any]] = Field(
+        None, description="Sandbox configuration and provenance details"
+    )
 
 
 class Report(BaseModel):

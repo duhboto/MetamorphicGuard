@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .sandbox import run_in_sandbox
-from .specs import Spec, get_task
+from .specs import Metric, Spec, get_task
 from .util import (
     compute_spec_fingerprint,
     get_environment_fingerprint,
@@ -137,6 +137,51 @@ def _compute_trust_scores(
         pass
     
     return None
+
+
+def _estimate_power(
+    p_baseline: float,
+    p_candidate: float,
+    sample_size: int,
+    alpha_value: float,
+    delta_value: float,
+    power_target: float,
+) -> Tuple[float, Optional[int]]:
+    if sample_size == 0:
+        return 0.0, None
+
+    effect = p_candidate - p_baseline
+    pooled_var = p_baseline * (1 - p_baseline) + p_candidate * (1 - p_candidate)
+    if pooled_var == 0:
+        power_val = 1.0 if effect >= delta_value else 0.0
+        return power_val, None
+
+    se = math.sqrt(pooled_var / sample_size)
+    if se == 0:
+        power_val = 1.0 if effect >= delta_value else 0.0
+        return power_val, None
+
+    z_alpha = NormalDist().inv_cdf(1 - alpha_value)
+    z_effect = (effect - delta_value) / se
+    power_val = 1 - NormalDist().cdf(z_alpha - z_effect)
+    power_val = max(0.0, min(1.0, power_val))
+
+    recommended_n = None
+    if delta_value > 0 and 0 < power_target < 1:
+        p1 = p_baseline
+        p2 = max(0.0, min(1.0, p_baseline + delta_value))
+        var_target = p1 * (1 - p1) + p2 * (1 - p2)
+        if var_target > 0:
+            z_beta = NormalDist().inv_cdf(power_target)
+            recommended_n = math.ceil(((z_alpha + z_beta) ** 2 * var_target) / (delta_value ** 2))
+
+    return power_val, recommended_n
+
+
+def _fingerprint_payload(payload: Any) -> str:
+    normalized = _serialize_for_report(payload)
+    encoded = json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 @dataclass
@@ -428,6 +473,99 @@ def _summarize_relations(
     return relation_summary, category_totals, correction_metadata
 
 
+def _safe_extract_metric(metric: Metric, result: Dict[str, Any], args: Tuple[Any, ...]) -> Optional[float]:
+    if not result.get("success"):
+        return None
+    try:
+        value = metric.extract(result.get("result"), args)
+        if value is None:
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+def _aggregate_metric_values(values: Sequence[Optional[float]], kind: str) -> Dict[str, Any]:
+    filtered = [float(v) for v in values if v is not None]
+    summary: Dict[str, Any] = {"count": len(filtered)}
+    if not filtered:
+        return summary
+
+    summary["min"] = min(filtered)
+    summary["max"] = max(filtered)
+
+    if kind == "mean":
+        mean = sum(filtered) / len(filtered)
+        summary["mean"] = mean
+        summary["value"] = mean
+        if len(filtered) > 1:
+            variance = sum((v - mean) ** 2 for v in filtered) / (len(filtered) - 1)
+            summary["stddev"] = math.sqrt(variance)
+    elif kind == "sum":
+        total = sum(filtered)
+        summary["sum"] = total
+        summary["value"] = total
+    else:
+        raise ValueError(f"Unsupported metric kind: {kind}")
+
+    return summary
+
+
+def _collect_metrics(
+    metrics: Sequence[Metric],
+    baseline_results: Sequence[Dict[str, Any]],
+    candidate_results: Sequence[Dict[str, Any]],
+    test_inputs: Sequence[Tuple[Any, ...]],
+) -> Dict[str, Any]:
+    if not metrics:
+        return {}
+
+    metrics_payload: Dict[str, Any] = {}
+
+    for metric in metrics:
+        baseline_values: List[Optional[float]] = []
+        candidate_values: List[Optional[float]] = []
+
+        for args, b_result, c_result in zip(test_inputs, baseline_results, candidate_results):
+            baseline_values.append(_safe_extract_metric(metric, b_result, args))
+            candidate_values.append(_safe_extract_metric(metric, c_result, args))
+
+        baseline_summary = _aggregate_metric_values(baseline_values, metric.kind)
+        candidate_summary = _aggregate_metric_values(candidate_values, metric.kind)
+
+        delta_payload: Dict[str, Any] = {}
+        baseline_value = baseline_summary.get("value")
+        candidate_value = candidate_summary.get("value")
+        if baseline_value is not None and candidate_value is not None:
+            delta_payload["difference"] = candidate_value - baseline_value
+            if baseline_value != 0:
+                delta_payload["ratio"] = candidate_value / baseline_value
+
+        paired_deltas = [
+            cand - base
+            for base, cand in zip(baseline_values, candidate_values)
+            if base is not None and cand is not None
+        ]
+        if paired_deltas:
+            paired_count = len(paired_deltas)
+            paired_mean = sum(paired_deltas) / paired_count
+            delta_payload["paired_mean"] = paired_mean
+            delta_payload["paired_count"] = paired_count
+
+        metric_entry: Dict[str, Any] = {
+            "kind": metric.kind,
+            "higher_is_better": metric.higher_is_better,
+            "baseline": baseline_summary,
+            "candidate": candidate_summary,
+        }
+        if delta_payload:
+            metric_entry["delta"] = delta_payload
+
+        metrics_payload[metric.name] = metric_entry
+
+    return metrics_payload
+
+
 def run_eval(
     task_name: str,
     baseline_path: str,
@@ -519,41 +657,25 @@ def run_eval(
         candidate_metrics.get("pass_indicators", []),
     )
 
-    def _estimate_power(
-        p_baseline: float,
-        p_candidate: float,
-        sample_size: int,
-        alpha_value: float,
-        delta_value: float,
-        power_target: float,
-    ) -> Tuple[float, Optional[int]]:
-        if sample_size == 0:
-            return 0.0, None
-        effect = p_candidate - p_baseline
-        pooled_var = p_baseline * (1 - p_baseline) + p_candidate * (1 - p_candidate)
-        if pooled_var == 0:
-            power_val = 1.0 if effect >= delta_value else 0.0
-            return power_val, None
-        se = math.sqrt(pooled_var / sample_size)
-        if se == 0:
-            power_val = 1.0 if effect >= delta_value else 0.0
-            return power_val, None
+    baseline_call_spec = _serialize_for_report(
+        _build_call_spec(
+            baseline_path,
+            timeout_s=timeout_s,
+            mem_mb=mem_mb,
+            executor=executor,
+            executor_config=executor_config,
+        )
+    )
+    candidate_call_spec = _serialize_for_report(
+        _build_call_spec(
+            candidate_path,
+            timeout_s=timeout_s,
+            mem_mb=mem_mb,
+            executor=executor,
+            executor_config=executor_config,
+        )
+    )
 
-        z_alpha = NormalDist().inv_cdf(1 - alpha_value)
-        z_effect = (effect - delta_value) / se
-        power_val = 1 - NormalDist().cdf(z_alpha - z_effect)
-        power_val = max(0.0, min(1.0, power_val))
-
-        recommended_n = None
-        if delta_value > 0 and power_target > 0 and power_target < 1:
-            p1 = p_baseline
-            p2 = max(0.0, min(1.0, p_baseline + delta_value))
-            var_target = p1 * (1 - p1) + p2 * (1 - p2)
-            if delta_value > 0 and var_target > 0:
-                z_beta = NormalDist().inv_cdf(power_target)
-                recommended_n = math.ceil(((z_alpha + z_beta) ** 2 * var_target) / (delta_value ** 2))
-        return power_val, recommended_n
-    
     # Compute trust scores if applicable (for RAG evaluations)
     baseline_trust = _compute_trust_scores(baseline_results, test_inputs, spec)
     candidate_trust = _compute_trust_scores(candidate_results, test_inputs, spec)
@@ -739,6 +861,15 @@ def run_eval(
         if correction_metadata:
             result["statistics"]["relation_correction"] = correction_metadata
 
+    metrics_payload = _collect_metrics(
+        spec.metrics,
+        baseline_results,
+        candidate_results,
+        test_inputs,
+    )
+    if metrics_payload:
+        result["metrics"] = metrics_payload
+
     if policy_config:
         result["policy"] = _serialize_for_report(policy_config)
 
@@ -780,6 +911,27 @@ def run_eval(
     # Spec fingerprint
     if "spec_fingerprint" in result:
         provenance_data["spec_fingerprint"] = result["spec_fingerprint"]
+
+    sandbox_provenance: Dict[str, Any] = {
+        "executor": executor or "local",
+        "timeout_s": timeout_s,
+        "mem_mb": mem_mb,
+        "call_spec": {
+            "baseline": baseline_call_spec,
+            "candidate": candidate_call_spec,
+        },
+        "call_spec_fingerprint": {
+            "baseline": _fingerprint_payload(baseline_call_spec),
+            "candidate": _fingerprint_payload(candidate_call_spec),
+        },
+    }
+    sanitized_executor_config = result["config"].get("executor_config")
+    if sanitized_executor_config is not None:
+        sandbox_provenance["executor_config"] = sanitized_executor_config
+        sandbox_provenance["executor_config_fingerprint"] = _fingerprint_payload(
+            sanitized_executor_config
+        )
+    provenance_data["sandbox"] = sandbox_provenance
     
     if provenance_data:
         result["provenance"] = provenance_data

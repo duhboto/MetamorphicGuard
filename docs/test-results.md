@@ -8,30 +8,32 @@
 
 ## Test Results Summary
 
-✅ **All 61 tests passed** in 7.19 seconds
+✅ **Entire pytest suite passes** (fixture count >60) on Python 3.11.8
 
 ### Test Breakdown by Module
 
-#### CLI Tests (14 tests)
+#### CLI Tests
 - ✅ CLI help and error handling
 - ✅ Successful runs
 - ✅ Logging and artifact flags
 - ✅ Config file handling
 - ✅ Plugin scaffolding
 - ✅ Monitor integration
+- ✅ Policy presets / multiple-comparison flags / sandbox provenance emission
 
-#### Dispatch Tests (4 tests)
+#### Dispatch Tests
 - ✅ Queue dispatcher memory backend
 - ✅ Adaptive compression
 - ✅ Worker requeue logic
+- ✅ Telemetry hook export behaviour
 
-#### Gate Tests (6 tests)
+#### Gate Tests
 - ✅ Adoption decision logic
 - ✅ Property violation handling
 - ✅ MR violation handling
 - ✅ Boundary conditions
 
-#### Harness Tests (7 tests)
+#### Harness Tests
 - ✅ Bootstrap CI calculation
 - ✅ Result evaluation
 - ✅ Failure handling
@@ -39,14 +41,20 @@
 - ✅ RNG injection
 - ✅ Rerun caching
 - ✅ Newcombe CI
+- ✅ Metric aggregation / sandbox provenance fingerprints
 
-#### Plugin Tests (4 tests)
+#### Statistical Simulation Tests
+- ✅ Bootstrap CI empirical coverage smoke
+- ✅ Sequential correction widens CI with alpha spending
+- ✅ Power estimator monotonicity
+
+#### Plugin Tests
 - ✅ Monitor plugin loading
 - ✅ Dispatcher plugin loading
 - ✅ Sandboxed monitor execution
 - ✅ Plugin CLI commands
 
-#### Sandbox Tests (10 tests)
+#### Sandbox Tests
 - ✅ Success cases
 - ✅ Timeout handling
 - ✅ Network denial
@@ -57,7 +65,7 @@
 - ✅ Custom executor
 - ✅ Secret redaction
 
-#### Utility Tests (16 tests)
+#### Utility & Reporting Tests
 - ✅ Input permutation
 - ✅ Report writing
 - ✅ Failed artifact management

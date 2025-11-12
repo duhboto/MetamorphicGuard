@@ -295,6 +295,19 @@
           "default": null,
           "description": "Runtime environment metadata",
           "title": "Environment"
+        },
+        "sandbox": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Sandbox configuration and provenance details",
+          "title": "Sandbox"
         }
       },
       "title": "Provenance",

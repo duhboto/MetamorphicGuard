@@ -14,6 +14,7 @@ Every evaluation report includes a `provenance` section with:
 - **Hostname**: Machine where evaluation ran
 - **MR IDs**: List of metamorphic relation identifiers
 - **Spec Fingerprint**: Hash-based fingerprint of task specification
+- **Sandbox**: Executor name, resource limits, sanitized call specs, and SHA256 fingerprints of executor configuration
 
 This enables:
 - **Reproducibility**: Replay exact evaluations with same environment
@@ -37,6 +38,8 @@ Reports include fingerprints for:
 - **Spec Fingerprint**: Hash of generator, properties, relations, formatters
 - **Baseline Hash**: SHA256 of baseline implementation file
 - **Candidate Hash**: SHA256 of candidate implementation file
+- **Sandbox Call Specs**: SHA256 of the sanitized baseline/candidate call specifications
+- **Executor Config**: SHA256 of sanitized executor configuration payload
 
 These enable detection of:
 - Specification changes between runs

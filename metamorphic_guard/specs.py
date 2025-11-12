@@ -2,7 +2,7 @@
 Task specification framework with property and metamorphic relation definitions.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Hashable, List, Optional, Tuple
 import functools
 
@@ -27,6 +27,15 @@ class MetamorphicRelation:
 
 
 @dataclass
+class Metric:
+    """A continuous metric to track during evaluation."""
+    name: str
+    extract: Callable[[Any, Tuple[Any, ...]], float]
+    kind: str = "mean"
+    higher_is_better: bool = True
+
+
+@dataclass
 class Spec:
     """Complete specification for a task."""
     gen_inputs: Callable[[int, int], List[Tuple[Any, ...]]]
@@ -36,6 +45,7 @@ class Spec:
     fmt_in: Callable[[Tuple[Any, ...]], str] = lambda args: str(args)
     fmt_out: Callable[[Any], str] = lambda result: str(result)
     cluster_key: Optional[Callable[[Tuple[Any, ...]], Hashable]] = None
+    metrics: List[Metric] = field(default_factory=list)
 
 
 # Global task registry
