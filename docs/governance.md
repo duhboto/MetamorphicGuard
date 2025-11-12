@@ -15,11 +15,21 @@ Every evaluation report includes a `provenance` section with:
 - **MR IDs**: List of metamorphic relation identifiers
 - **Spec Fingerprint**: Hash-based fingerprint of task specification
 - **Sandbox**: Executor name, resource limits, sanitized call specs, and SHA256 fingerprints of executor configuration
+- **Sandbox Executions**: Runtime metadata returned by the sandbox (image digests, seccomp/capability flags, run state)
 
 This enables:
 - **Reproducibility**: Replay exact evaluations with same environment
 - **Auditability**: Prove which code and configuration were used
 - **Compliance**: Meet regulatory requirements for ML model validation
+
+Inspect differences between reports with:
+
+```bash
+metamorphic-guard provenance-diff reports/report_old.json reports/report_new.json
+metamorphic-guard regression-guard reports/report_main.json reports/report_pr.json \
+  --metric-threshold value_mean:delta.difference=0.1 \
+  --require-provenance-match
+```
 
 ## Report Integrity
 

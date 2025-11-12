@@ -14,7 +14,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 try:
     import resource  # type: ignore
@@ -114,6 +114,23 @@ def _run_local_sandbox(
     structured error information (on failure).
     """
     config = config or {}
+    metadata_base: Dict[str, Any] = {
+        "executor": "local",
+        "timeout_s": timeout_s,
+        "mem_mb": mem_mb,
+        "python_version": sys.version,
+    }
+    sanitized_config = _sanitize_config_payload(config)
+    if sanitized_config:
+        metadata_base["config"] = sanitized_config
+        metadata_base["config_fingerprint"] = hashlib.sha256(
+            json.dumps(sanitized_config, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+
+    def _metadata_with_state(state: str) -> Dict[str, Any]:
+        meta = dict(metadata_base)
+        meta["run_state"] = state
+        return meta
 
     start_time = time.time()
 
@@ -167,6 +184,7 @@ def _run_local_sandbox(
                     error="Timeout",
                     error_type="timeout",
                     error_code="SANDBOX_TIMEOUT",
+                    sandbox_metadata=_metadata_with_state("timeout"),
                 )
 
             duration_ms = (time.time() - start_time) * 1000
@@ -181,6 +199,7 @@ def _run_local_sandbox(
                     error_type="process_exit",
                     error_code="SANDBOX_EXIT_CODE",
                     diagnostics={"returncode": process.returncode},
+                    sandbox_metadata=_metadata_with_state("process_exit"),
                 )
 
             parsed = _parse_success(stdout)
@@ -193,6 +212,7 @@ def _run_local_sandbox(
                     error="No success marker found in output",
                     error_type="output_parse",
                     error_code="SANDBOX_PARSE_ERROR",
+                    sandbox_metadata=_metadata_with_state("output_parse"),
                 )
 
             return _result(
@@ -201,6 +221,7 @@ def _run_local_sandbox(
                 stdout=stdout,
                 stderr=stderr,
                 result=parsed,
+                sandbox_metadata=_metadata_with_state("success"),
             )
 
         except Exception as exc:  # pragma: no cover - defensive safety net
@@ -213,6 +234,7 @@ def _run_local_sandbox(
                 error=f"Execution failed: {exc}",
                 error_type="internal_error",
                 error_code="SANDBOX_UNHANDLED_EXCEPTION",
+                sandbox_metadata=_metadata_with_state("internal_error"),
             )
 
 
@@ -250,6 +272,8 @@ def _run_docker_sandbox(
 
     banned_modules = os.environ.get("METAMORPHIC_GUARD_BANNED")
 
+    sanitized_config = _sanitize_config_payload(docker_config)
+
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         workspace_dir = temp_path / "workspace"
@@ -281,6 +305,27 @@ def _run_docker_sandbox(
 
         container_name = f"metaguard-{uuid.uuid4().hex[:12]}"
 
+        metadata_base: Dict[str, Any] = {
+            "executor": "docker",
+            "image": image,
+            "workdir": workdir,
+            "network": str(network_mode),
+            "cpus": str(cpus) if cpus is not None else "1",
+            "memory_limit_mb": memory_limit_mb,
+            "pids_limit": pids_limit,
+            "env_keys": sorted(env_vars.keys()),
+            "capabilities": _extract_capabilities(extra_flags),
+        }
+        if sanitized_config:
+            metadata_base["config"] = sanitized_config
+            metadata_base["config_fingerprint"] = hashlib.sha256(
+                json.dumps(sanitized_config, sort_keys=True).encode("utf-8")
+            ).hexdigest()
+        security_opts = docker_config.get("security_opt")
+        if isinstance(security_opts, (list, tuple)):
+            metadata_base["security_options"] = [str(opt) for opt in security_opts]
+        metadata_base.update(_collect_docker_image_metadata(image))
+
         command = [
             "docker",
             "run",
@@ -302,7 +347,6 @@ def _run_docker_sandbox(
         else:
             command.extend(["--cpus", "1"])
 
-        security_opts = docker_config.get("security_opt")
         if isinstance(security_opts, (list, tuple)):
             for opt in security_opts:
                 command.extend(["--security-opt", str(opt)])
@@ -314,6 +358,15 @@ def _run_docker_sandbox(
         command.extend([str(image), "python", "-I", container_bootstrap])
 
         import subprocess
+
+        metadata_base["command_fingerprint"] = hashlib.sha256(
+            " ".join(command).encode("utf-8")
+        ).hexdigest()
+
+        def _metadata_with_state(state: str) -> Dict[str, Any]:
+            meta = dict(metadata_base)
+            meta["run_state"] = state
+            return meta
 
         try:
             completed = subprocess.run(
@@ -334,6 +387,7 @@ def _run_docker_sandbox(
                 error=f"Process timed out after {timeout_s}s",
                 error_type="timeout",
                 error_code="SANDBOX_TIMEOUT",
+                sandbox_metadata=_metadata_with_state("timeout"),
             )
         except FileNotFoundError:
             duration_ms = (time.time() - start_time) * 1000
@@ -345,6 +399,7 @@ def _run_docker_sandbox(
                 error="Docker executable not found",
                 error_type="executor_missing",
                 error_code="SANDBOX_DOCKER_NOT_FOUND",
+                sandbox_metadata=_metadata_with_state("executor_missing"),
             )
 
         duration_ms = (time.time() - start_time) * 1000
@@ -359,6 +414,7 @@ def _run_docker_sandbox(
                 error_type="process_exit",
                 error_code="SANDBOX_EXIT_CODE",
                 diagnostics={"returncode": completed.returncode},
+                sandbox_metadata=_metadata_with_state("process_exit"),
             )
 
         parsed = _parse_success(completed.stdout)
@@ -371,6 +427,7 @@ def _run_docker_sandbox(
                 error="No success marker found in output",
                 error_type="output_parse",
                 error_code="SANDBOX_PARSE_ERROR",
+                sandbox_metadata=_metadata_with_state("output_parse"),
             )
 
         return _result(
@@ -379,6 +436,7 @@ def _run_docker_sandbox(
             stdout=completed.stdout,
             stderr=completed.stderr,
             result=parsed,
+            sandbox_metadata=_metadata_with_state("success"),
         )
 
 
@@ -825,6 +883,7 @@ def _result(
     error_type: Optional[str] = None,
     error_code: Optional[str] = None,
     diagnostics: Optional[Dict[str, Any]] = None,
+    sandbox_metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Helper for constructing run_in_sandbox response payloads."""
     payload: Dict[str, Any] = {
@@ -841,7 +900,80 @@ def _result(
         payload["error_code"] = error_code
     if diagnostics:
         payload["diagnostics"] = diagnostics
+    if sandbox_metadata is not None:
+        payload["sandbox_metadata"] = sandbox_metadata
     return payload
+
+
+def _sanitize_config_payload(payload: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if payload is None:
+        return None
+    try:
+        return json.loads(json.dumps(payload, default=str))
+    except Exception:
+        sanitized: Dict[str, Any] = {}
+        for key, value in payload.items():
+            sanitized[str(key)] = str(value)
+        return sanitized
+
+
+def _extract_capabilities(flags: Sequence[str]) -> Dict[str, List[str]]:
+    cap_add: List[str] = []
+    cap_drop: List[str] = []
+    i = 0
+    while i < len(flags):
+        flag = flags[i]
+        if flag.startswith("--cap-add"):
+            if flag == "--cap-add" and i + 1 < len(flags):
+                cap_add.append(flags[i + 1])
+                i += 2
+                continue
+            if "=" in flag:
+                cap_add.append(flag.split("=", 1)[1])
+        elif flag.startswith("--cap-drop"):
+            if flag == "--cap-drop" and i + 1 < len(flags):
+                cap_drop.append(flags[i + 1])
+                i += 2
+                continue
+            if "=" in flag:
+                cap_drop.append(flag.split("=", 1)[1])
+        i += 1
+    return {
+        "add": sorted({c for c in cap_add if c}),
+        "drop": sorted({c for c in cap_drop if c}),
+    }
+
+
+def _collect_docker_image_metadata(image: str) -> Dict[str, Any]:
+    metadata: Dict[str, Any] = {"image": image}
+    try:
+        import subprocess
+
+        completed = subprocess.run(
+            ["docker", "image", "inspect", image],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            if completed.stderr.strip():
+                metadata["image_inspect_error"] = completed.stderr.strip()
+            elif completed.stdout.strip():
+                metadata["image_inspect_error"] = completed.stdout.strip()
+            return metadata
+        data = json.loads(completed.stdout or "[]")
+        if not data:
+            return metadata
+        entry = data[0]
+        metadata["image_id"] = entry.get("Id")
+        metadata["image_digest"] = entry.get("RepoDigests")
+        metadata["image_created"] = entry.get("Created")
+        metadata["image_size"] = entry.get("Size")
+        metadata["image_repo_tags"] = entry.get("RepoTags")
+    except Exception as exc:  # pragma: no cover - best effort
+        metadata["image_inspect_error"] = str(exc)
+    return metadata
 
 
 def _finalize_result(result: Any, config: Optional[Dict[str, Any]]) -> Any:

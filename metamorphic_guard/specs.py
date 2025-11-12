@@ -33,6 +33,13 @@ class Metric:
     extract: Callable[[Any, Tuple[Any, ...]], float]
     kind: str = "mean"
     higher_is_better: bool = True
+    ci_method: Optional[str] = "bootstrap"
+    bootstrap_samples: int = 500
+    alpha: float = 0.05
+    seed: Optional[int] = None
+    memoize: bool = False
+    memoize_key: Optional[str] = None
+    sample_rate: float = 1.0
 
 
 @dataclass

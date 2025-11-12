@@ -8,6 +8,7 @@ import textwrap
 import pytest
 
 from metamorphic_guard.harness import (
+    _collect_metrics,
     _compute_bootstrap_ci,
     _compute_delta_ci,
     _compute_relative_risk,
@@ -406,17 +407,27 @@ def test_run_eval_collects_metrics(tmp_path):
     assert metrics is not None
 
     value_metric = metrics["value_mean"]
+    assert value_metric["baseline"]["count"] == 5
+    assert value_metric["baseline"]["missing"] == 0
     assert value_metric["baseline"]["mean"] == pytest.approx(2.0, rel=1e-6)
     assert value_metric["candidate"]["mean"] == pytest.approx(2.5, rel=1e-6)
     assert value_metric["delta"]["difference"] == pytest.approx(0.5, rel=1e-6)
     assert value_metric["delta"]["paired_mean"] == pytest.approx(0.5, rel=1e-6)
+    ci_payload = value_metric["delta"]["ci"]
+    assert ci_payload["mean"]["estimate"] == pytest.approx(0.5, rel=1e-6)
+    assert ci_payload["mean"]["upper"] >= ci_payload["mean"]["lower"]
 
     cost_metric = metrics["total_cost"]
+    assert cost_metric["baseline"]["count"] == 5
+    assert cost_metric["baseline"]["missing"] == 0
     assert cost_metric["baseline"]["sum"] == pytest.approx(20.0, rel=1e-6)
     assert cost_metric["candidate"]["sum"] == pytest.approx(17.5, rel=1e-6)
     assert cost_metric["delta"]["difference"] == pytest.approx(-2.5, rel=1e-6)
     assert cost_metric["delta"]["paired_mean"] == pytest.approx(-0.5, rel=1e-6)
     assert cost_metric["delta"]["ratio"] == pytest.approx(0.875, rel=1e-6)
+    cost_ci = cost_metric["delta"]["ci"]
+    assert cost_ci["sum"]["estimate"] == pytest.approx(-2.5, rel=1e-6)
+    assert cost_ci["sum"]["upper"] >= cost_ci["sum"]["lower"]
 
     provenance = result.get("provenance")
     assert provenance is not None
@@ -424,6 +435,74 @@ def test_run_eval_collects_metrics(tmp_path):
     assert sandbox_info is not None
     assert sandbox_info["executor"] == "local"
     assert sandbox_info["call_spec_fingerprint"]["baseline"]
+    executions = sandbox_info.get("executions")
+    assert executions is not None
+    assert executions["baseline"]["executor"] == "local"
+    assert executions["baseline"]["run_state"] == "success"
+    assert sandbox_info["executions_fingerprint"]["baseline"]
+
+
+def test_collect_metrics_sampling_and_memoization():
+    call_counts = {"baseline": 0, "candidate": 0}
+
+    def extractor(output, args):
+        role = output.get("role")
+        if role in call_counts:
+            call_counts[role] += 1
+        return float(output["value"])
+
+    metrics = [
+        Metric(
+            name="value_mean_sampled",
+            extract=extractor,
+            kind="mean",
+            higher_is_better=True,
+            ci_method=None,
+            sample_rate=0.5,
+            seed=99,
+            memoize_key="value",
+        ),
+        Metric(
+            name="value_sum_full",
+            extract=extractor,
+            kind="sum",
+            higher_is_better=True,
+            memoize_key="value",
+        ),
+    ]
+
+    baseline_results = []
+    candidate_results = []
+    test_inputs = []
+    for i in range(10):
+        test_inputs.append((i,))
+        baseline_results.append(
+            {"success": True, "result": {"value": float(i), "role": "baseline"}}
+        )
+        candidate_results.append(
+            {"success": True, "result": {"value": float(i) + 1.0, "role": "candidate"}}
+        )
+
+    payload = _collect_metrics(
+        metrics,
+        baseline_results,
+        candidate_results,
+        test_inputs,
+        seed=42,
+    )
+
+    sampled_metric = payload["value_mean_sampled"]
+    sample_count = sampled_metric["baseline"]["count"]
+    assert 0 < sample_count < len(test_inputs)
+    assert sampled_metric["baseline"]["missing"] == len(test_inputs) - sample_count
+    assert sampled_metric["candidate"]["count"] == sample_count
+
+    sum_metric = payload["value_sum_full"]
+    assert sum_metric["baseline"]["sum"] == pytest.approx(sum(range(10)), rel=1e-6)
+    assert sum_metric["candidate"]["sum"] == pytest.approx(sum(range(10)) + 10.0, rel=1e-6)
+
+    assert call_counts["baseline"] == len(test_inputs)
+    assert call_counts["candidate"] == len(test_inputs)
 def test_newcombe_ci_difference():
     baseline_metrics = {
         "passes": 60,

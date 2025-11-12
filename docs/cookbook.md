@@ -34,30 +34,51 @@ metamorphic-guard \
 ```
 HTML reports and JSON output now include monitor summaries.
 
-## Prometheus & Logging
+## Metrics, Provenance & Dashboards
 
-```
-export METAMORPHIC_GUARD_PROMETHEUS=1
-export METAMORPHIC_GUARD_LOG_JSON=1
-metamorphic-guard ...
-```
-Expose `metamorphic_guard.observability.prometheus_registry()` via your preferred HTTP exporter.
-On the CLI, pass `--log-json --metrics --metrics-port 9093` to emit structured logs and serve
-Prometheus metrics directly during ad-hoc runs.
+1. **Run with metrics + provenance**
+   ```bash
+   metamorphic-guard \
+     --task top_k \
+     --baseline examples/top_k_baseline.py \
+     --candidate examples/top_k_improved.py \
+     --metrics --metrics-port 9093 --log-json \
+     --report-dir reports/ \
+     --metric value_mean --metric total_cost
+   ```
+   - Prometheus endpoint: `http://localhost:9093/metrics`
+   - JSON report: `reports/report_<timestamp>.json`
+   - `result["metrics"]`: baseline/candidate summaries, bootstrap CIs, paired deltas
+   - `provenance.sandbox`: executor fingerprints, runtime metadata, command hashes
 
-Persist logs for later inspection by adding `--log-file observability/run.jsonl`; the CLI ensures the
-directory exists and appends one JSON object per event (start, completion, decision, alerts).
+2. **Inspect outputs**
+   ```bash
+   jq '.metrics' reports/report_*.json
+   metamorphic-guard provenance-diff reports/report_old.json reports/report_new.json
+   ```
+   Use the diff command to flag sandbox changes (image digests, capabilities, run state).
 
-Import `docs/grafana/metamorphic-guard-dashboard.json` into Grafana to get live pass/fail charts
-and throughput trends using the exported Prometheus metrics.
-Standalone HTML reports bundle Chart.js visualisations for pass rates, fairness gaps, and resource usage
-when the corresponding monitors are enabled—no external dashboards required for quick triage.
+3. **Wire into Prometheus / Grafana**
+   - Export env vars for long-lived services:
+     ```bash
+     export METAMORPHIC_GUARD_PROMETHEUS=1
+     export METAMORPHIC_GUARD_LOG_JSON=1
+     ```
+   - Expose the registry via your HTTP exporter: `metamorphic_guard.observability.prometheus_registry()`.
+   - Import `docs/grafana/metamorphic-guard-dashboard.json` and add panels for:
+     - `metamorphic_queue_pending_tasks`
+     - `metamorphic_queue_inflight_cases`
+     - `metamorphic_queue_cases_completed_total`
+     - Custom metrics derived from `Spec.metrics`.
 
-Prometheus queue telemetry metrics:
-- `metamorphic_queue_pending_tasks`, `metamorphic_queue_inflight_cases`, `metamorphic_queue_active_workers`
-  (gauges refreshed during dispatch loops).
-- `metamorphic_queue_cases_dispatched_total`, `metamorphic_queue_cases_completed_total`,
-  `metamorphic_queue_cases_requeued_total` (counters for throughput/backpressure dashboards).
+4. **Reference telemetry metrics**
+   - Gauges: `metamorphic_queue_pending_tasks`, `metamorphic_queue_inflight_cases`, `metamorphic_queue_active_workers`
+   - Counters: `metamorphic_queue_cases_dispatched_total`, `metamorphic_queue_cases_completed_total`, `metamorphic_queue_cases_requeued_total`, `metamorphic_queue_heartbeats_total`
+
+5. **Operational tips**
+   - Append JSON logs via `--log-file observability/run.jsonl` for ingestion.
+   - Tune simulation validation strictness with `MG_CI_RUNS`, `MG_CI_TOLERANCE`, `MG_CI_MIN_COVERAGE`.
+   - Preserve report JSONs as CI artifacts for downstream auditing and diffing.
 
 ## Advanced Monitors & Alerts
 

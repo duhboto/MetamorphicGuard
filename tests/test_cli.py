@@ -249,6 +249,153 @@ def solve(L, k):
         os.unlink(candidate)
 
 
+def test_provenance_diff_command(tmp_path):
+    runner = CliRunner()
+
+    report_a = tmp_path / "report_a.json"
+    report_b = tmp_path / "report_b.json"
+
+    payload_a = {
+        "provenance": {
+            "sandbox": {
+                "call_spec_fingerprint": {"baseline": "aa", "candidate": "bb"},
+                "executions": {
+                    "baseline": {"executor": "local", "run_state": "success"},
+                },
+                "executions_fingerprint": {"baseline": "ff"},
+            }
+        }
+    }
+    payload_b = {
+        "provenance": {
+            "sandbox": {
+                "call_spec_fingerprint": {"baseline": "aa", "candidate": "cc"},
+                "executions": {
+                    "baseline": {"executor": "docker", "run_state": "success"},
+                },
+                "executions_fingerprint": {"baseline": "gg"},
+            }
+        }
+    }
+
+    report_a.write_text(json.dumps(payload_a), encoding="utf-8")
+    report_b.write_text(json.dumps(payload_b), encoding="utf-8")
+
+    result = runner.invoke(
+        main, ["provenance-diff", str(report_a), str(report_b)]
+    )
+
+    assert result.exit_code == 0
+    assert "Sandbox provenance differences:" in result.output
+    assert "sandbox.call_spec_fingerprint.candidate" in result.output
+    assert "sandbox.executions.baseline.executor" in result.output
+
+    result_same = runner.invoke(main, ["provenance-diff", str(report_a), str(report_a)])
+    assert result_same.exit_code == 0
+    assert "Sandbox provenance matches." in result_same.output
+
+
+def test_regression_guard_pass(tmp_path):
+    runner = CliRunner()
+
+    baseline_report = tmp_path / "baseline.json"
+    candidate_report = tmp_path / "candidate.json"
+
+    sandbox_payload = {
+        "sandbox": {
+            "executions_fingerprint": {"baseline": "abc"},
+            "executions": {"baseline": {"run_state": "success"}},
+        }
+    }
+    baseline_report.write_text(json.dumps({"provenance": sandbox_payload}), encoding="utf-8")
+    candidate_payload = {
+        "metrics": {
+            "value_mean": {
+                "delta": {
+                    "difference": 0.05,
+                }
+            }
+        },
+        "provenance": sandbox_payload,
+    }
+    candidate_report.write_text(json.dumps(candidate_payload), encoding="utf-8")
+
+    result = runner.invoke(
+        main,
+        [
+            "regression-guard",
+            str(baseline_report),
+            str(candidate_report),
+            "--metric-threshold",
+            "value_mean:delta.difference=0.1",
+            "--require-provenance-match",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "Regression guard passed" in result.output
+
+
+def test_regression_guard_fails_on_threshold(tmp_path):
+    runner = CliRunner()
+
+    baseline_report = tmp_path / "baseline.json"
+    candidate_report = tmp_path / "candidate.json"
+    baseline_report.write_text("{}", encoding="utf-8")
+    candidate_payload = {
+        "metrics": {
+            "value_mean": {
+                "delta": {
+                    "difference": 0.5,
+                }
+            }
+        }
+    }
+    candidate_report.write_text(json.dumps(candidate_payload), encoding="utf-8")
+
+    result = runner.invoke(
+        main,
+        [
+            "regression-guard",
+            str(baseline_report),
+            str(candidate_report),
+            "--metric-threshold",
+            "value_mean:delta.difference=0.1",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "exceeded 0.1" in result.output
+
+
+def test_regression_guard_fails_on_provenance(tmp_path):
+    runner = CliRunner()
+
+    baseline_report = tmp_path / "baseline.json"
+    candidate_report = tmp_path / "candidate.json"
+
+    baseline_report.write_text(
+        json.dumps({"provenance": {"sandbox": {"executions_fingerprint": {"baseline": "abc"}}}}),
+        encoding="utf-8",
+    )
+    candidate_report.write_text(
+        json.dumps({"provenance": {"sandbox": {"executions_fingerprint": {"baseline": "xyz"}}}}),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        main,
+        [
+            "regression-guard",
+            str(baseline_report),
+            str(candidate_report),
+            "--require-provenance-match",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Sandbox provenance mismatch" in result.output
+
+
 def test_cli_log_json_and_artifact_flags(tmp_path):
     runner = CliRunner()
 

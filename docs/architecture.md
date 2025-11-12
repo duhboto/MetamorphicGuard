@@ -138,6 +138,9 @@ Each `Metric` defines:
 - `extract(output, args) -> float`: derived value for a successful run.
 - `kind`: `"mean"` or `"sum"` aggregation strategy.
 - `higher_is_better`: signals whether positive deltas are desirable.
+- Optional performance knobs:
+  - `memoize=True` or `memoize_key="shared_id"` caches expensive extractors across multiple metrics (e.g., mean + sum of the same signal) so the underlying sandbox result is parsed once per case.
+  - `sample_rate=<0..1>` evaluates metrics on a deterministic subsample (seeded by `metric.seed` or the harness seed) to reduce extractor cost on large suites. Missing counts are tracked to signal down-sampled summaries.
 
 `run_eval` serialises metric summaries under `result["metrics"]`, including paired deltas and ratios when both baseline and candidate emit values. This enables downstream dashboards to reason about cost, latency, fairness gaps, or arbitrary performance scores without leaving the harness.
 

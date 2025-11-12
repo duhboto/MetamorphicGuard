@@ -9,6 +9,7 @@ import json
 import math
 import random
 import uuid
+from collections import defaultdict
 from statistics import NormalDist
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -485,9 +486,66 @@ def _safe_extract_metric(metric: Metric, result: Dict[str, Any], args: Tuple[Any
         return None
 
 
-def _aggregate_metric_values(values: Sequence[Optional[float]], kind: str) -> Dict[str, Any]:
+def _metric_memo_key(metric: Metric) -> Optional[str]:
+    if getattr(metric, "memoize_key", None):
+        return metric.memoize_key
+    if getattr(metric, "memoize", False):
+        return metric.name
+    return None
+
+
+def _get_or_compute_metric_value(
+    metric: Metric,
+    result: Dict[str, Any],
+    args: Tuple[Any, ...],
+    *,
+    memo_key: Optional[str],
+    cache: Dict[str, Dict[int, Optional[float]]],
+    index: int,
+) -> Optional[float]:
+    if memo_key is None:
+        return _safe_extract_metric(metric, result, args)
+    bucket = cache.setdefault(memo_key, {})
+    if index in bucket:
+        return bucket[index]
+    value = _safe_extract_metric(metric, result, args)
+    bucket[index] = value
+    return value
+
+
+def _should_sample_metric(metric: Metric, index: int, global_seed: Optional[int]) -> bool:
+    rate = getattr(metric, "sample_rate", 1.0)
+    try:
+        rate = float(rate)
+    except Exception:
+        rate = 1.0
+    rate = max(0.0, min(1.0, rate))
+    if rate <= 0.0:
+        return False
+    if rate >= 1.0:
+        return True
+    base_seed = metric.seed if metric.seed is not None else global_seed
+    if base_seed is None:
+        base_seed = 0
+    random_seed = int(base_seed) + (index + 1) * 1013904223
+    rng = random.Random(random_seed & 0xFFFFFFFF)
+    return rng.random() < rate
+
+
+def _aggregate_metric_values(
+    values: Sequence[Optional[float]],
+    *,
+    kind: str,
+    total_count: int,
+) -> Dict[str, Any]:
+    summary: Dict[str, Any] = {"count": 0, "missing": total_count}
+    if total_count <= 0:
+        return summary
+
     filtered = [float(v) for v in values if v is not None]
-    summary: Dict[str, Any] = {"count": len(filtered)}
+    summary["count"] = len(filtered)
+    summary["missing"] = total_count - len(filtered)
+
     if not filtered:
         return summary
 
@@ -511,27 +569,114 @@ def _aggregate_metric_values(values: Sequence[Optional[float]], kind: str) -> Di
     return summary
 
 
+def _bootstrap_metric_delta(
+    deltas: Sequence[float],
+    *,
+    kind: str,
+    samples: int,
+    alpha: float,
+    seed: Optional[int],
+) -> Optional[Dict[str, Any]]:
+    count = len(deltas)
+    if count == 0 or samples <= 0:
+        return None
+
+    rng = random.Random(seed if seed is not None else 0)
+    resampled_means: List[float] = []
+    for _ in range(max(1, samples)):
+        sample = [deltas[rng.randrange(count)] for _ in range(count)]
+        resampled_means.append(sum(sample) / count)
+
+    resampled_means.sort()
+    lower_mean = _percentile(resampled_means, alpha / 2)
+    upper_mean = _percentile(resampled_means, 1 - alpha / 2)
+
+    observed_mean = sum(deltas) / count
+    ci_payload: Dict[str, Any] = {
+        "method": "bootstrap",
+        "level": 1 - alpha,
+        "mean": {
+            "estimate": observed_mean,
+            "lower": lower_mean,
+            "upper": upper_mean,
+        },
+    }
+
+    if kind == "sum":
+        observed_sum = observed_mean * count
+        lower_sum = lower_mean * count
+        upper_sum = upper_mean * count
+        ci_payload["sum"] = {
+            "estimate": observed_sum,
+            "lower": lower_sum,
+            "upper": upper_sum,
+        }
+
+    return ci_payload
+
+
 def _collect_metrics(
     metrics: Sequence[Metric],
     baseline_results: Sequence[Dict[str, Any]],
     candidate_results: Sequence[Dict[str, Any]],
     test_inputs: Sequence[Tuple[Any, ...]],
+    *,
+    seed: Optional[int],
 ) -> Dict[str, Any]:
     if not metrics:
         return {}
 
     metrics_payload: Dict[str, Any] = {}
+    global_seed = seed
+    shared_baseline_cache: Dict[str, Dict[int, Optional[float]]] = defaultdict(dict)
+    shared_candidate_cache: Dict[str, Dict[int, Optional[float]]] = defaultdict(dict)
 
     for metric in metrics:
         baseline_values: List[Optional[float]] = []
         candidate_values: List[Optional[float]] = []
+        memo_key = _metric_memo_key(metric)
 
-        for args, b_result, c_result in zip(test_inputs, baseline_results, candidate_results):
-            baseline_values.append(_safe_extract_metric(metric, b_result, args))
-            candidate_values.append(_safe_extract_metric(metric, c_result, args))
+        for index, (args, b_result, c_result) in enumerate(
+            zip(test_inputs, baseline_results, candidate_results)
+        ):
+            include_case = _should_sample_metric(metric, index, global_seed)
+            if not include_case:
+                baseline_values.append(None)
+                candidate_values.append(None)
+                continue
 
-        baseline_summary = _aggregate_metric_values(baseline_values, metric.kind)
-        candidate_summary = _aggregate_metric_values(candidate_values, metric.kind)
+            baseline_values.append(
+                _get_or_compute_metric_value(
+                    metric,
+                    b_result,
+                    args,
+                    memo_key=memo_key,
+                    cache=shared_baseline_cache,
+                    index=index,
+                )
+            )
+            candidate_values.append(
+                _get_or_compute_metric_value(
+                    metric,
+                    c_result,
+                    args,
+                    memo_key=memo_key,
+                    cache=shared_candidate_cache,
+                    index=index,
+                )
+            )
+
+        total_count = len(baseline_values)
+        baseline_summary = _aggregate_metric_values(
+            baseline_values,
+            kind=metric.kind,
+            total_count=total_count,
+        )
+        candidate_summary = _aggregate_metric_values(
+            candidate_values,
+            kind=metric.kind,
+            total_count=len(candidate_values),
+        )
 
         delta_payload: Dict[str, Any] = {}
         baseline_value = baseline_summary.get("value")
@@ -546,11 +691,22 @@ def _collect_metrics(
             for base, cand in zip(baseline_values, candidate_values)
             if base is not None and cand is not None
         ]
+        paired_count = len(paired_deltas)
+        delta_payload["paired_count"] = paired_count
         if paired_deltas:
-            paired_count = len(paired_deltas)
             paired_mean = sum(paired_deltas) / paired_count
             delta_payload["paired_mean"] = paired_mean
-            delta_payload["paired_count"] = paired_count
+
+            if metric.ci_method and metric.ci_method.lower() == "bootstrap" and paired_count > 1:
+                ci_result = _bootstrap_metric_delta(
+                    paired_deltas,
+                    kind=metric.kind,
+                    samples=max(1, metric.bootstrap_samples),
+                    alpha=metric.alpha,
+                    seed=metric.seed,
+                )
+                if ci_result:
+                    delta_payload["ci"] = ci_result
 
         metric_entry: Dict[str, Any] = {
             "kind": metric.kind,
@@ -634,6 +790,22 @@ def run_eval(
         mem_mb=mem_mb,
         executor=executor,
         executor_config=executor_config,
+    )
+    baseline_runtime_meta = next(
+        (
+            _serialize_for_report(entry.get("sandbox_metadata"))
+            for entry in baseline_results
+            if entry.get("sandbox_metadata")
+        ),
+        None,
+    )
+    candidate_runtime_meta = next(
+        (
+            _serialize_for_report(entry.get("sandbox_metadata"))
+            for entry in candidate_results
+            if entry.get("sandbox_metadata")
+        ),
+        None,
     )
 
     baseline_metrics, candidate_metrics = _evaluate_roles(
@@ -866,6 +1038,7 @@ def run_eval(
         baseline_results,
         candidate_results,
         test_inputs,
+        seed=seed,
     )
     if metrics_payload:
         result["metrics"] = metrics_payload
@@ -931,6 +1104,16 @@ def run_eval(
         sandbox_provenance["executor_config_fingerprint"] = _fingerprint_payload(
             sanitized_executor_config
         )
+    runtime_metadata: Dict[str, Any] = {}
+    if baseline_runtime_meta:
+        runtime_metadata["baseline"] = baseline_runtime_meta
+    if candidate_runtime_meta:
+        runtime_metadata["candidate"] = candidate_runtime_meta
+    if runtime_metadata:
+        sandbox_provenance["executions"] = runtime_metadata
+        sandbox_provenance["executions_fingerprint"] = {
+            role: _fingerprint_payload(meta) for role, meta in runtime_metadata.items()
+        }
     provenance_data["sandbox"] = sandbox_provenance
     
     if provenance_data:

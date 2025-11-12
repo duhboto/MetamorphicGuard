@@ -4,6 +4,7 @@ Simulation-oriented tests for statistical routines.
 
 from __future__ import annotations
 
+import os
 import random
 
 import pytest
@@ -36,8 +37,9 @@ def test_bootstrap_ci_empirical_coverage():
     Empirical coverage for the bootstrap CI should fall near the nominal rate.
     """
 
+    seed = int(os.environ.get("MG_CI_RUNS", "120"))
     rng = random.Random(1337)
-    runs = 120
+    runs = max(30, seed)
     n = 80
     p_baseline = 0.78
     p_candidate = 0.83
@@ -61,8 +63,12 @@ def test_bootstrap_ci_empirical_coverage():
             coverage_hits += 1
 
     coverage = coverage_hits / runs
-    # Allow some Monte Carlo tolerance while ensuring coverage is reasonable.
-    assert 0.88 <= coverage <= 1.0
+    tolerance = float(os.environ.get("MG_CI_TOLERANCE", "0.12"))
+    assert (1 - tolerance) <= coverage <= 1.0, coverage
+    min_threshold = os.environ.get("MG_CI_MIN_COVERAGE")
+    if min_threshold is not None:
+        threshold = float(min_threshold)
+        assert coverage >= threshold, f"coverage {coverage:.3f} < threshold {threshold:.3f}"
 
 
 def test_sequential_correction_expands_interval():
