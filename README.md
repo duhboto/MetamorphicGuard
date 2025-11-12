@@ -139,7 +139,7 @@ metamorphic-guard --help
 - `--violation-cap`: Maximum violations to report (default: 25)
 - `--parallel`: Number of worker processes used to drive the sandbox (default: 1)
 - `--bootstrap-samples`: Resamples used for percentile bootstrap CI (default: 1000)
-- `--ci-method`: Confidence interval method for pass-rate delta (`bootstrap`, `bootstrap-cluster`, `newcombe`, `wilson`). See [Confidence Interval Methods](#confidence-interval-methods) for guidance.
+- `--ci-method`: Confidence interval method for pass-rate delta (`bootstrap`, `bootstrap-bca`, `bootstrap-cluster`, `bootstrap-cluster-bca`, `newcombe`, `wilson`). See [Confidence Interval Methods](#confidence-interval-methods) for guidance.
 - `--power-target`: Desired statistical power used when estimating recommended sample sizes (default: 0.8). The CLI prints the observed power and a suggested `n` for the current thresholds.
 - `--rr-ci-method`: Confidence interval method for relative risk (`log`). Use when baseline pass-rate is near 0 or 1, or when you need a ratio-based comparison. The log method uses a log-normal approximation appropriate for ratio statistics.
 - `--alpha`: Significance level for confidence intervals (default: 0.05)
@@ -446,7 +446,9 @@ Metamorphic Guard supports multiple methods for computing confidence intervals o
 | Method | Description | When to Use |
 |--------|-------------|-------------|
 | `bootstrap` | Percentile bootstrap resampling | Default choice for IID trials. Works well for any sample size, accounts for correlation between baseline and candidate. |
+| `bootstrap-bca` | Bootstrap with bias-corrected and accelerated (BCa) intervals | Use when you want percentile bootstrap coverage with bias/acceleration corrections. Especially helpful when delta distributions are skewed. |
 | `bootstrap-cluster` | Bootstrap that resamples entire clusters determined by `Spec.cluster_key` | Use when multiple trials share a seed, MR family, or other grouping. Prevents optimistic CIs when tests are correlated. |
+| `bootstrap-cluster-bca` | Cluster bootstrap with BCa adjustments | Combines cluster-aware resampling with BCa corrections. Use for correlated trials where skew/bias matters. |
 | `newcombe` | Newcombe's hybrid score method | Good for small samples or when you need a closed-form solution. Based on Wilson score intervals. |
 | `wilson` | Wilson score interval | Alternative closed-form method. Similar to Newcombe but uses a different approach. |
 
@@ -455,6 +457,7 @@ Metamorphic Guard supports multiple methods for computing confidence intervals o
 - Handles small sample sizes gracefully
 - Accounts for the correlation between baseline and candidate results (they're tested on the same inputs)
 - Provides accurate coverage even when pass rates are near 0 or 1
+- BCa variants (`bootstrap-bca`, `bootstrap-cluster-bca`) correct for bias and skew via jackknife acceleration, reducing under/over-coverage in asymmetric settings
 
 For relative risk (candidate/baseline ratio), the `log` method uses a log-normal approximation, which is appropriate for ratio statistics.
 

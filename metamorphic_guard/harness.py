@@ -891,7 +891,7 @@ def _compute_delta_ci(
     """Compute the pass-rate delta confidence interval using the requested method."""
     method = method.lower().replace("-", "_")
     clusters = baseline_metrics.get("cluster_labels")
-    if method == "bootstrap_cluster":
+    if method in {"bootstrap_cluster", "bootstrap_cluster_bca"}:
         return _compute_bootstrap_ci(
             baseline_metrics["pass_indicators"],
             candidate_metrics["pass_indicators"],
@@ -899,8 +899,10 @@ def _compute_delta_ci(
             seed=seed,
             samples=samples,
             clusters=clusters,
+            use_bca=method.endswith("bca"),
+            observed_delta=candidate_metrics["pass_rate"] - baseline_metrics["pass_rate"],
         )
-    if method == "bootstrap":
+    if method in {"bootstrap", "bootstrap_bca"}:
         return _compute_bootstrap_ci(
             baseline_metrics["pass_indicators"],
             candidate_metrics["pass_indicators"],
@@ -908,6 +910,8 @@ def _compute_delta_ci(
             seed=seed,
             samples=samples,
             clusters=None,
+            use_bca=method.endswith("bca"),
+            observed_delta=candidate_metrics["pass_rate"] - baseline_metrics["pass_rate"],
         )
     if method in {"newcombe", "wilson"}:
         return _compute_newcombe_ci(
@@ -928,27 +932,70 @@ def _compute_bootstrap_ci(
     seed: int,
     samples: int,
     clusters: Optional[Sequence[Any]] = None,
+    use_bca: bool = False,
+    observed_delta: float | None = None,
 ) -> List[float]:
-    """Compute a percentile bootstrap confidence interval for the pass-rate delta."""
+    """Compute a bootstrap confidence interval for the pass-rate delta."""
     n = len(baseline_indicators)
     if n == 0 or len(candidate_indicators) != n:
         return [0.0, 0.0]
 
     rng = random.Random(seed)
-    deltas: list[float] = []
+    deltas = _generate_bootstrap_deltas(
+        baseline_indicators,
+        candidate_indicators,
+        rng=rng,
+        samples=samples,
+        clusters=clusters,
+    )
+
+    if not deltas:
+        return [0.0, 0.0]
+
+    if use_bca:
+        if observed_delta is None:
+            observed_delta = (sum(candidate_indicators) / n) - (sum(baseline_indicators) / n)
+        return _compute_bca_interval(
+            deltas,
+            observed_delta=observed_delta,
+            baseline_indicators=baseline_indicators,
+            candidate_indicators=candidate_indicators,
+            alpha=alpha,
+        )
+
+    lower_quantile = alpha / 2
+    upper_quantile = 1 - alpha / 2
+    ci_lower = _percentile(deltas, lower_quantile)
+    ci_upper = _percentile(deltas, upper_quantile)
+    return [float(ci_lower), float(ci_upper)]
+
+
+def _generate_bootstrap_deltas(
+    baseline_indicators: Sequence[int],
+    candidate_indicators: Sequence[int],
+    *,
+    rng: random.Random,
+    samples: int,
+    clusters: Optional[Sequence[Any]] = None,
+) -> List[float]:
+    """Generate bootstrap deltas (candidate - baseline pass rate)."""
+    n = len(baseline_indicators)
+    if n == 0 or len(candidate_indicators) != n:
+        return []
+
+    deltas: List[float] = []
 
     if clusters:
         cluster_indices: Dict[Any, List[int]] = {}
         for idx, cluster_id in enumerate(clusters):
             cluster_indices.setdefault(cluster_id, []).append(idx)
         unique_clusters = list(cluster_indices.keys())
-        if not unique_clusters:
-            clusters = None
-        else:
+        if unique_clusters:
+            cluster_count = len(unique_clusters)
             for _ in range(max(1, samples)):
                 sampled_clusters = [
-                    unique_clusters[rng.randrange(len(unique_clusters))]
-                    for _ in range(len(unique_clusters))
+                    unique_clusters[rng.randrange(cluster_count)]
+                    for _ in range(cluster_count)
                 ]
                 baseline_sample: List[int] = []
                 candidate_sample: List[int] = []
@@ -962,28 +1009,92 @@ def _compute_bootstrap_ci(
                 p_candidate = sum(candidate_sample) / len(candidate_sample)
                 deltas.append(p_candidate - p_baseline)
             if deltas:
-                lower_quantile = alpha / 2
-                upper_quantile = 1 - alpha / 2
-                ci_lower = _percentile(deltas, lower_quantile)
-                ci_upper = _percentile(deltas, upper_quantile)
-                return [float(ci_lower), float(ci_upper)]
-            # Fall back to IID bootstrap if cluster sampling fails (e.g., empty samples).
-
-    deltas.clear()
+                return deltas
+        # fallback to iid if clusters missing/empty
 
     for _ in range(max(1, samples)):
         baseline_sample = [baseline_indicators[rng.randrange(n)] for _ in range(n)]
         candidate_sample = [candidate_indicators[rng.randrange(n)] for _ in range(n)]
-
         p_baseline = sum(baseline_sample) / n
         p_candidate = sum(candidate_sample) / n
         deltas.append(p_candidate - p_baseline)
 
-    lower_quantile = alpha / 2
-    upper_quantile = 1 - alpha / 2
-    ci_lower = _percentile(deltas, lower_quantile)
-    ci_upper = _percentile(deltas, upper_quantile)
-    return [float(ci_lower), float(ci_upper)]
+    return deltas
+
+
+def _compute_bca_interval(
+    deltas: Sequence[float],
+    *,
+    observed_delta: float,
+    baseline_indicators: Sequence[int],
+    candidate_indicators: Sequence[int],
+    alpha: float,
+) -> List[float]:
+    """Compute the bias-corrected and accelerated (BCa) interval for bootstrap deltas."""
+    if not deltas:
+        return [0.0, 0.0]
+
+    sorted_deltas = sorted(deltas)
+    num_samples = len(sorted_deltas)
+    # Bias correction
+    proportion = sum(delta < observed_delta for delta in sorted_deltas) / num_samples
+    if proportion <= 0.0:
+        z0 = float("-inf")
+    elif proportion >= 1.0:
+        z0 = float("inf")
+    else:
+        z0 = NormalDist().inv_cdf(proportion)
+
+    # Acceleration via jackknife
+    n = len(baseline_indicators)
+    if n <= 1:
+        acceleration = 0.0
+    else:
+        jackknife: List[float] = []
+        total_baseline = sum(baseline_indicators)
+        total_candidate = sum(candidate_indicators)
+        for i in range(n):
+            baseline_loo_total = total_baseline - baseline_indicators[i]
+            candidate_loo_total = total_candidate - candidate_indicators[i]
+            denom = n - 1
+            if denom <= 0:
+                continue
+            p_b = baseline_loo_total / denom
+            p_c = candidate_loo_total / denom
+            jackknife.append(p_c - p_b)
+        if len(jackknife) < 2:
+            acceleration = 0.0
+        else:
+            mean_jackknife = sum(jackknife) / len(jackknife)
+            num = sum((mean_jackknife - jk) ** 3 for jk in jackknife)
+            denom = sum((mean_jackknife - jk) ** 2 for jk in jackknife)
+            denom_pow = denom ** 1.5 if denom > 0 else 0.0
+            if denom_pow == 0:
+                acceleration = 0.0
+            else:
+                acceleration = num / (6.0 * denom_pow)
+
+    def _adjusted_quantile(prob: float) -> float:
+        if prob <= 0.0:
+            return 0.0
+        if prob >= 1.0:
+            return 1.0
+        if math.isinf(z0):
+            return 0.0 if z0 < 0 else 1.0
+        z_prob = NormalDist().inv_cdf(prob)
+        denom = 1 - acceleration * (z0 + z_prob)
+        if denom == 0:
+            adjusted = 0.0 if z0 + z_prob < 0 else 1.0
+        else:
+            adjusted = NormalDist().cdf(z0 + (z0 + z_prob) / denom)
+        return min(1.0, max(0.0, adjusted))
+
+    lower_prob = _adjusted_quantile(alpha / 2)
+    upper_prob = _adjusted_quantile(1 - alpha / 2)
+
+    lower = _percentile(sorted_deltas, lower_prob)
+    upper = _percentile(sorted_deltas, upper_prob)
+    return [float(lower), float(upper)]
 
 
 def _compute_newcombe_ci(
