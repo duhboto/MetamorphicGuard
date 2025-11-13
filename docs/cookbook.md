@@ -80,6 +80,78 @@ HTML reports and JSON output now include monitor summaries.
    - Tune simulation validation strictness with `MG_CI_RUNS`, `MG_CI_TOLERANCE`, `MG_CI_MIN_COVERAGE`.
    - Preserve report JSONs as CI artifacts for downstream auditing and diffing.
 
+## Programmatic Gates & Config Pipelines
+
+1. **Define a reusable TaskSpec**
+   ```python
+   from metamorphic_guard import TaskSpec, Property, Metric
+
+   SPEC = TaskSpec(
+       name="api_test_task",
+       gen_inputs=lambda n, seed: [(i,) for i in range(n)],
+       properties=[
+           Property(
+               check=lambda output, x: isinstance(output, dict) and "value" in output,
+               description="Outputs include a value field",
+           ),
+       ],
+       relations=[],
+       equivalence=lambda a, b: a == b,
+       metrics=[
+           Metric(
+               name="value_mean",
+               extract=lambda output, _: float(output["value"]),
+               kind="mean",
+           )
+       ],
+   )
+   ```
+
+2. **Run with callables or dotted paths**
+   ```python
+   from metamorphic_guard import run, Implementation
+
+   result = run(
+       task=SPEC,
+       baseline=Implementation.from_callable(baseline_callable),
+       candidate=Implementation.from_dotted("my_project.models:candidate"),
+   )
+   print(result.adopt, result.reason)
+   ```
+
+3. **Load configs from TOML, mappings, or EvaluatorConfig**
+   ```python
+   from metamorphic_guard import run_with_config
+
+   mapping = {
+       "metamorphic_guard": {
+           "task": "api_test_task",
+           "baseline": "my_project.models:baseline",
+           "candidate": "my_project.models:candidate",
+           "n": 200,
+           "seed": 13,
+           "policy": "superiority:margin=0.02",
+       }
+   }
+   result = run_with_config(mapping, task=SPEC)
+   ```
+   - `policy` accepts preset strings (`superiority:margin=0.02`) or policy file paths. Gating thresholds override the evaluation config (min_delta, alpha, min_pass_rate, power, violation_cap) and a descriptive `policy_version` is inferred when omitted.
+   - The same helper accepts `guard.toml` files or `EvaluatorConfig` instances, letting you share configuration between CLI and code.
+
+4. **CI/CD snippet (GitHub Actions)**
+   ```yaml
+   - name: Programmatic gate
+     run: |
+       python - <<'PY'
+       from metamorphic_guard import run_with_config
+       from demo_task import SPEC
+       result = run_with_config("guard.toml", task=SPEC)
+       if not result.adopt:
+           raise SystemExit(result.reason)
+       PY
+   ```
+   Keep the TaskSpec in a module (`demo_task.py`) so both programmatic scripts and the CLI can reference it.
+
 ## Advanced Monitors & Alerts
 
 - Latency percentiles: `--monitor latency:percentile=0.99,alert_ratio=1.25`
