@@ -110,3 +110,39 @@ def test_run_with_config_mapping(task_spec):
     result = run_with_config(data, task=task_spec)
     assert result.adopt is True
 
+
+def test_run_with_config_policy_preset(tmp_path, task_spec):
+    config_text = textwrap.dedent(
+        """
+        [metamorphic_guard]
+        task = "api_test_task"
+        baseline = "tests.callable_fixtures:baseline_callable"
+        candidate = "tests.callable_fixtures:baseline_callable"
+        policy = "superiority:margin=0.05"
+        n = 5
+        seed = 123
+        """
+    )
+    config_path = tmp_path / "guard.toml"
+    config_path.write_text(config_text, encoding="utf-8")
+
+    result = run_with_config(config_path, task=task_spec)
+    assert result.adopt is False
+
+
+def test_run_with_config_policy_invalid(tmp_path, task_spec):
+    config_text = textwrap.dedent(
+        """
+        [metamorphic_guard]
+        task = "api_test_task"
+        baseline = "tests.callable_fixtures:baseline_callable"
+        candidate = "tests.callable_fixtures:baseline_callable"
+        policy = "unknownpreset"
+        """
+    )
+    config_path = tmp_path / "guard.toml"
+    config_path.write_text(config_text, encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        run_with_config(config_path, task=task_spec)
+

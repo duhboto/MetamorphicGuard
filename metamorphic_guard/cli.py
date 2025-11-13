@@ -20,7 +20,7 @@ from .observability import (
     configure_metrics,
     log_event,
 )
-from .policy import load_policy_file, PolicyLoadError
+from .policy import PolicyLoadError, PolicyParseError, resolve_policy_option
 
 
 _PLUGIN_TEMPLATES = {
@@ -195,156 +195,11 @@ def _load_config_defaults(ctx: click.Context, param: click.Parameter, value: Opt
     ctx.default_map = default_map
 
 
-def _parse_policy_preset(value: str) -> Dict[str, Any]:
-    raw = value.strip()
-    if not raw:
-        raise click.ClickException("Policy preset cannot be empty.")
-
-    name, _, param_str = raw.partition(":")
-    name = name.strip().lower()
-    if name not in {"noninferiority", "superiority"}:
-        raise click.ClickException(
-            f"Unknown policy preset '{name}'. Supported presets: noninferiority, superiority."
-        )
-
-    params: Dict[str, str] = {}
-    if param_str:
-        for token in param_str.split(","):
-            token = token.strip()
-            if not token:
-                continue
-            key, sep, val = token.partition("=")
-            if not sep:
-                raise click.ClickException(
-                    f"Invalid policy preset parameter '{token}'. Expected key=value."
-                )
-            params[key.strip().lower()] = val.strip()
-
-    def _get_float(key: str, default: Optional[float] = None) -> Optional[float]:
-        if key not in params:
-            return default
-        try:
-            return float(params[key])
-        except ValueError:
-            raise click.ClickException(f"Policy preset parameter '{key}' must be numeric.")
-
-    margin = _get_float("margin", 0.0) or 0.0
-    pass_rate = _get_float("pass_rate")
-    alpha_override = _get_float("alpha")
-    power_override = _get_float("power")
-
-    violation_cap: Optional[int] = None
-    if "violation_cap" in params:
-        try:
-            violation_cap = int(params["violation_cap"])
-        except ValueError:
-            raise click.ClickException("Policy preset parameter 'violation_cap' must be an integer.")
-
-    min_delta = margin if name == "superiority" else -margin
-
-    gating: Dict[str, Any] = {"min_delta": min_delta}
-    if pass_rate is not None:
-        gating["min_pass_rate"] = pass_rate
-    if alpha_override is not None:
-        gating["alpha"] = alpha_override
-    if power_override is not None:
-        gating["power_target"] = power_override
-    if violation_cap is not None:
-        gating["violation_cap"] = violation_cap
-
-    quality_policy: Dict[str, Any] = {"min_delta": min_delta}
-    if pass_rate is not None:
-        quality_policy["min_pass_rate"] = pass_rate
-
-    parameters: Dict[str, Any] = {"margin": margin}
-    if pass_rate is not None:
-        parameters["pass_rate"] = pass_rate
-    if alpha_override is not None:
-        parameters["alpha"] = alpha_override
-    if power_override is not None:
-        parameters["power"] = power_override
-    if violation_cap is not None:
-        parameters["violation_cap"] = violation_cap
-
-    label_parts = [f"margin={margin:.4f}"]
-    if pass_rate is not None:
-        label_parts.append(f"pass_rate={pass_rate:.4f}")
-    if alpha_override is not None:
-        label_parts.append(f"alpha={alpha_override:.4f}")
-    if power_override is not None:
-        label_parts.append(f"power={power_override:.4f}")
-    if violation_cap is not None:
-        label_parts.append(f"violation_cap={violation_cap}")
-
-    descriptor = {
-        "type": "preset",
-        "name": name,
-        "parameters": parameters,
-        "label": f"{name}({', '.join(label_parts)})" if label_parts else name,
-    }
-
-    return {
-        "source": "preset",
-        "name": name,
-        "parameters": parameters,
-        "gating": gating,
-        "policy": {"quality": quality_policy},
-        "descriptor": descriptor,
-    }
-
-
 def _resolve_policy_option(value: str) -> Dict[str, Any]:
-    candidate = value.strip()
-    if not candidate:
-        raise click.ClickException("Policy value cannot be empty.")
-
-    path = Path(candidate)
-    if path.exists():
-        if not path.is_file():
-            raise click.ClickException(f"Policy path must be a file: {path}")
-        payload = load_policy_file(path)
-        payload["source"] = "file"
-
-        descriptor: Dict[str, Any] = {"type": "file", "path": str(path)}
-        raw_section = payload.get("raw", {})
-        if isinstance(raw_section, dict):
-            policy_name = raw_section.get("name")
-            if isinstance(policy_name, str):
-                descriptor["name"] = policy_name
-                descriptor["label"] = policy_name
-        payload["descriptor"] = descriptor
-
-        gating_cfg = payload.get("gating", {})
-        normalized_gating: Dict[str, Any] = {}
-        for key, val in gating_cfg.items():
-            if key == "violation_cap":
-                try:
-                    normalized_gating[key] = int(val)
-                except (TypeError, ValueError):
-                    raise click.ClickException("Policy value 'violation_cap' must be an integer.")
-            else:
-                try:
-                    normalized_gating[key] = float(val)
-                except (TypeError, ValueError):
-                    raise click.ClickException(f"Policy value '{key}' must be numeric.")
-        payload["gating"] = normalized_gating
-
-        policy_dict: Dict[str, Any] = {}
-        if isinstance(raw_section, dict) and isinstance(raw_section.get("policy"), dict):
-            policy_dict = raw_section["policy"]  # type: ignore[assignment]
-        else:
-            quality_policy: Dict[str, Any] = {}
-            if "min_delta" in normalized_gating:
-                quality_policy["min_delta"] = normalized_gating["min_delta"]
-            if "min_pass_rate" in normalized_gating:
-                quality_policy["min_pass_rate"] = normalized_gating["min_pass_rate"]
-            if quality_policy:
-                policy_dict["quality"] = quality_policy
-
-        payload["policy"] = policy_dict
-        return payload
-
-    return _parse_policy_preset(candidate)
+    try:
+        return resolve_policy_option(value)
+    except (PolicyLoadError, PolicyParseError) as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 def _write_violation_report(path: Path, result: Dict[str, Any]) -> None:

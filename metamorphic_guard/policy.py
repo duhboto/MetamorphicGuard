@@ -14,6 +14,10 @@ class PolicyLoadError(Exception):
     """Raised when a policy file cannot be loaded or parsed."""
 
 
+class PolicyParseError(Exception):
+    """Raised when a policy string cannot be parsed."""
+
+
 def load_policy_file(path: Path, *, schema: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Load a policy TOML file, optionally validating against a schema."""
     try:
@@ -49,6 +53,142 @@ def load_policy_file(path: Path, *, schema: Optional[Dict[str, Any]] = None) -> 
         "raw": data,
         "gating": recognized,
     }
+
+
+def parse_policy_preset(value: str) -> Dict[str, Any]:
+    raw = value.strip()
+    if not raw:
+        raise PolicyParseError("Policy preset cannot be empty.")
+
+    name, _, param_str = raw.partition(":")
+    name = name.strip().lower()
+    if name not in {"noninferiority", "superiority"}:
+        raise PolicyParseError(
+            f"Unknown policy preset '{name}'. Supported presets: noninferiority, superiority."
+        )
+
+    params: Dict[str, str] = {}
+    if param_str:
+        for token in param_str.split(","):
+            token = token.strip()
+            if not token:
+                continue
+            key, sep, val = token.partition("=")
+            if not sep:
+                raise PolicyParseError(
+                    f"Invalid policy preset parameter '{token}'. Expected key=value."
+                )
+            params[key.strip().lower()] = val.strip()
+
+    def _get_float(key: str, default: Optional[float] = None) -> Optional[float]:
+        if key not in params:
+            return default
+        try:
+            return float(params[key])
+        except ValueError:
+            raise PolicyParseError(f"Policy preset parameter '{key}' must be numeric.")
+
+    margin = _get_float("margin", 0.0) or 0.0
+    pass_rate = _get_float("pass_rate")
+    alpha_override = _get_float("alpha")
+    power_override = _get_float("power")
+
+    violation_cap: Optional[int] = None
+    if "violation_cap" in params:
+        try:
+            violation_cap = int(params["violation_cap"])
+        except ValueError:
+            raise PolicyParseError("Policy preset parameter 'violation_cap' must be an integer.")
+
+    min_delta = margin if name == "superiority" else -margin
+    gating: Dict[str, Any] = {"min_delta": min_delta}
+    if pass_rate is not None:
+        gating["min_pass_rate"] = pass_rate
+    if alpha_override is not None:
+        gating["alpha"] = alpha_override
+    if power_override is not None:
+        gating["power_target"] = power_override
+    if violation_cap is not None:
+        gating["violation_cap"] = violation_cap
+
+    quality_policy: Dict[str, Any] = {"min_delta": min_delta}
+    if pass_rate is not None:
+        quality_policy["min_pass_rate"] = pass_rate
+
+    label_parts = []
+    if margin:
+        label_parts.append(f"margin={margin}")
+    if pass_rate is not None:
+        label_parts.append(f"pass_rate={pass_rate}")
+    if violation_cap is not None:
+        label_parts.append(f"violation_cap={violation_cap}")
+    descriptor = {
+        "type": "preset",
+        "name": name,
+        "parameters": params,
+        "label": f"{name}({', '.join(label_parts)})" if label_parts else name,
+    }
+
+    return {
+        "source": "preset",
+        "name": name,
+        "parameters": params,
+        "gating": gating,
+        "policy": {"quality": quality_policy},
+        "descriptor": descriptor,
+    }
+
+
+def resolve_policy_option(value: str) -> Dict[str, Any]:
+    candidate = value.strip()
+    if not candidate:
+        raise PolicyParseError("Policy value cannot be empty.")
+
+    path = Path(candidate)
+    if path.exists():
+        if not path.is_file():
+            raise PolicyParseError(f"Policy path must be a file: {path}")
+        payload = load_policy_file(path)
+        payload["source"] = "file"
+
+        descriptor: Dict[str, Any] = {"type": "file", "path": str(path)}
+        raw_section = payload.get("raw", {})
+        if isinstance(raw_section, dict):
+            policy_name = raw_section.get("name")
+            if isinstance(policy_name, str):
+                descriptor["name"] = policy_name
+                descriptor["label"] = policy_name
+        payload["descriptor"] = descriptor
+
+        gating_cfg = payload.get("gating", {})
+        normalized_gating: Dict[str, Any] = {}
+        for key, val in gating_cfg.items():
+            if key == "violation_cap":
+                try:
+                    normalized_gating[key] = int(val)
+                except (TypeError, ValueError):
+                    raise PolicyParseError("Policy value 'violation_cap' must be an integer.")
+            else:
+                try:
+                    normalized_gating[key] = float(val)
+                except (TypeError, ValueError):
+                    raise PolicyParseError(f"Policy value '{key}' must be numeric.")
+        payload["gating"] = normalized_gating
+
+        if isinstance(raw_section, dict) and isinstance(raw_section.get("policy"), dict):
+            policy_dict = raw_section["policy"]  # type: ignore[assignment]
+        else:
+            quality_policy: Dict[str, Any] = {}
+            if "min_delta" in normalized_gating:
+                quality_policy["min_delta"] = normalized_gating["min_delta"]
+            if "min_pass_rate" in normalized_gating:
+                quality_policy["min_pass_rate"] = normalized_gating["min_pass_rate"]
+            policy_dict = {"quality": quality_policy} if quality_policy else {}
+
+        payload["policy"] = policy_dict
+        return payload
+
+    return parse_policy_preset(candidate)
 
 
 def _validate_policy(data: Dict[str, Any], schema: Dict[str, Any]) -> None:

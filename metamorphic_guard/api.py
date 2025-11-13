@@ -15,6 +15,7 @@ import importlib
 import inspect
 import tempfile
 from .config import EvaluatorConfig, load_config
+from .policy import PolicyLoadError, PolicyParseError, resolve_policy_option
 
 from .harness import run_eval
 from .specs import MetamorphicRelation, Metric, Property, Spec, register_spec, unregister_spec
@@ -301,6 +302,13 @@ def _existing_specs() -> Sequence[str]:
 
 def _evaluation_config_from_evaluator(cfg: EvaluatorConfig) -> EvaluationConfig:
     extra_options: Dict[str, Any] = {}
+    improve_delta = cfg.min_delta
+    alpha = cfg.alpha
+    min_pass_rate = cfg.min_pass_rate
+    violation_cap = cfg.violation_cap
+    power_target = cfg.power_target
+    policy_version_value = cfg.policy_version
+
     if cfg.parallel:
         extra_options["parallel"] = cfg.parallel
     if cfg.relation_correction:
@@ -315,8 +323,40 @@ def _evaluation_config_from_evaluator(cfg: EvaluatorConfig) -> EvaluationConfig:
         extra_options["executor"] = cfg.executor
     if cfg.executor_config is not None:
         extra_options["executor_config"] = cfg.executor_config
-    if cfg.policy_version:
-        extra_options["policy_version"] = cfg.policy_version
+
+    if cfg.policy:
+        try:
+            policy_payload = resolve_policy_option(str(cfg.policy))
+        except (PolicyLoadError, PolicyParseError) as exc:
+            raise ValueError(f"Invalid policy configuration: {exc}") from exc
+
+        extra_options["policy_config"] = policy_payload
+
+        gating = policy_payload.get("gating", {})
+        if "min_delta" in gating:
+            improve_delta = float(gating["min_delta"])
+        if "min_pass_rate" in gating:
+            min_pass_rate = float(gating["min_pass_rate"])
+        if "alpha" in gating:
+            alpha = float(gating["alpha"])
+        if "power_target" in gating:
+            power_target = float(gating["power_target"])
+        if "violation_cap" in gating:
+            violation_cap = int(gating["violation_cap"])
+
+        if policy_version_value is None:
+            descriptor = policy_payload.get("descriptor", {})
+            if isinstance(descriptor, dict):
+                candidate_version = (
+                    descriptor.get("name")
+                    or descriptor.get("label")
+                    or policy_payload.get("name")
+                )
+                if isinstance(candidate_version, str) and candidate_version:
+                    policy_version_value = candidate_version
+
+    if policy_version_value:
+        extra_options["policy_version"] = policy_version_value
 
     # Drop empty or None entries
     extra_options = {k: v for k, v in extra_options.items() if v not in (None, [], {})}
@@ -326,14 +366,14 @@ def _evaluation_config_from_evaluator(cfg: EvaluatorConfig) -> EvaluationConfig:
         seed=cfg.seed,
         timeout_s=cfg.timeout_s,
         mem_mb=cfg.mem_mb,
-        alpha=cfg.alpha,
-        violation_cap=cfg.violation_cap,
-        improve_delta=cfg.min_delta,
+        alpha=alpha,
+        violation_cap=violation_cap,
+        improve_delta=improve_delta,
         bootstrap_samples=cfg.bootstrap_samples,
         ci_method=cfg.ci_method,
         rr_ci_method=cfg.rr_ci_method,
-        min_pass_rate=cfg.min_pass_rate,
-        power_target=cfg.power_target,
+        min_pass_rate=min_pass_rate,
+        power_target=power_target,
         failed_artifact_limit=cfg.failed_artifact_limit,
         failed_artifact_ttl_days=cfg.failed_artifact_ttl_days,
         extra_options=extra_options,
