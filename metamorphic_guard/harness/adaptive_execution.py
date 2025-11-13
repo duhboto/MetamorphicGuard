@@ -91,9 +91,35 @@ def execute_adaptively(
     }
     
     current_n = len(test_inputs)
+    
+    # Determine look times for group sequential or adaptive
+    if adaptive_config.group_sequential and adaptive_config.look_times:
+        look_times = sorted(adaptive_config.look_times)
+        # Cap at max_sample_size if set
+        if adaptive_config.max_sample_size:
+            look_times = [lt for lt in look_times if lt <= adaptive_config.max_sample_size]
+    elif adaptive_config.group_sequential:
+        # Generate look times evenly spaced
+        n_looks = adaptive_config.max_looks
+        look_times = [
+            int(adaptive_config.min_sample_size + i * (current_n - adaptive_config.min_sample_size) / (n_looks - 1))
+            for i in range(n_looks)
+        ]
+    else:
+        # Adaptive: check at intervals
+        look_times = []
+        chunk_size = adaptive_config.check_interval
+        next_check = adaptive_config.min_sample_size
+        while next_check <= len(test_inputs):
+            if adaptive_config.max_sample_size and next_check > adaptive_config.max_sample_size:
+                break
+            look_times.append(next_check)
+            next_check += chunk_size
+    
     chunk_size = adaptive_config.check_interval
-    next_check = adaptive_config.min_sample_size
+    next_check_idx = 0  # Index into look_times
     final_n = current_n  # May be adjusted
+    look_number = 1
     
     # Execute in chunks, checking power after each
     processed = 0
@@ -131,8 +157,19 @@ def execute_adaptively(
         candidate_results.extend(chunk_candidate)
         processed = len(baseline_results)
         
-        # Check if we should check power at this point
-        if processed >= next_check:
+        # Check if we should check power at this point (group sequential or adaptive)
+        should_check = False
+        if adaptive_config.group_sequential and next_check_idx < len(look_times):
+            if processed >= look_times[next_check_idx]:
+                should_check = True
+                next_check_idx += 1
+        elif not adaptive_config.group_sequential:
+            # Adaptive: check at intervals
+            if processed >= adaptive_config.min_sample_size:
+                if (processed - adaptive_config.min_sample_size) % adaptive_config.check_interval == 0:
+                    should_check = True
+        
+        if should_check:
             # Compute interim metrics
             interim_baseline, interim_candidate = compute_interim_metrics(
                 baseline_results,
@@ -166,7 +203,10 @@ def execute_adaptively(
                 min_delta=min_delta,
                 power_target=power_target,
                 config=adaptive_config,
+                look_number=look_number,
             )
+            
+            look_number += 1
             
             adaptive_metadata["decisions"].append({
                 "n": processed,
@@ -190,17 +230,16 @@ def execute_adaptively(
                 final_n = processed
                 break
             
-            # Update next check point
-            if decision.recommended_n is not None and decision.recommended_n > processed:
-                # Increase sample size if recommended
-                final_n = min(decision.recommended_n, adaptive_config.max_sample_size or len(test_inputs))
-                # Generate additional test cases if needed
-                if final_n > len(test_inputs):
-                    additional_needed = final_n - len(test_inputs)
-                    additional_inputs = spec.gen_inputs(additional_needed, seed + len(test_inputs))
-                    test_inputs.extend(additional_inputs)
-            
-            next_check = processed + adaptive_config.check_interval
+            # Update next check point (for adaptive testing only, not group sequential)
+            if not adaptive_config.group_sequential:
+                if decision.recommended_n is not None and decision.recommended_n > processed:
+                    # Increase sample size if recommended
+                    final_n = min(decision.recommended_n, adaptive_config.max_sample_size or len(test_inputs))
+                    # Generate additional test cases if needed
+                    if final_n > len(test_inputs):
+                        additional_needed = final_n - len(test_inputs)
+                        additional_inputs = spec.gen_inputs(additional_needed, seed + len(test_inputs))
+                        test_inputs.extend(additional_inputs)
     
     adaptive_metadata["final_n"] = final_n
     return baseline_results, candidate_results, adaptive_metadata

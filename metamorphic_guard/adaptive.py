@@ -7,11 +7,13 @@ interim power analysis during evaluation.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from .harness.statistics import estimate_power
 from .power import calculate_sample_size
+from .sequential_testing import SequentialTestConfig, compute_sequential_alpha
 
 
 @dataclass
@@ -23,6 +25,10 @@ class AdaptiveConfig:
     power_threshold: float = 0.95  # Stop if power exceeds this
     max_sample_size: Optional[int] = None  # Maximum samples (None = no limit)
     early_stop_enabled: bool = True  # Allow early stopping
+    group_sequential: bool = False  # Use group sequential design
+    sequential_method: str = "pocock"  # "pocock", "obrien-fleming", "sprt"
+    max_looks: int = 5  # Maximum number of looks for group sequential
+    look_times: Optional[List[int]] = None  # Pre-specified sample sizes for looks (if None, use check_interval)
 
 
 @dataclass
@@ -43,6 +49,7 @@ def should_continue_adaptive(
     min_delta: float,
     power_target: float,
     config: AdaptiveConfig,
+    look_number: int = 1,
 ) -> AdaptiveDecision:
     """
     Determine if sampling should continue based on interim results.
@@ -107,7 +114,52 @@ def should_continue_adaptive(
             reason="insufficient_data_for_analysis",
         )
     
-    # Estimate current power
+    # For group sequential designs, use pre-specified boundaries
+    if config.group_sequential and config.max_looks > 1:
+        seq_config = SequentialTestConfig(
+            method=config.sequential_method,
+            alpha=alpha,
+            max_looks=config.max_looks,
+            look_number=look_number,
+        )
+        adjusted_alpha = compute_sequential_alpha(seq_config)
+        
+        # Compute test statistic (simple z-test for proportions)
+        from statistics import NormalDist
+        p_pooled = (baseline_rate + candidate_rate) / 2.0
+        se = math.sqrt(p_pooled * (1 - p_pooled) * (2.0 / current_n))
+        if se > 0:
+            delta_obs = candidate_rate - baseline_rate
+            z_stat = delta_obs / se
+            z_critical = NormalDist().inv_cdf(1 - adjusted_alpha / 2)
+            
+            # Stop early if boundary crossed
+            if abs(z_stat) >= z_critical:
+                return AdaptiveDecision(
+                    continue_sampling=False,
+                    recommended_n=current_n,
+                    current_power=0.0,  # Will compute separately
+                    reason=f"group_sequential_boundary_crossed_look_{look_number}",
+                )
+        
+        # Continue to next look if we haven't exceeded max_looks
+        if look_number < config.max_looks:
+            return AdaptiveDecision(
+                continue_sampling=True,
+                recommended_n=None,
+                current_power=0.0,
+                reason=f"group_sequential_continue_to_look_{look_number + 1}",
+            )
+        else:
+            # Final look (look_number >= max_looks) - must stop
+            return AdaptiveDecision(
+                continue_sampling=False,
+                recommended_n=current_n,
+                current_power=0.0,
+                reason=f"group_sequential_final_look_{look_number}",
+            )
+    
+    # Estimate current power for adaptive (non-group-sequential) decisions
     current_power, recommended_n = estimate_power(
         p_baseline=baseline_rate,
         p_candidate=candidate_rate,
@@ -117,7 +169,7 @@ def should_continue_adaptive(
         power_target=power_target,
     )
     
-    # Decision logic
+    # Decision logic for adaptive testing (not group sequential)
     if config.early_stop_enabled and current_power >= config.power_threshold:
         return AdaptiveDecision(
             continue_sampling=False,

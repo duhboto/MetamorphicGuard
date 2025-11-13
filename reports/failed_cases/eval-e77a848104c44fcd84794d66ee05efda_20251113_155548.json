@@ -1,0 +1,71 @@
+{
+  "task": "top_k",
+  "baseline": {
+    "passes": 4,
+    "total": 4,
+    "pass_rate": 1.0,
+    "prop_violations": [],
+    "mr_violations": []
+  },
+  "candidate": {
+    "passes": 1,
+    "total": 4,
+    "pass_rate": 0.25,
+    "prop_violations": [
+      {
+        "test_case": 0,
+        "property": "Output length equals min(k, len(L))",
+        "input": "L=[1000000000, 1000, 1000, 1000, 0, 0, -1000000], k=7",
+        "output": "top_k=[]"
+      },
+      {
+        "test_case": 1,
+        "property": "Output length equals min(k, len(L))",
+        "input": "L=[1000000, 1000000000, 1000000, 1000000000, 1000000000, -1000000000, 1000000, 1000000000, -1000000, -1000000, -1000, 1000, -1000000000, 1000000, 1000000000], k=5",
+        "output": "top_k=[]"
+      },
+      {
+        "test_case": 2,
+        "property": "Output length equals min(k, len(L))",
+        "input": "L=[353, 146, -89, -424, -224, -476, 484, -296, 157, 493, 394, 12, -287, -310, 391, 191, -162, -332, 484, 406, -412, 65, 404, 445, 109, -23, 416, 213, 459, 262, -124, -368, 177, 169], k=31",
+        "output": "top_k=[]"
+      }
+    ],
+    "mr_violations": []
+  },
+  "config": {
+    "timeout_s": 2.0,
+    "mem_mb": 512,
+    "alpha": 0.05,
+    "effective_alpha": 0.05,
+    "sequential_method": "none",
+    "max_looks": 1,
+    "look_number": 1,
+    "min_delta": 0.02,
+    "improve_delta": 0.02,
+    "min_pass_rate": 0.8,
+    "violation_cap": 25,
+    "parallel": 1,
+    "bootstrap_samples": 1000,
+    "ci_method": "bootstrap",
+    "rr_ci_method": "log",
+    "executor": null,
+    "executor_config": null,
+    "baseline_executor": null,
+    "candidate_executor": null,
+    "baseline_executor_config": null,
+    "candidate_executor_config": null,
+    "dispatcher": "local",
+    "queue_config": null,
+    "relation_correction": null
+  },
+  "job_metadata": {
+    "hostname": "Spencers-Mac-Studio.local",
+    "executable": "/opt/anaconda3/bin/python",
+    "python_version": "3.11.8",
+    "git_commit": "28b7435d5e7ca751982d1c5c2c3b524890adfb23",
+    "git_dirty": true,
+    "run_id": "eval-e77a848104c44fcd84794d66ee05efda"
+  },
+  "run_id": "eval-e77a848104c44fcd84794d66ee05efda"
+}

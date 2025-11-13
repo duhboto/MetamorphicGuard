@@ -91,6 +91,27 @@ EVALUATE_OPTIONS = [
         help="Maximum sample size for adaptive testing (no limit if not set).",
     ),
     click.option(
+        "--adaptive-group-sequential",
+        "adaptive_group_sequential",
+        is_flag=True,
+        default=False,
+        help="Use group sequential design with pre-specified boundaries (alternative to adaptive power-based stopping).",
+    ),
+    click.option(
+        "--adaptive-sequential-method",
+        "adaptive_sequential_method",
+        type=click.Choice(["pocock", "obrien-fleming"], case_sensitive=False),
+        default="pocock",
+        help="Sequential boundary method for group sequential designs (default: pocock).",
+    ),
+    click.option(
+        "--adaptive-max-looks",
+        "adaptive_max_looks",
+        type=int,
+        default=5,
+        help="Maximum number of looks for group sequential designs (default: 5).",
+    ),
+    click.option(
         "--max-looks",
         type=int,
         default=1,
@@ -418,6 +439,9 @@ def evaluate_command(
     adaptive_check_interval: int,
     adaptive_power_threshold: float,
     adaptive_max_sample_size: Optional[int],
+    adaptive_group_sequential: bool,
+    adaptive_sequential_method: str,
+    adaptive_max_looks: int,
 ) -> None:
     """Compare baseline and candidate implementations using metamorphic testing."""
 
@@ -712,6 +736,9 @@ def evaluate_command(
                 adaptive_check_interval=adaptive_check_interval,
                 adaptive_power_threshold=adaptive_power_threshold,
                 adaptive_max_sample_size=adaptive_max_sample_size,
+                adaptive_group_sequential=adaptive_group_sequential,
+                adaptive_sequential_method=adaptive_sequential_method,
+                adaptive_max_looks=adaptive_max_looks,
             )
             
             run_decision = run_result.get("decision", {})

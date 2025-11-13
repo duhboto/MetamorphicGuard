@@ -337,6 +337,9 @@ def run_eval(
     adaptive_check_interval: int = 50,
     adaptive_power_threshold: float = 0.95,
     adaptive_max_sample_size: Optional[int] = None,
+    adaptive_group_sequential: bool = False,
+    adaptive_sequential_method: str = "pocock",
+    adaptive_max_looks: int = 5,
     **deprecated_kwargs: Any,
 ) -> Dict[str, Any]:
     """
@@ -377,6 +380,10 @@ def run_eval(
         power_threshold=adaptive_power_threshold,
         max_sample_size=adaptive_max_sample_size,
         early_stop_enabled=True,
+        group_sequential=adaptive_group_sequential,
+        sequential_method=adaptive_sequential_method,
+        max_looks=adaptive_max_looks,
+        look_times=None,  # Can be extended to support custom look times
     )
     
     plan = _prepare_execution_plan(
