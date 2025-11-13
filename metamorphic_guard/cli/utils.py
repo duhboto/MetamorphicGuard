@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Sequence
 import click
 
 from ..config import ConfigLoadError, load_config
-from ..policy import PolicyLoadError, PolicyParseError, resolve_policy_option
+from ..policy import PolicyLoadError, PolicyParseError, resolve_policy_option as _resolve_policy_option
 
 
 def flatten_dict(value: Any, prefix: str = "") -> Dict[str, Any]:
@@ -116,7 +116,7 @@ def load_config_defaults(ctx: click.Context, param: click.Parameter, value: Opti
 def resolve_policy_option(value: str) -> Dict[str, Any]:
     """Resolve a policy option string to a policy dictionary."""
     try:
-        return resolve_policy_option(value)
+        return _resolve_policy_option(value)
     except (PolicyLoadError, PolicyParseError) as exc:
         raise click.ClickException(str(exc)) from exc
 

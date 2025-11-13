@@ -154,7 +154,7 @@ def test_plugin_cli_list(monkeypatch):
     assert result.exit_code == 0
     assert "cli_monitor" in result.output
 
-    result = runner.invoke(main, ["plugin", "info", "cli_monitor", "--json"])
+    result = runner.invoke(main, ["plugin", "info", "cli_monitor", "--kind", "monitor", "--json"])
     assert result.exit_code == 0
     assert "Demo CLI Monitor" in result.output
 

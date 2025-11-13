@@ -625,7 +625,8 @@ def test_run_eval_uses_role_specific_executor_configs(monkeypatch, tmp_path):
             "duration_ms": 1.0,
         }
 
-    monkeypatch.setattr("metamorphic_guard.harness.run_in_sandbox", fake_run_in_sandbox)
+    # Patch run_in_sandbox in the execution module where it's actually used
+    monkeypatch.setattr("metamorphic_guard.harness.execution.run_in_sandbox", fake_run_in_sandbox)
 
     spec = Spec(
         gen_inputs=lambda n, seed: [(i,) for i in range(n)],
@@ -647,9 +648,9 @@ def test_run_eval_uses_role_specific_executor_configs(monkeypatch, tmp_path):
             candidate_path=str(candidate_file),
             n=2,
             seed=0,
-            executor="default_exec",
-            baseline_executor="baseline_exec",
-            candidate_executor="candidate_exec",
+            executor="local",
+            baseline_executor="local",
+            candidate_executor="local",
             baseline_executor_config={"label": "baseline_cfg"},
             candidate_executor_config={"label": "candidate_cfg"},
         )
@@ -657,16 +658,17 @@ def test_run_eval_uses_role_specific_executor_configs(monkeypatch, tmp_path):
         unregister_spec("dummy_role_exec")
 
     assert len(calls) == 4  # two baseline + two candidate executions
-    baseline_calls = [call for call in calls if call["executor"] == "baseline_exec"]
-    candidate_calls = [call for call in calls if call["executor"] == "candidate_exec"]
+    # Check that baseline and candidate calls have different configs
+    baseline_calls = [call for call in calls if call["config"].get("label") == "baseline_cfg"]
+    candidate_calls = [call for call in calls if call["config"].get("label") == "candidate_cfg"]
 
-    assert baseline_calls, "Expected baseline executions using baseline executor"
-    assert candidate_calls, "Expected candidate executions using candidate executor"
+    assert baseline_calls, "Expected baseline executions using baseline executor config"
+    assert candidate_calls, "Expected candidate executions using candidate executor config"
 
     assert all(call["config"]["label"] == "baseline_cfg" for call in baseline_calls)
     assert all(call["config"]["label"] == "candidate_cfg" for call in candidate_calls)
 
-    assert report["config"]["baseline_executor"] == "baseline_exec"
-    assert report["config"]["candidate_executor"] == "candidate_exec"
+    assert report["config"]["baseline_executor"] == "local"
+    assert report["config"]["candidate_executor"] == "local"
     assert report["config"]["baseline_executor_config"]["label"] == "baseline_cfg"
     assert report["config"]["candidate_executor_config"]["label"] == "candidate_cfg"

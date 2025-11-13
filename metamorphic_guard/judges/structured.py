@@ -120,7 +120,8 @@ class CitationJudge(LLMJudge):
         self.citation_patterns = [
             re.compile(r"\[(\d+)\]"),  # [1], [2], etc.
             re.compile(r"\([A-Za-z]+\s+et\s+al\.\s+\d{4}\)"),  # (Author et al. 2024)
-            re.compile(r"\([A-Za-z]+\s+\d{4}\)"),  # (Author 2024)
+            re.compile(r"[A-Za-z]+\s*\(\d{4}\)"),  # Author (2024) or Author(2024)
+            re.compile(r"\([A-Za-z]+\s+\d{4}\)"),  # (Author 2024) - alternative format
             re.compile(r"https?://[^\s]+"),  # URLs
         ]
 
@@ -133,8 +134,14 @@ class CitationJudge(LLMJudge):
         """Check for citations in output."""
         citations_found = []
         for pattern in self.citation_patterns:
-            matches = pattern.findall(output)
-            citations_found.extend(matches)
+            # Use finditer to get full matches, not just captured groups
+            matches = list(pattern.finditer(output))
+            if matches:
+                # If pattern has capturing groups, use findall; otherwise use full match
+                if pattern.groups > 0:
+                    citations_found.extend(pattern.findall(output))
+                else:
+                    citations_found.extend([m.group() for m in matches])
 
         citation_count = len(citations_found)
         has_citations = citation_count >= self.min_citations
