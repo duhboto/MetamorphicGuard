@@ -9,6 +9,12 @@ import random
 from statistics import NormalDist
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+try:
+    from scipy import stats
+    _SCIPY_AVAILABLE = True
+except ImportError:
+    _SCIPY_AVAILABLE = False
+
 from ..power import calculate_power, calculate_sample_size
 
 
@@ -97,6 +103,16 @@ def compute_delta_ci(
             candidate_metrics["passes"],
             candidate_metrics["total"],
             alpha=alpha,
+        )
+    if method == "bayesian":
+        prior_type = "jeffreys"  # Default to Jeffreys prior
+        return compute_bayesian_ci(
+            baseline_metrics["passes"],
+            baseline_metrics["total"],
+            candidate_metrics["passes"],
+            candidate_metrics["total"],
+            alpha=alpha,
+            prior_type=prior_type,
         )
     raise ValueError(f"Unsupported CI method: {method}")
 
@@ -482,4 +498,115 @@ def compute_paired_stats(
         "mcnemar_p": p_value,
         "method": "mcnemar_cc",
     }
+
+
+def compute_bayesian_ci(
+    baseline_passes: int,
+    baseline_total: int,
+    candidate_passes: int,
+    candidate_total: int,
+    *,
+    alpha: float,
+    prior_type: str = "jeffreys",
+) -> List[float]:
+    """
+    Compute Bayesian credible interval for pass-rate delta using Beta-Binomial model.
+    
+    Uses Beta prior for each pass rate, then computes posterior distribution
+    of the difference (candidate - baseline).
+    
+    Args:
+        baseline_passes: Number of baseline passes
+        baseline_total: Total baseline tests
+        candidate_passes: Number of candidate passes
+        candidate_total: Total candidate tests
+        alpha: Significance level (1 - alpha is the credible interval coverage)
+        prior_type: Type of prior - "uniform" (Beta(1,1)), "jeffreys" (Beta(0.5,0.5)), 
+                   or "beta" with custom parameters
+    
+    Returns:
+        [lower_bound, upper_bound] credible interval for the delta
+    """
+    if not _SCIPY_AVAILABLE:
+        raise ValueError(
+            "Bayesian CI requires scipy. Install with: pip install scipy"
+        )
+    
+    # Set prior parameters
+    if prior_type == "uniform":
+        alpha_prior = beta_prior = 1.0
+    elif prior_type == "jeffreys":
+        alpha_prior = beta_prior = 0.5
+    elif prior_type.startswith("beta:"):
+        # Custom prior: "beta:alpha,beta"
+        parts = prior_type.split(":")
+        if len(parts) != 2:
+            raise ValueError(f"Invalid prior_type format: {prior_type}")
+        params = parts[1].split(",")
+        if len(params) != 2:
+            raise ValueError(f"Invalid prior_type format: {prior_type}")
+        try:
+            alpha_prior = float(params[0])
+            beta_prior = float(params[1])
+        except ValueError as e:
+            raise ValueError(f"Invalid prior_type format: {prior_type}") from e
+    else:
+        raise ValueError(f"Unknown prior_type: {prior_type}. Use 'uniform', 'jeffreys', or 'beta:alpha,beta'")
+    
+    # Compute posterior parameters for baseline and candidate
+    baseline_alpha_post = alpha_prior + baseline_passes
+    baseline_beta_post = beta_prior + (baseline_total - baseline_passes)
+    
+    candidate_alpha_post = alpha_prior + candidate_passes
+    candidate_beta_post = beta_prior + (candidate_total - candidate_passes)
+    
+    # For small samples, use analytical approximation
+    # For larger samples, use Monte Carlo sampling
+    if baseline_total < 50 or candidate_total < 50:
+        # Use analytical method for small samples
+        # Sample from posterior distributions and compute difference
+        n_samples = 10000
+        baseline_samples = stats.beta.rvs(
+            baseline_alpha_post, 
+            baseline_beta_post, 
+            size=n_samples
+        )
+        candidate_samples = stats.beta.rvs(
+            candidate_alpha_post, 
+            candidate_beta_post, 
+            size=n_samples
+        )
+        delta_samples = candidate_samples - baseline_samples
+        delta_samples.sort()
+        
+        # Compute credible interval
+        lower_idx = int(n_samples * (alpha / 2))
+        upper_idx = int(n_samples * (1 - alpha / 2))
+        ci_lower = float(delta_samples[lower_idx])
+        ci_upper = float(delta_samples[upper_idx])
+    else:
+        # For larger samples, use normal approximation
+        # Posterior mean and variance for each
+        baseline_mean = baseline_alpha_post / (baseline_alpha_post + baseline_beta_post)
+        baseline_var = (baseline_alpha_post * baseline_beta_post) / (
+            (baseline_alpha_post + baseline_beta_post) ** 2 * 
+            (baseline_alpha_post + baseline_beta_post + 1)
+        )
+        
+        candidate_mean = candidate_alpha_post / (candidate_alpha_post + candidate_beta_post)
+        candidate_var = (candidate_alpha_post * candidate_beta_post) / (
+            (candidate_alpha_post + candidate_beta_post) ** 2 * 
+            (candidate_alpha_post + candidate_beta_post + 1)
+        )
+        
+        # Delta distribution (difference of two independent normals)
+        delta_mean = candidate_mean - baseline_mean
+        delta_std = math.sqrt(baseline_var + candidate_var)
+        
+        # Normal approximation for credible interval
+        z_score = NormalDist().inv_cdf(1 - alpha / 2)
+        ci_lower = delta_mean - z_score * delta_std
+        ci_upper = delta_mean + z_score * delta_std
+    
+    return [ci_lower, ci_upper]
 
