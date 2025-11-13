@@ -9,11 +9,14 @@ Methods:
 - Holm: Step-down procedure controlling FWER (conservative)
 - Hochberg: Step-down procedure controlling FWER (more powerful than Holm)
 - Benjamini-Hochberg: Step-up procedure controlling FDR (less conservative)
+- Custom: User-provided correction function
+
+Built-in methods can be extended with custom correction functions.
 """
 
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import Callable, List, Tuple
 import math
 
 
@@ -150,9 +153,40 @@ def benjamini_hochberg_correction(
     return results
 
 
+# Registry for custom correction methods
+_custom_corrections: dict[str, Callable[[List[float], float], List[Tuple[int, float, bool]]]] = {}
+
+
+def register_correction_method(
+    name: str,
+    correction_fn: Callable[[List[float], float], List[Tuple[int, float, bool]]],
+) -> None:
+    """
+    Register a custom correction method.
+    
+    Args:
+        name: Name of the correction method (must be unique)
+        correction_fn: Function that takes (p_values, alpha) and returns
+            List of (index, adjusted_p_value, is_significant) tuples
+    """
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("Correction method name must be a non-empty string")
+    if not callable(correction_fn):
+        raise ValueError("Correction function must be callable")
+    
+    _custom_corrections[name.lower()] = correction_fn
+
+
+def get_registered_methods() -> List[str]:
+    """Get list of all registered correction methods (built-in + custom)."""
+    built_in = ["holm", "hochberg", "benjamini-hochberg", "bh", "fdr"]
+    custom = list(_custom_corrections.keys())
+    return sorted(set(built_in + custom))
+
+
 def apply_multiple_comparisons_correction(
     p_values: List[float],
-    method: str = "holm",
+    method: str | Callable[[List[float], float], List[Tuple[int, float, bool]]] = "holm",
     alpha: float = 0.05,
 ) -> List[Tuple[int, float, bool]]:
     """
@@ -160,22 +194,36 @@ def apply_multiple_comparisons_correction(
     
     Args:
         p_values: List of p-values
-        method: Correction method ("holm", "hochberg", or "benjamini-hochberg"/"bh"/"fdr")
+        method: Correction method - either a string ("holm", "hochberg", "benjamini-hochberg"/"bh"/"fdr")
+                or a custom function that takes (p_values, alpha) and returns
+                List of (index, adjusted_p_value, is_significant) tuples
         alpha: Significance level
         
     Returns:
         List of (index, adjusted_p_value, is_significant) tuples
     """
-    method = method.lower()
-    if method == "holm":
+    # If method is a callable, use it directly
+    if callable(method):
+        try:
+            return method(p_values, alpha)
+        except Exception as e:
+            raise ValueError(f"Custom correction function failed: {e}") from e
+    
+    # Otherwise, treat as string method name
+    method_str = str(method).lower()
+    
+    if method_str == "holm":
         return holm_correction(p_values, alpha)
-    elif method == "hochberg":
+    elif method_str == "hochberg":
         return hochberg_correction(p_values, alpha)
-    elif method in ("benjamini-hochberg", "bh", "fdr"):
+    elif method_str in ("benjamini-hochberg", "bh", "fdr"):
         return benjamini_hochberg_correction(p_values, alpha)
+    elif method_str in _custom_corrections:
+        return _custom_corrections[method_str](p_values, alpha)
     else:
+        available = get_registered_methods()
         raise ValueError(
             f"Unknown correction method: {method}. "
-            "Use 'holm', 'hochberg', or 'benjamini-hochberg'/'bh'/'fdr'"
+            f"Use one of: {', '.join(available)} or provide a custom function"
         )
 
