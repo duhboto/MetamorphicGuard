@@ -14,33 +14,23 @@ try:
     HYPOTHESIS_AVAILABLE = True
 except ImportError:
     HYPOTHESIS_AVAILABLE = False
-    # Create dummy decorators if Hypothesis is not available
-    def given(*args, **kwargs):
-        def decorator(func):
-            return func
-        return decorator
-    
-    def settings(*args, **kwargs):
-        def decorator(func):
-            return func
-        return decorator
-    
-    st = None
+    pytestmark = pytest.mark.skip("Hypothesis not available")
 
-from metamorphic_guard.harness.statistics import (
-    compute_bootstrap_ci,
-    compute_delta_ci,
-    compute_paired_stats,
-    estimate_power,
-    percentile,
-    wilson_interval,
-    compute_newcombe_ci,
-    compute_bayesian_ci,
-)
+if HYPOTHESIS_AVAILABLE:
+    from metamorphic_guard.harness.statistics import (
+        compute_bootstrap_ci,
+        compute_delta_ci,
+        compute_paired_stats,
+        estimate_power,
+        percentile,
+        wilson_interval,
+        compute_newcombe_ci,
+        compute_bayesian_ci,
+    )
 
 
-@pytest.mark.skipif(not HYPOTHESIS_AVAILABLE, reason="Hypothesis not available")
-class TestStatisticalProperties:
+if HYPOTHESIS_AVAILABLE:
+    class TestStatisticalProperties:
     """Property-based tests for statistical functions."""
 
     @given(
@@ -329,4 +319,8 @@ class TestStatisticalProperties:
         assert ci_jeffreys[0] <= ci_jeffreys[1]
         assert 0.0 <= ci_jeffreys[0] <= 1.0
         assert 0.0 <= ci_jeffreys[1] <= 1.0
+else:
+    # Dummy class to avoid import errors when Hypothesis is not available
+    class TestStatisticalProperties:
+        pass
 
