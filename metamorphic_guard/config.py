@@ -54,6 +54,11 @@ class EvaluatorConfig(BaseModel):
     failed_artifact_ttl_days: Optional[int] = Field(default=None, ge=0)
     sandbox_plugins: Optional[bool] = None
     stability: int = Field(default=1, ge=1)
+    adaptive_testing: bool = Field(default=False)
+    adaptive_min_sample_size: int = Field(default=50, ge=10)
+    adaptive_check_interval: int = Field(default=50, ge=10)
+    adaptive_power_threshold: float = Field(default=0.95, gt=0.0, le=1.0)
+    adaptive_max_sample_size: Optional[int] = Field(default=None, ge=10)
 
     @field_validator("dispatcher")
     @classmethod

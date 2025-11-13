@@ -332,6 +332,11 @@ def run_eval(
     max_looks: int = 1,
     look_number: int = 1,
     relation_correction: Optional[str] = None,
+    adaptive_testing: bool = False,
+    adaptive_min_sample_size: int = 50,
+    adaptive_check_interval: int = 50,
+    adaptive_power_threshold: float = 0.95,
+    adaptive_max_sample_size: Optional[int] = None,
     **deprecated_kwargs: Any,
 ) -> Dict[str, Any]:
     """
@@ -362,6 +367,18 @@ def run_eval(
         candidate_executor_config if candidate_executor_config is not None else executor_config
     )
 
+    # Check if adaptive testing is enabled
+    from .adaptive import AdaptiveConfig
+    
+    adaptive_config = AdaptiveConfig(
+        enabled=adaptive_testing,
+        min_sample_size=adaptive_min_sample_size,
+        check_interval=adaptive_check_interval,
+        power_threshold=adaptive_power_threshold,
+        max_sample_size=adaptive_max_sample_size,
+        early_stop_enabled=True,
+    )
+    
     plan = _prepare_execution_plan(
         task_name=task_name,
         spec=spec,
@@ -382,19 +399,49 @@ def run_eval(
     monitor_objs = plan.monitors
     run_id = plan.run_id
 
-    baseline_results, candidate_results = _execute_implementations(
-        plan,
-        baseline_path=baseline_path,
-        candidate_path=candidate_path,
-        timeout_s=timeout_s,
-        mem_mb=mem_mb,
-        executor=executor,
-        executor_config=executor_config,
-        baseline_executor=baseline_executor,
-        baseline_executor_config=baseline_executor_config,
-        candidate_executor=candidate_executor,
-        candidate_executor_config=candidate_executor_config,
-    )
+    # Use adaptive execution if enabled, otherwise normal execution
+    if adaptive_testing:
+        from .harness import adaptive_execution
+        
+        baseline_results, candidate_results, adaptive_metadata = adaptive_execution.execute_adaptively(
+            plan=plan,
+            baseline_path=baseline_path,
+            candidate_path=candidate_path,
+            timeout_s=timeout_s,
+            mem_mb=mem_mb,
+            executor=executor,
+            executor_config=executor_config,
+            baseline_executor=baseline_executor,
+            baseline_executor_config=baseline_executor_config,
+            candidate_executor=candidate_executor,
+            candidate_executor_config=candidate_executor_config,
+            alpha=alpha,
+            min_delta=min_delta,
+            power_target=power_target,
+            adaptive_config=adaptive_config,
+            violation_cap=violation_cap,
+            seed=seed,
+            shrink_violations=shrink_violations,
+            spec=spec,
+        )
+        
+        # Update n to reflect actual samples run
+        n = adaptive_metadata.get("final_n", n)
+    else:
+        baseline_results, candidate_results = _execute_implementations(
+            plan,
+            baseline_path=baseline_path,
+            candidate_path=candidate_path,
+            timeout_s=timeout_s,
+            mem_mb=mem_mb,
+            executor=executor,
+            executor_config=executor_config,
+            baseline_executor=baseline_executor,
+            baseline_executor_config=baseline_executor_config,
+            candidate_executor=candidate_executor,
+            candidate_executor_config=candidate_executor_config,
+        )
+        adaptive_metadata = {"adaptive_testing": False}
     baseline_llm_summary = _summarize_llm_results(baseline_results)
     candidate_llm_summary = _summarize_llm_results(candidate_results)
     baseline_runtime_meta = next(
@@ -622,6 +669,10 @@ def run_eval(
         "min_delta": min_delta,
         "alpha": alpha,
     }
+    
+    # Add adaptive testing metadata if enabled
+    if adaptive_testing:
+        result["adaptive"] = adaptive_metadata
     if paired_stats:
         result["statistics"]["paired"] = paired_stats
 

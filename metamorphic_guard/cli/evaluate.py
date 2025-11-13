@@ -56,6 +56,41 @@ EVALUATE_OPTIONS = [
         help="Sequential testing method for iterative PR workflows (alpha-spending or SPRT).",
     ),
     click.option(
+        "--adaptive",
+        "adaptive_testing",
+        is_flag=True,
+        default=False,
+        help="Enable adaptive sample size determination based on interim power analysis.",
+    ),
+    click.option(
+        "--adaptive-min-n",
+        "adaptive_min_sample_size",
+        type=int,
+        default=50,
+        help="Minimum sample size before first adaptive check (default: 50).",
+    ),
+    click.option(
+        "--adaptive-interval",
+        "adaptive_check_interval",
+        type=int,
+        default=50,
+        help="Check power every N samples (default: 50).",
+    ),
+    click.option(
+        "--adaptive-power-threshold",
+        "adaptive_power_threshold",
+        type=float,
+        default=0.95,
+        help="Stop early if power exceeds this threshold (default: 0.95).",
+    ),
+    click.option(
+        "--adaptive-max-n",
+        "adaptive_max_sample_size",
+        type=int,
+        default=None,
+        help="Maximum sample size for adaptive testing (no limit if not set).",
+    ),
+    click.option(
         "--max-looks",
         type=int,
         default=1,
@@ -378,6 +413,11 @@ def evaluate_command(
     stability: int,
     shrink_violations: bool,
     estimate_cost: bool,
+    adaptive_testing: bool,
+    adaptive_min_sample_size: int,
+    adaptive_check_interval: int,
+    adaptive_power_threshold: float,
+    adaptive_max_sample_size: Optional[int],
 ) -> None:
     """Compare baseline and candidate implementations using metamorphic testing."""
 
@@ -667,6 +707,11 @@ def evaluate_command(
                 max_looks=max_looks,
                 look_number=look_number,
                 relation_correction=relation_correction,
+                adaptive_testing=adaptive_testing,
+                adaptive_min_sample_size=adaptive_min_sample_size,
+                adaptive_check_interval=adaptive_check_interval,
+                adaptive_power_threshold=adaptive_power_threshold,
+                adaptive_max_sample_size=adaptive_max_sample_size,
             )
             
             run_decision = run_result.get("decision", {})
