@@ -98,7 +98,8 @@ class TestVLLMExecutor:
 
     def test_vllm_executor_execute_with_system_prompt(self):
         """Test execution with system prompt."""
-        with patch("metamorphic_guard.executors.vllm.LLM") as mock_llm_class:
+        with patch("metamorphic_guard.executors.vllm.LLM") as mock_llm_class, \
+             patch("metamorphic_guard.executors.vllm.SamplingParams") as mock_sampling:
             mock_llm_instance = MagicMock()
             mock_llm_class.return_value = mock_llm_instance
             
@@ -149,7 +150,8 @@ class TestVLLMExecutor:
 
     def test_vllm_executor_execute_error_handling(self):
         """Test error handling during execution."""
-        with patch("metamorphic_guard.executors.vllm.LLM") as mock_llm_class:
+        with patch("metamorphic_guard.executors.vllm.LLM") as mock_llm_class, \
+             patch("metamorphic_guard.executors.vllm.SamplingParams") as mock_sampling:
             mock_llm_instance = MagicMock()
             mock_llm_class.return_value = mock_llm_instance
             
@@ -166,7 +168,8 @@ class TestVLLMExecutor:
 
     def test_vllm_executor_generate_batch(self):
         """Test batch generation."""
-        with patch("metamorphic_guard.executors.vllm.LLM") as mock_llm_class:
+        with patch("metamorphic_guard.executors.vllm.LLM") as mock_llm_class, \
+             patch("metamorphic_guard.executors.vllm.SamplingParams") as mock_sampling:
             mock_llm_instance = MagicMock()
             mock_llm_class.return_value = mock_llm_instance
             
