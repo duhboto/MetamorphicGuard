@@ -42,9 +42,8 @@ def _serialize_for_report(value: Any) -> Any:
         return repr(value)
 from .dispatch import Dispatcher
 from .monitoring import Monitor
-from .observability import add_log_context, increment_llm_retries, increment_metric, log_event
+from .observability import increment_llm_retries, log_event
 from .gate import decide_adopt
-from .multiple_comparisons import apply_multiple_comparisons_correction
 
 # Import from refactored modules
 from .harness.statistics import (
