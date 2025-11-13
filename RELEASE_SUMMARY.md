@@ -1,5 +1,10 @@
 # Release Summary - Major Feature Upgrade
 
+## 2.2.0 Highlights (2025-11-13)
+- Adopted `min_delta` terminology across API/CLI and kept backwards-compatible warnings.
+- Hardened LLM executor routing with configurable pricing, retries, and Prometheus `metamorphic_llm_retries_total`.
+- Surfaced aggregated LLM cost/token/latency data in harness, JSON, and HTML reports.
+
 ## 🎉 Release Status: READY FOR PRODUCTION
 
 This release represents a **substantial upgrade** to Metamorphic Guard, transforming it from an algorithm testing framework to a comprehensive LLM/AI evaluation platform.
