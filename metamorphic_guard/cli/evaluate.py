@@ -205,13 +205,19 @@ EVALUATE_OPTIONS = [
         "--mr-fwer",
         is_flag=True,
         default=False,
-        help="Apply Holm-Bonferroni correction to metamorphic relation p-values.",
+        help="Apply Holm-Bonferroni correction to metamorphic relation p-values (default: enabled).",
     ),
     click.option(
         "--mr-fdr",
         is_flag=True,
         default=False,
-        help="Apply Benjamini-Hochberg FDR correction to metamorphic relation p-values.",
+        help="Apply Benjamini-Hochberg FDR correction to metamorphic relation p-values (alternative to FWER).",
+    ),
+    click.option(
+        "--no-mr-correction",
+        is_flag=True,
+        default=False,
+        help="Disable multiple comparisons correction for metamorphic relations (not recommended).",
     ),
     click.option(
         "--alert-webhook",
@@ -340,6 +346,7 @@ def evaluate_command(
     monitor_names: Sequence[str],
     mr_fwer: bool,
     mr_fdr: bool,
+    no_mr_correction: bool,
     alert_webhooks: Sequence[str],
     sandbox_plugins: Optional[bool],
     allow_unsafe_plugins: bool,
@@ -514,11 +521,20 @@ def evaluate_command(
 
         if mr_fwer and mr_fdr:
             raise click.ClickException("Cannot combine --mr-fwer and --mr-fdr.")
+        if no_mr_correction and (mr_fwer or mr_fdr):
+            raise click.ClickException("Cannot use --no-mr-correction with --mr-fwer or --mr-fdr.")
+        
+        # Default to Holm correction unless explicitly disabled or FDR requested
         relation_correction = None
-        if mr_fwer:
+        if no_mr_correction:
+            relation_correction = None
+        elif mr_fwer:
             relation_correction = "holm"
         elif mr_fdr:
             relation_correction = "fdr"
+        else:
+            # Default: apply Holm correction
+            relation_correction = "holm"
 
         from ..monitoring import resolve_monitors
         monitor_objects = []
