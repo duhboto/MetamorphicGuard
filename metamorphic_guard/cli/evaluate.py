@@ -208,6 +208,12 @@ EVALUATE_OPTIONS = [
         help="Apply Holm-Bonferroni correction to metamorphic relation p-values (default: enabled).",
     ),
     click.option(
+        "--mr-hochberg",
+        is_flag=True,
+        default=False,
+        help="Apply Hochberg step-down correction to metamorphic relation p-values (more powerful than Holm).",
+    ),
+    click.option(
         "--mr-fdr",
         is_flag=True,
         default=False,
@@ -351,6 +357,7 @@ def evaluate_command(
     queue_config: str | None,
     monitor_names: Sequence[str],
     mr_fwer: bool,
+    mr_hochberg: bool,
     mr_fdr: bool,
     no_mr_correction: bool,
     alert_webhooks: Sequence[str],
@@ -583,17 +590,19 @@ def evaluate_command(
             effective_sandbox = False
             click.echo("⚠️  Warning: Unsafe plugins enabled (sandboxing disabled)", err=True)
 
-        if mr_fwer and mr_fdr:
-            raise click.ClickException("Cannot combine --mr-fwer and --mr-fdr.")
-        if no_mr_correction and (mr_fwer or mr_fdr):
-            raise click.ClickException("Cannot use --no-mr-correction with --mr-fwer or --mr-fdr.")
+        if sum([mr_fwer, mr_hochberg, mr_fdr]) > 1:
+            raise click.ClickException("Cannot combine --mr-fwer, --mr-hochberg, and --mr-fdr. Choose one.")
+        if no_mr_correction and (mr_fwer or mr_hochberg or mr_fdr):
+            raise click.ClickException("Cannot use --no-mr-correction with --mr-fwer, --mr-hochberg, or --mr-fdr.")
         
-        # Default to Holm correction unless explicitly disabled or FDR requested
+        # Default to Holm correction unless explicitly disabled or another method requested
         relation_correction = None
         if no_mr_correction:
             relation_correction = None
         elif mr_fwer:
             relation_correction = "holm"
+        elif mr_hochberg:
+            relation_correction = "hochberg"
         elif mr_fdr:
             relation_correction = "fdr"
         else:

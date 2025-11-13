@@ -80,9 +80,11 @@ class EvaluatorConfig(BaseModel):
             return None
         if normalized in {"holm", "holm-bonferroni"}:
             return "holm"
+        if normalized == "hochberg":
+            return "hochberg"
         if normalized in {"fdr", "bh", "benjamini-hochberg"}:
             return "fdr"
-        raise ValueError("relation_correction must be one of: holm, fdr, none.")
+        raise ValueError("relation_correction must be one of: holm, hochberg, fdr, none.")
 
 
 class ConfigLoadError(Exception):

@@ -498,7 +498,16 @@ def summarize_relations(
 
     correction_metadata: Optional[Dict[str, Any]] = None
     if relation_summary and relation_correction and relation_p_values:
-        correction_method = "holm" if relation_correction == "holm" else "fdr"
+        if relation_correction == "holm":
+            correction_method = "holm"
+            method_name = "holm-bonferroni"
+        elif relation_correction == "hochberg":
+            correction_method = "hochberg"
+            method_name = "hochberg"
+        else:  # fdr
+            correction_method = "fdr"
+            method_name = "benjamini-hochberg"
+        
         corrected = apply_multiple_comparisons_correction(
             relation_p_values,
             method=correction_method,
@@ -508,9 +517,7 @@ def summarize_relations(
             relation_summary[index]["adjusted_p_value"] = adjusted_p
             relation_summary[index]["significant"] = significant
         correction_metadata = {
-            "method": "holm-bonferroni"
-            if relation_correction == "holm"
-            else "benjamini-hochberg",
+            "method": method_name,
             "alpha": alpha,
         }
 
