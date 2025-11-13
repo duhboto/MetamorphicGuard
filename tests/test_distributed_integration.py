@@ -14,7 +14,6 @@ from metamorphic_guard.dispatch_queue import QueueDispatcher
 from metamorphic_guard.harness import run_eval
 
 
-@pytest.mark.integration
 class TestDistributedExecution:
     """Integration tests for distributed execution scenarios."""
 
