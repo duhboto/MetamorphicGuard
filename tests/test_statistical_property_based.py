@@ -83,29 +83,29 @@ if HYPOTHESIS_AVAILABLE:
         candidate_total: int,
         alpha: float,
     ) -> None:
-        """Test that Newcombe CI has correct properties."""
-        if baseline_passes > baseline_total or candidate_passes > candidate_total:
+            """Test that Newcombe CI has correct properties."""
+            if baseline_passes > baseline_total or candidate_passes > candidate_total:
             return
         
-        ci = compute_newcombe_ci(
+            ci = compute_newcombe_ci(
             baseline_passes,
             baseline_total,
             candidate_passes,
             candidate_total,
             alpha=alpha,
-        )
+            )
         
-        # Property 1: Lower bound <= upper bound
-        assert ci[0] <= ci[1]
+            # Property 1: Lower bound <= upper bound
+            assert ci[0] <= ci[1]
         
-        # Property 2: CI contains observed delta (approximately)
-        p_b = baseline_passes / baseline_total if baseline_total > 0 else 0.0
-        p_c = candidate_passes / candidate_total if candidate_total > 0 else 0.0
-        delta = p_c - p_b
+            # Property 2: CI contains observed delta (approximately)
+            p_b = baseline_passes / baseline_total if baseline_total > 0 else 0.0
+            p_c = candidate_passes / candidate_total if candidate_total > 0 else 0.0
+            delta = p_c - p_b
         
-        # Delta should be within CI bounds (with some margin for approximation)
-        assert ci[0] <= delta + 0.2
-        assert ci[1] >= delta - 0.2
+            # Delta should be within CI bounds (with some margin for approximation)
+            assert ci[0] <= delta + 0.2
+            assert ci[1] >= delta - 0.2
 
         @given(
             values=st.lists(st.floats(min_value=0.0, max_value=100.0), min_size=1, max_size=100),
@@ -148,38 +148,38 @@ if HYPOTHESIS_AVAILABLE:
         alpha: float,
         seed: int,
     ) -> None:
-        """Test that bootstrap CI has correct properties."""
-        # Ensure same length
-        n = min(len(baseline_indicators), len(candidate_indicators))
-        if n < 10:
+            """Test that bootstrap CI has correct properties."""
+            # Ensure same length
+            n = min(len(baseline_indicators), len(candidate_indicators))
+            if n < 10:
             return
         
-        baseline = baseline_indicators[:n]
-        candidate = candidate_indicators[:n]
+            baseline = baseline_indicators[:n]
+            candidate = candidate_indicators[:n]
         
-        ci = compute_bootstrap_ci(
+            ci = compute_bootstrap_ci(
             baseline,
             candidate,
             alpha=alpha,
             seed=seed,
             samples=100,  # Reduced for faster tests
-        )
+            )
         
-        # Property 1: Lower bound <= upper bound
-        assert ci[0] <= ci[1]
+            # Property 1: Lower bound <= upper bound
+            assert ci[0] <= ci[1]
         
-        # Property 2: CI bounds are reasonable (within [-1, 1] for pass rate delta)
-        assert -1.0 <= ci[0] <= 1.0
-        assert -1.0 <= ci[1] <= 1.0
+            # Property 2: CI bounds are reasonable (within [-1, 1] for pass rate delta)
+            assert -1.0 <= ci[0] <= 1.0
+            assert -1.0 <= ci[1] <= 1.0
         
-        # Property 3: CI contains observed delta (approximately)
-        p_b = sum(baseline) / len(baseline) if baseline else 0.0
-        p_c = sum(candidate) / len(candidate) if candidate else 0.0
-        delta = p_c - p_b
+            # Property 3: CI contains observed delta (approximately)
+            p_b = sum(baseline) / len(baseline) if baseline else 0.0
+            p_c = sum(candidate) / len(candidate) if candidate else 0.0
+            delta = p_c - p_b
         
-        # Delta should be within CI (with margin for bootstrap variance)
-        assert ci[0] <= delta + 0.3
-        assert ci[1] >= delta - 0.3
+            # Delta should be within CI (with margin for bootstrap variance)
+            assert ci[0] <= delta + 0.3
+            assert ci[1] >= delta - 0.3
 
         @given(
             baseline_indicators=st.lists(st.integers(min_value=0, max_value=1), min_size=10, max_size=50),
@@ -191,37 +191,37 @@ if HYPOTHESIS_AVAILABLE:
         baseline_indicators: List[int],
         candidate_indicators: List[int],
     ) -> None:
-        """Test that paired stats have correct properties."""
-        n = min(len(baseline_indicators), len(candidate_indicators))
-        if n < 10:
+            """Test that paired stats have correct properties."""
+            n = min(len(baseline_indicators), len(candidate_indicators))
+            if n < 10:
             return
         
-        baseline = baseline_indicators[:n]
-        candidate = candidate_indicators[:n]
+            baseline = baseline_indicators[:n]
+            candidate = candidate_indicators[:n]
         
-        stats = compute_paired_stats(baseline, candidate)
+            stats = compute_paired_stats(baseline, candidate)
         
-        if stats is None:
+            if stats is None:
             return
         
-        # Property 1: Delta is in [-1, 1]
-        assert -1.0 <= stats["delta"] <= 1.0
+            # Property 1: Delta is in [-1, 1]
+            assert -1.0 <= stats["delta"] <= 1.0
         
-        # Property 2: Total matches input length
-        assert stats["total"] == n
+            # Property 2: Total matches input length
+            assert stats["total"] == n
         
-        # Property 3: Counts sum correctly
-        total_counted = (
+            # Property 3: Counts sum correctly
+            total_counted = (
             stats["both_pass"] + stats["both_fail"] + stats["baseline_only"] + stats["candidate_only"]
-        )
-        assert total_counted == n
+            )
+            assert total_counted == n
         
-        # Property 4: Discordant pairs are non-negative
-        assert stats["discordant"] >= 0
-        assert stats["discordant"] == stats["baseline_only"] + stats["candidate_only"]
+            # Property 4: Discordant pairs are non-negative
+            assert stats["discordant"] >= 0
+            assert stats["discordant"] == stats["baseline_only"] + stats["candidate_only"]
         
-        # Property 5: P-value is in [0, 1]
-        assert 0.0 <= stats["mcnemar_p"] <= 1.0
+            # Property 5: P-value is in [0, 1]
+            assert 0.0 <= stats["mcnemar_p"] <= 1.0
 
         @given(
             p_baseline=st.floats(min_value=0.1, max_value=0.9),
@@ -241,26 +241,26 @@ if HYPOTHESIS_AVAILABLE:
         delta_value: float,
         power_target: float,
     ) -> None:
-        """Test that power estimation has correct properties."""
-        power, recommended_n = estimate_power(
+            """Test that power estimation has correct properties."""
+            power, recommended_n = estimate_power(
             p_baseline,
             p_candidate,
             sample_size,
             alpha,
             delta_value,
             power_target,
-        )
+            )
         
-        # Property 1: Power is in [0, 1]
-        assert 0.0 <= power <= 1.0
+            # Property 1: Power is in [0, 1]
+            assert 0.0 <= power <= 1.0
         
-        # Property 2: Recommended n is positive
-        if recommended_n is not None:
+            # Property 2: Recommended n is positive
+            if recommended_n is not None:
             assert recommended_n > 0
         
-        # Property 3: Larger sample size generally increases power
-        # (tested by comparing with larger sample)
-        if sample_size < 500:
+            # Property 3: Larger sample size generally increases power
+            # (tested by comparing with larger sample)
+            if sample_size < 500:
             power2, _ = estimate_power(
                 p_baseline,
                 p_candidate,
@@ -284,41 +284,41 @@ if HYPOTHESIS_AVAILABLE:
         total: int,
         alpha: float,
     ) -> None:
-        """Test that Bayesian CI has correct properties."""
-        if successes > total:
+            """Test that Bayesian CI has correct properties."""
+            if successes > total:
             return
         
-        # Test with uniform prior
-        ci_uniform = compute_bayesian_ci(
+            # Test with uniform prior
+            ci_uniform = compute_bayesian_ci(
             successes,
             total,
             alpha=alpha,
             prior="uniform",
-        )
+            )
         
-        # Property 1: Lower bound <= upper bound
-        assert ci_uniform[0] <= ci_uniform[1]
+            # Property 1: Lower bound <= upper bound
+            assert ci_uniform[0] <= ci_uniform[1]
         
-        # Property 2: Both bounds are in [0, 1]
-        assert 0.0 <= ci_uniform[0] <= 1.0
-        assert 0.0 <= ci_uniform[1] <= 1.0
+            # Property 2: Both bounds are in [0, 1]
+            assert 0.0 <= ci_uniform[0] <= 1.0
+            assert 0.0 <= ci_uniform[1] <= 1.0
         
-        # Property 3: CI contains sample proportion (approximately)
-        p_hat = successes / total if total > 0 else 0.0
-        assert ci_uniform[0] <= p_hat + 0.2
-        assert ci_uniform[1] >= p_hat - 0.2
+            # Property 3: CI contains sample proportion (approximately)
+            p_hat = successes / total if total > 0 else 0.0
+            assert ci_uniform[0] <= p_hat + 0.2
+            assert ci_uniform[1] >= p_hat - 0.2
         
-        # Test with Jeffreys prior
-        ci_jeffreys = compute_bayesian_ci(
+            # Test with Jeffreys prior
+            ci_jeffreys = compute_bayesian_ci(
             successes,
             total,
             alpha=alpha,
             prior="jeffreys",
-        )
+            )
         
-        assert ci_jeffreys[0] <= ci_jeffreys[1]
-        assert 0.0 <= ci_jeffreys[0] <= 1.0
-        assert 0.0 <= ci_jeffreys[1] <= 1.0
+            assert ci_jeffreys[0] <= ci_jeffreys[1]
+            assert 0.0 <= ci_jeffreys[0] <= 1.0
+            assert 0.0 <= ci_jeffreys[1] <= 1.0
 else:
     # Dummy class to avoid import errors when Hypothesis is not available
     class TestStatisticalProperties:
