@@ -186,3 +186,56 @@ def test_run_with_config_sends_alerts(monkeypatch, task_spec):
     assert captured["metadata"]["task"] == "api_test_task"
     assert captured["metadata"]["pipeline"] == "ci"
 
+
+def test_run_with_config_observability(monkeypatch, task_spec, tmp_path):
+    calls: Dict[str, Any] = {}
+
+    def fake_logging(*, enabled=None, stream=None, context=None, path=None):
+        calls["logging"] = {"enabled": enabled, "path": path, "context": context}
+
+    def fake_close_logging():
+        calls["closed"] = True
+
+    def fake_metrics(*, enabled=None, port=None, host="0.0.0.0"):
+        calls["metrics"] = {"enabled": enabled, "port": port, "host": host}
+
+    monkeypatch.setattr("metamorphic_guard.api.configure_logging", fake_logging)
+    monkeypatch.setattr("metamorphic_guard.api.close_logging", fake_close_logging)
+    monkeypatch.setattr("metamorphic_guard.api.configure_metrics", fake_metrics)
+
+    mapping = {
+        "metamorphic_guard": {
+            "task": "api_test_task",
+            "baseline": "tests.callable_fixtures:baseline_callable",
+            "candidate": "tests.callable_fixtures:baseline_callable",
+            "n": 1,
+            "seed": 5,
+            "min_delta": 0.0,
+            "log_json": True,
+            "log_file": str(tmp_path / "run.jsonl"),
+            "metrics_enabled": True,
+            "metrics_port": 9100,
+            "metrics_host": "127.0.0.1",
+        }
+    }
+
+    result = run_with_config(
+        mapping,
+        task=task_spec,
+        logging_enabled=False,
+        log_path=tmp_path / "override.jsonl",
+        log_context={"job": "ci"},
+        metrics_enabled=True,
+        metrics_port=9200,
+        metrics_host="127.0.0.2",
+    )
+
+    assert result.adopt is True
+    assert calls["logging"]["enabled"] is False
+    assert Path(calls["logging"]["path"]) == tmp_path / "override.jsonl"
+    assert calls["logging"]["context"] == {"job": "ci"}
+    assert calls["metrics"]["enabled"] is True
+    assert calls["metrics"]["port"] == 9200
+    assert calls["metrics"]["host"] == "127.0.0.2"
+    assert calls["closed"] is True
+

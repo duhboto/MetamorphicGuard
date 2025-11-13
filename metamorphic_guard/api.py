@@ -9,15 +9,17 @@ from __future__ import annotations
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union, Mapping
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union, Mapping, Iterator
 import uuid
 import importlib
 import inspect
 import tempfile
 import logging
+
 from .config import EvaluatorConfig, load_config
 from .policy import PolicyLoadError, PolicyParseError, resolve_policy_option
 from .notifications import collect_alerts, send_webhook_alerts
+from .observability import configure_logging, configure_metrics, close_logging
 
 from .harness import run_eval
 from .specs import MetamorphicRelation, Metric, Property, Spec, register_spec, unregister_spec
@@ -304,6 +306,43 @@ def _existing_specs() -> Sequence[str]:
     return list_tasks()
 
 
+@contextmanager
+def _observability_context(
+    *,
+    logging_enabled: Optional[bool] = None,
+    log_path: Optional[str | Path] = None,
+    log_context: Optional[Mapping[str, Any]] = None,
+    metrics_enabled: Optional[bool] = None,
+    metrics_port: Optional[int] = None,
+    metrics_host: Optional[str] = None,
+) -> Iterator[None]:
+    """Configure logging/metrics similarly to the CLI, then restore state."""
+
+    configure_logging(
+        enabled=logging_enabled,
+        path=log_path,
+        context=dict(log_context) if log_context else None,
+    )
+
+    metrics_host = metrics_host or "0.0.0.0"
+    if metrics_enabled or metrics_port is not None:
+        configure_metrics(
+            enabled=metrics_enabled if metrics_enabled is not None else True,
+            port=metrics_port,
+            host=metrics_host,
+        )
+    elif metrics_enabled is not None:
+        configure_metrics(enabled=metrics_enabled)
+
+    try:
+        yield
+    finally:
+        try:
+            close_logging()
+        except Exception:  # pragma: no cover - defensive logging cleanup
+            logger.exception("Failed to close logging")
+
+
 def _dispatch_alerts(
     result: Dict[str, Any],
     alert_webhooks: Optional[Sequence[str]],
@@ -336,7 +375,7 @@ def _dispatch_alerts(
         logger.exception("Failed to dispatch alert webhooks")
 
 
-def _evaluation_config_from_evaluator(cfg: EvaluatorConfig) -> EvaluationConfig:
+def _evaluation_config_from_evaluator(cfg: EvaluatorConfig) -> Tuple[EvaluationConfig, Dict[str, Any]]:
     extra_options: Dict[str, Any] = {}
     improve_delta = cfg.min_delta
     alpha = cfg.alpha
@@ -359,6 +398,15 @@ def _evaluation_config_from_evaluator(cfg: EvaluatorConfig) -> EvaluationConfig:
         extra_options["executor"] = cfg.executor
     if cfg.executor_config is not None:
         extra_options["executor_config"] = cfg.executor_config
+
+    observability: Dict[str, Any] = {
+        "logging_enabled": cfg.log_json,
+        "log_path": cfg.log_file,
+        "log_context": None,
+        "metrics_enabled": cfg.metrics_enabled,
+        "metrics_port": cfg.metrics_port,
+        "metrics_host": cfg.metrics_host,
+    }
 
     if cfg.policy:
         try:
@@ -413,7 +461,7 @@ def _evaluation_config_from_evaluator(cfg: EvaluatorConfig) -> EvaluationConfig:
         failed_artifact_limit=cfg.failed_artifact_limit,
         failed_artifact_ttl_days=cfg.failed_artifact_ttl_days,
         extra_options=extra_options,
-    )
+    ), observability
 
 
 def run(
@@ -424,6 +472,12 @@ def run(
     *,
     alert_webhooks: Optional[Sequence[str]] = None,
     alert_metadata: Optional[Mapping[str, Any]] = None,
+    logging_enabled: Optional[bool] = None,
+    log_path: Optional[str | Path] = None,
+    log_context: Optional[Mapping[str, Any]] = None,
+    metrics_enabled: Optional[bool] = None,
+    metrics_port: Optional[int] = None,
+    metrics_host: Optional[str] = None,
 ) -> EvaluationResult:
     """
     Execute baseline vs candidate under the provided task.
@@ -431,16 +485,24 @@ def run(
 
     cfg = config or EvaluationConfig()
 
-    with _registered_spec(task) as task_name, ExitStack() as stack:
-        baseline_path = stack.enter_context(baseline.materialize())
-        candidate_path = stack.enter_context(candidate.materialize())
-        kwargs = cfg.to_kwargs()
-        report = run_eval(
-            task_name=task_name,
-            baseline_path=baseline_path,
-            candidate_path=candidate_path,
-            **kwargs,
-        )
+    with _observability_context(
+        logging_enabled=logging_enabled,
+        log_path=log_path,
+        log_context=log_context,
+        metrics_enabled=metrics_enabled,
+        metrics_port=metrics_port,
+        metrics_host=metrics_host,
+    ):
+        with _registered_spec(task) as task_name, ExitStack() as stack:
+            baseline_path = stack.enter_context(baseline.materialize())
+            candidate_path = stack.enter_context(candidate.materialize())
+            kwargs = cfg.to_kwargs()
+            report = run_eval(
+                task_name=task_name,
+                baseline_path=baseline_path,
+                candidate_path=candidate_path,
+                **kwargs,
+            )
 
     _dispatch_alerts(report, alert_webhooks, alert_metadata)
 
@@ -453,6 +515,12 @@ def run_with_config(
     task: TaskSpec,
     alert_webhooks: Optional[Sequence[str]] = None,
     alert_metadata: Optional[Mapping[str, Any]] = None,
+    logging_enabled: Optional[bool] = None,
+    log_path: Optional[str | Path] = None,
+    log_context: Optional[Mapping[str, Any]] = None,
+    metrics_enabled: Optional[bool] = None,
+    metrics_port: Optional[int] = None,
+    metrics_host: Optional[str] = None,
 ) -> EvaluationResult:
     """
     Execute an evaluation described by a TOML configuration file.
@@ -477,7 +545,20 @@ def run_with_config(
 
     baseline_impl = Implementation.from_specifier(config.baseline)
     candidate_impl = Implementation.from_specifier(config.candidate)
-    eval_cfg = _evaluation_config_from_evaluator(config)
+    eval_cfg, observability = _evaluation_config_from_evaluator(config)
+
+    if logging_enabled is not None:
+        observability["logging_enabled"] = logging_enabled
+    if log_path is not None:
+        observability["log_path"] = log_path
+    if log_context is not None:
+        observability["log_context"] = log_context
+    if metrics_enabled is not None:
+        observability["metrics_enabled"] = metrics_enabled
+    if metrics_port is not None:
+        observability["metrics_port"] = metrics_port
+    if metrics_host is not None:
+        observability["metrics_host"] = metrics_host
 
     return run(
         task=task,
@@ -486,6 +567,7 @@ def run_with_config(
         config=eval_cfg,
         alert_webhooks=alert_webhooks,
         alert_metadata=alert_metadata,
+        **observability,
     )
 
 
