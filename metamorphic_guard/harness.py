@@ -13,6 +13,7 @@ from collections import defaultdict
 from statistics import NormalDist
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+import warnings
 
 from .sandbox import run_in_sandbox
 from .specs import Metric, Spec, get_task
@@ -233,7 +234,7 @@ def _prepare_execution_plan(
         task=task_name,
         total_cases=len(test_inputs),
         dispatcher=getattr(dispatcher_obj, "kind", "local"),
-        executor=executor,
+            executor=executor,
     )
 
     return ExecutionPlan(
@@ -255,8 +256,16 @@ def _execute_implementations(
     mem_mb: int,
     executor: Optional[str],
     executor_config: Dict[str, Any] | None,
+    baseline_executor: Optional[str],
+    baseline_executor_config: Dict[str, Any] | None,
+    candidate_executor: Optional[str],
+    candidate_executor_config: Dict[str, Any] | None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    def make_runner(file_path: str) -> Callable[[int, Tuple[Any, ...]], Dict[str, Any]]:
+    def make_runner(
+        file_path: str,
+        role_executor: Optional[str],
+        role_executor_config: Dict[str, Any] | None,
+    ) -> Callable[[int, Tuple[Any, ...]], Dict[str, Any]]:
         def _run_case(index: int, call_args: Tuple[Any, ...]) -> Dict[str, Any]:
             return run_in_sandbox(
                 file_path,
@@ -264,8 +273,8 @@ def _execute_implementations(
                 call_args,
                 timeout_s,
                 mem_mb,
-                executor=executor,
-                executor_config=executor_config,
+                executor=role_executor,
+                executor_config=role_executor_config,
             )
 
         return _run_case
@@ -274,30 +283,49 @@ def _execute_implementations(
     monitors = plan.monitors
     test_inputs = plan.test_inputs
 
+    baseline_effective_executor = baseline_executor if baseline_executor is not None else executor
+    baseline_effective_config = (
+        baseline_executor_config if baseline_executor_config is not None else executor_config
+    )
+    candidate_effective_executor = (
+        candidate_executor if candidate_executor is not None else executor
+    )
+    candidate_effective_config = (
+        candidate_executor_config if candidate_executor_config is not None else executor_config
+    )
+
     baseline_results = dispatcher_obj.execute(
         test_inputs=test_inputs,
-        run_case=make_runner(baseline_path),
+        run_case=make_runner(
+            baseline_path,
+            baseline_effective_executor,
+            baseline_effective_config,
+        ),
         role="baseline",
         monitors=monitors,
         call_spec=_build_call_spec(
             baseline_path,
             timeout_s=timeout_s,
             mem_mb=mem_mb,
-            executor=executor,
-            executor_config=executor_config,
+            executor=baseline_effective_executor,
+            executor_config=baseline_effective_config,
         ),
     )
     candidate_results = dispatcher_obj.execute(
         test_inputs=test_inputs,
-        run_case=make_runner(candidate_path),
+        run_case=make_runner(
+            candidate_path,
+            candidate_effective_executor,
+            candidate_effective_config,
+        ),
         role="candidate",
         monitors=monitors,
         call_spec=_build_call_spec(
             candidate_path,
             timeout_s=timeout_s,
             mem_mb=mem_mb,
-            executor=executor,
-            executor_config=executor_config,
+            executor=candidate_effective_executor,
+            executor_config=candidate_effective_config,
         ),
     )
     return baseline_results, candidate_results
@@ -601,7 +629,6 @@ def _bootstrap_metric_delta(
             "upper": upper_mean,
         },
     }
-
     if kind == "sum":
         observed_sum = observed_mean * count
         lower_sum = lower_mean * count
@@ -733,12 +760,16 @@ def run_eval(
     alpha: float = 0.05,
     violation_cap: int = 25,
     parallel: int | None = None,
-    improve_delta: float = 0.02,
+    min_delta: float = 0.02,
     bootstrap_samples: int = 1000,
     ci_method: str = "bootstrap",
     rr_ci_method: str = "log",
     executor: str | None = None,
     executor_config: Dict[str, Any] | None = None,
+    baseline_executor: str | None = None,
+    candidate_executor: str | None = None,
+    baseline_executor_config: Dict[str, Any] | None = None,
+    candidate_executor_config: Dict[str, Any] | None = None,
     dispatcher: Dispatcher | str | None = None,
     queue_config: Dict[str, Any] | None = None,
     monitors: Sequence[Monitor] | None = None,
@@ -754,13 +785,35 @@ def run_eval(
     max_looks: int = 1,
     look_number: int = 1,
     relation_correction: Optional[str] = None,
+    **deprecated_kwargs: Any,
 ) -> Dict[str, Any]:
     """
     Run evaluation comparing baseline and candidate implementations.
 
     Returns comprehensive metrics including bootstrap confidence intervals.
     """
+    if "improve_delta" in deprecated_kwargs:
+        warnings.warn(
+            "The 'improve_delta' argument to run_eval is deprecated; use 'min_delta' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        min_delta = deprecated_kwargs.pop("improve_delta")
+    if deprecated_kwargs:
+        unexpected = ", ".join(sorted(deprecated_kwargs))
+        raise TypeError(f"run_eval() got unexpected keyword arguments: {unexpected}")
+
     spec = get_task(task_name)
+
+    baseline_exec = baseline_executor or executor
+    candidate_exec = candidate_executor or executor
+
+    baseline_exec_config = (
+        baseline_executor_config if baseline_executor_config is not None else executor_config
+    )
+    candidate_exec_config = (
+        candidate_executor_config if candidate_executor_config is not None else executor_config
+    )
 
     plan = _prepare_execution_plan(
         task_name=task_name,
@@ -772,7 +825,7 @@ def run_eval(
         queue_config=queue_config,
         monitors=monitors,
         explicit_inputs=explicit_inputs,
-        executor=executor,
+        executor=candidate_exec or baseline_exec,
     )
 
     test_inputs = plan.test_inputs
@@ -790,6 +843,10 @@ def run_eval(
         mem_mb=mem_mb,
         executor=executor,
         executor_config=executor_config,
+        baseline_executor=baseline_executor,
+        baseline_executor_config=baseline_executor_config,
+        candidate_executor=candidate_executor,
+        candidate_executor_config=candidate_executor_config,
     )
     baseline_runtime_meta = next(
         (
@@ -910,15 +967,22 @@ def run_eval(
             "sequential_method": sequential_method,
             "max_looks": max_looks,
             "look_number": look_number,
-            "improve_delta": improve_delta,
+            "min_delta": min_delta,
+            "improve_delta": min_delta,  # Deprecated alias for backwards compatibility
             "min_pass_rate": min_pass_rate,
             "violation_cap": violation_cap,
             "parallel": worker_count,
             "bootstrap_samples": bootstrap_samples,
             "ci_method": ci_method,
             "rr_ci_method": rr_ci_method,
-            "executor": executor,
-            "executor_config": _serialize_for_report(executor_config),
+            "executor": executor or candidate_exec or baseline_exec,
+            "executor_config": _serialize_for_report(
+                executor_config if executor_config is not None else candidate_exec_config
+            ),
+            "baseline_executor": baseline_exec or executor,
+            "candidate_executor": candidate_exec or executor,
+            "baseline_executor_config": _serialize_for_report(baseline_exec_config),
+            "candidate_executor_config": _serialize_for_report(candidate_exec_config),
             "dispatcher": getattr(dispatcher_obj, "kind", "local"),
             "queue_config": _serialize_for_report(queue_config),
             "relation_correction": relation_correction,
@@ -975,7 +1039,7 @@ def run_eval(
             policy_gate = policy_config.get("policy")
         result["decision"] = decide_adopt(
             result,
-            improve_delta=improve_delta,
+            min_delta=min_delta,
             min_pass_rate=min_pass_rate,
             policy=policy_gate,
         )
@@ -999,14 +1063,14 @@ def run_eval(
         candidate_metrics["pass_rate"],
         n,
         alpha,
-        improve_delta,
+        min_delta,
         power_target,
     )
     result["statistics"] = {
         "power_estimate": power_estimate,
         "power_target": power_target,
         "recommended_n": recommended_n,
-        "min_delta": improve_delta,
+        "min_delta": min_delta,
         "alpha": alpha,
     }
     if paired_stats:
@@ -1086,7 +1150,9 @@ def run_eval(
         provenance_data["spec_fingerprint"] = result["spec_fingerprint"]
 
     sandbox_provenance: Dict[str, Any] = {
-        "executor": executor or "local",
+        "executor": result["config"]["executor"] or "local",
+        "baseline_executor": result["config"].get("baseline_executor") or "local",
+        "candidate_executor": result["config"].get("candidate_executor") or "local",
         "timeout_s": timeout_s,
         "mem_mb": mem_mb,
         "call_spec": {
@@ -1103,6 +1169,18 @@ def run_eval(
         sandbox_provenance["executor_config"] = sanitized_executor_config
         sandbox_provenance["executor_config_fingerprint"] = _fingerprint_payload(
             sanitized_executor_config
+        )
+    baseline_executor_config_payload = result["config"].get("baseline_executor_config")
+    if baseline_executor_config_payload is not None:
+        sandbox_provenance["baseline_executor_config"] = baseline_executor_config_payload
+        sandbox_provenance["baseline_executor_config_fingerprint"] = _fingerprint_payload(
+            baseline_executor_config_payload
+        )
+    candidate_executor_config_payload = result["config"].get("candidate_executor_config")
+    if candidate_executor_config_payload is not None:
+        sandbox_provenance["candidate_executor_config"] = candidate_executor_config_payload
+        sandbox_provenance["candidate_executor_config_fingerprint"] = _fingerprint_payload(
+            candidate_executor_config_payload
         )
     runtime_metadata: Dict[str, Any] = {}
     if baseline_runtime_meta:

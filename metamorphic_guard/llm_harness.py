@@ -131,12 +131,12 @@ class LLMHarness:
         else:
             raise ValueError(f"Invalid case type: {type(case)}")
 
-        # Use baseline overrides if provided, otherwise use candidate values
+        candidate_system_prompt = candidate_system
         baseline_model = baseline_model or self.model
-        baseline_system = baseline_system or candidate_system
+        baseline_system_prompt = baseline_system if baseline_system is not None else candidate_system_prompt
 
-        # Create input generator (use candidate system for test inputs)
-        gen_inputs_fn = simple_llm_inputs(prompts, candidate_system)
+        # Create input generator (system prompts are supplied via executor configs)
+        gen_inputs_fn = simple_llm_inputs(prompts)
 
         # Create task spec
         spec = create_llm_spec(
@@ -169,15 +169,23 @@ class LLMHarness:
                 baseline_file = tmp_path / "baseline.txt"
                 candidate_file = tmp_path / "candidate.txt"
                 
-                baseline_file.write_text(baseline_system or "", encoding="utf-8")
-                candidate_file.write_text(candidate_system or "", encoding="utf-8")
+                baseline_file.write_text(baseline_system_prompt or "", encoding="utf-8")
+                candidate_file.write_text(candidate_system_prompt or "", encoding="utf-8")
 
                 # Create separate executor configs for baseline and candidate
-                baseline_config = (self.executor_config or {}).copy()
+                baseline_config = dict(self.executor_config or {})
                 baseline_config["model"] = baseline_model
-                
-                candidate_config = (self.executor_config or {}).copy()
+                if baseline_system_prompt is not None:
+                    baseline_config["system_prompt"] = baseline_system_prompt
+
+                candidate_config = dict(self.executor_config or {})
                 candidate_config["model"] = self.model
+                if candidate_system_prompt is not None:
+                    candidate_config["system_prompt"] = candidate_system_prompt
+
+                baseline_executor_name = baseline_config.get("provider", self.executor)
+                candidate_executor_name = candidate_config.get("provider", self.executor)
+                primary_executor_name = candidate_executor_name or baseline_executor_name or self.executor
 
                 # Run evaluation
                 result = run_eval(
@@ -186,8 +194,11 @@ class LLMHarness:
                     candidate_path=str(candidate_file),
                     n=n,
                     seed=seed,
-                    executor=self.executor,
-                    executor_config=candidate_config,  # Use candidate config (baseline handled via func_name)
+                    executor=primary_executor_name,
+                    baseline_executor=baseline_executor_name,
+                    candidate_executor=candidate_executor_name,
+                    baseline_executor_config=baseline_config,
+                    candidate_executor_config=candidate_config,
                     bootstrap_samples=1000 if bootstrap else 0,
                     **kwargs,
                 )

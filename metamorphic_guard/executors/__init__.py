@@ -47,6 +47,7 @@ class LLMExecutor(Executor):
         self.max_tokens = config.get("max_tokens", 512) if config else 512
         self.temperature = config.get("temperature", 0.0) if config else 0.0
         self.seed = config.get("seed") if config else None
+        self.system_prompt = config.get("system_prompt") if config else None
 
     def execute(
         self,

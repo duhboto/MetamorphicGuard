@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import time
 from typing import Any, Dict, Optional
+from pathlib import Path
 
 from .__init__ import LLMExecutor
 from ..redaction import get_redactor
@@ -81,7 +82,22 @@ class OpenAIExecutor(LLMExecutor):
                 "error_code": "invalid_input",
             }
         
-        system_prompt = args[1] if len(args) > 1 else (file_path if file_path else None)
+        system_prompt = None
+        if len(args) > 1 and isinstance(args[1], str) and args[1].strip():
+            system_prompt = args[1]
+        elif isinstance(self.system_prompt, str) and self.system_prompt.strip():
+            system_prompt = self.system_prompt
+        elif isinstance(self.config.get("system_prompt"), str) and self.config["system_prompt"].strip():
+            system_prompt = self.config["system_prompt"]
+        elif file_path:
+            try:
+                path_obj = Path(file_path)
+                if path_obj.exists():
+                    system_prompt = path_obj.read_text(encoding="utf-8")
+                else:
+                    system_prompt = file_path
+            except Exception:
+                system_prompt = file_path
         
         # Validate model name (basic check)
         if not model or not isinstance(model, str):

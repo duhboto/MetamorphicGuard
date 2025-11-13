@@ -15,7 +15,15 @@ from metamorphic_guard.harness import (
     _evaluate_results,
     run_eval,
 )
-from metamorphic_guard.specs import Metric, MetamorphicRelation, Property, Spec, task
+from metamorphic_guard.specs import (
+    Metric,
+    MetamorphicRelation,
+    Property,
+    Spec,
+    task,
+    register_spec,
+    unregister_spec,
+)
 from metamorphic_guard.stability import multiset_equal
 
 
@@ -400,7 +408,7 @@ def test_run_eval_collects_metrics(tmp_path):
         candidate_path=str(candidate_file),
         n=5,
         seed=42,
-        improve_delta=0.0,
+        min_delta=0.0,
     )
 
     metrics = result.get("metrics")
@@ -536,3 +544,81 @@ def test_newcombe_ci_difference():
 
     assert rr > 1
     assert rr_ci[0] < rr_ci[1]
+
+
+def test_run_eval_uses_role_specific_executor_configs(monkeypatch, tmp_path):
+    """run_eval should dispatch role-specific executor configs to the sandbox."""
+
+    calls = []
+
+    def fake_run_in_sandbox(
+        file_path,
+        func_name,
+        call_args,
+        timeout_s,
+        mem_mb,
+        *,
+        executor=None,
+        executor_config=None,
+    ):
+        calls.append(
+            {
+                "executor": executor,
+                "config": dict(executor_config or {}),
+                "file_path": file_path,
+                "args": call_args,
+            }
+        )
+        return {
+            "success": True,
+            "result": {"value": executor_config.get("label") if executor_config else None},
+            "stdout": "",
+            "stderr": "",
+            "duration_ms": 1.0,
+        }
+
+    monkeypatch.setattr("metamorphic_guard.harness.run_in_sandbox", fake_run_in_sandbox)
+
+    spec = Spec(
+        gen_inputs=lambda n, seed: [(i,) for i in range(n)],
+        properties=[],
+        relations=[],
+        equivalence=lambda a, b: True,
+    )
+    register_spec("dummy_role_exec", spec, overwrite=True)
+
+    baseline_file = tmp_path / "baseline_impl.py"
+    candidate_file = tmp_path / "candidate_impl.py"
+    baseline_file.write_text("def solve(*args):\n    return 'baseline'\n", encoding="utf-8")
+    candidate_file.write_text("def solve(*args):\n    return 'candidate'\n", encoding="utf-8")
+
+    try:
+        report = run_eval(
+            task_name="dummy_role_exec",
+            baseline_path=str(baseline_file),
+            candidate_path=str(candidate_file),
+            n=2,
+            seed=0,
+            executor="default_exec",
+            baseline_executor="baseline_exec",
+            candidate_executor="candidate_exec",
+            baseline_executor_config={"label": "baseline_cfg"},
+            candidate_executor_config={"label": "candidate_cfg"},
+        )
+    finally:
+        unregister_spec("dummy_role_exec")
+
+    assert len(calls) == 4  # two baseline + two candidate executions
+    baseline_calls = [call for call in calls if call["executor"] == "baseline_exec"]
+    candidate_calls = [call for call in calls if call["executor"] == "candidate_exec"]
+
+    assert baseline_calls, "Expected baseline executions using baseline executor"
+    assert candidate_calls, "Expected candidate executions using candidate executor"
+
+    assert all(call["config"]["label"] == "baseline_cfg" for call in baseline_calls)
+    assert all(call["config"]["label"] == "candidate_cfg" for call in candidate_calls)
+
+    assert report["config"]["baseline_executor"] == "baseline_exec"
+    assert report["config"]["candidate_executor"] == "candidate_exec"
+    assert report["config"]["baseline_executor_config"]["label"] == "baseline_cfg"
+    assert report["config"]["candidate_executor_config"]["label"] == "candidate_cfg"
