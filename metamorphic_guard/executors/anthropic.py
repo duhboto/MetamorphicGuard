@@ -69,20 +69,24 @@ class AnthropicExecutor(LLMExecutor):
         """
         start_time = time.time()
         model = func_name if func_name else self.model
-        
-        # Validate inputs
-        user_prompt = args[0] if args else ""
-        if not isinstance(user_prompt, str) or not user_prompt.strip():
-            return {
+
+        def _validation_error(message: str, code: str) -> Dict[str, Any]:
+            payload = {
                 "success": False,
                 "duration_ms": 0.0,
                 "stdout": "",
-                "stderr": "Empty or invalid user prompt",
-                "error": "Empty or invalid user prompt",
+                "stderr": message,
+                "error": message,
                 "error_type": "ValidationError",
-                "error_code": "invalid_input",
+                "error_code": code,
             }
-        
+            return self._attach_retry_metadata(payload, attempts=0)
+
+        # Validate inputs
+        user_prompt = args[0] if args else ""
+        if not isinstance(user_prompt, str) or not user_prompt.strip():
+            return _validation_error("Empty or invalid user prompt", "invalid_input")
+
         system_prompt = None
         if len(args) > 1 and isinstance(args[1], str) and args[1].strip():
             system_prompt = args[1]
@@ -99,96 +103,91 @@ class AnthropicExecutor(LLMExecutor):
                     system_prompt = file_path
             except Exception:
                 system_prompt = file_path
-        
+
         # Validate model name
         if not model or not isinstance(model, str):
-            return {
-                "success": False,
-                "duration_ms": 0.0,
-                "stdout": "",
-                "stderr": f"Invalid model name: {model}",
-                "error": f"Invalid model name: {model}",
-                "error_type": "ValidationError",
-                "error_code": "invalid_model",
-            }
-        
+            return _validation_error(f"Invalid model name: {model}", "invalid_model")
+
         # Validate temperature range (Anthropic: 0-1)
         if self.temperature < 0 or self.temperature > 1:
-            return {
-                "success": False,
-                "duration_ms": 0.0,
-                "stdout": "",
-                "stderr": f"Temperature must be between 0 and 1, got {self.temperature}",
-                "error": f"Temperature must be between 0 and 1, got {self.temperature}",
-                "error_type": "ValidationError",
-                "error_code": "invalid_parameter",
-            }
-        
+            return _validation_error(
+                f"Temperature must be between 0 and 1, got {self.temperature}",
+                "invalid_parameter",
+            )
+
         # Validate max_tokens (Anthropic: 1-4096)
         if self.max_tokens <= 0 or self.max_tokens > 4096:
-            return {
-                "success": False,
-                "duration_ms": 0.0,
-                "stdout": "",
-                "stderr": f"max_tokens must be between 1 and 4096, got {self.max_tokens}",
-                "error": f"max_tokens must be between 1 and 4096, got {self.max_tokens}",
-                "error_type": "ValidationError",
-                "error_code": "invalid_parameter",
-            }
-
-        try:
-            result = self._call_llm(
-                prompt=user_prompt,
-                system_prompt=system_prompt,
-                model=model,
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                timeout=timeout_s,
+            return _validation_error(
+                f"max_tokens must be between 1 and 4096, got {self.max_tokens}",
+                "invalid_parameter",
             )
-            duration_ms = (time.time() - start_time) * 1000
 
-            return {
-                "success": True,
-                "duration_ms": duration_ms,
-                "stdout": result.get("content", ""),
-                "stderr": "",
-                "result": result.get("content"),
-                "tokens_prompt": result.get("tokens_prompt", 0),
-                "tokens_completion": result.get("tokens_completion", 0),
-                "tokens_total": result.get("tokens_total", 0),
-                "cost_usd": result.get("cost_usd", 0.0),
-                "finish_reason": result.get("finish_reason", "end_turn"),
-            }
-        except Exception as e:
-            duration_ms = (time.time() - start_time) * 1000
-            error_msg = str(e)
-            # Redact potential API keys from error messages
-            redacted_error = self._redactor.redact(error_msg)
-            
-            # Determine specific error code
-            error_code = "llm_api_error"
-            error_type = type(e).__name__
-            
-            # Handle specific Anthropic API errors
-            if hasattr(e, "status_code"):
-                if e.status_code == 401:
-                    error_code = "authentication_error"
-                elif e.status_code == 429:
-                    error_code = "rate_limit_error"
-                elif e.status_code == 400:
-                    error_code = "invalid_request"
-                elif e.status_code == 500:
-                    error_code = "api_server_error"
-            
-            return {
-                "success": False,
-                "duration_ms": duration_ms,
-                "stdout": "",
-                "stderr": redacted_error,
-                "error": redacted_error,
-                "error_type": error_type,
-                "error_code": error_code,
-            }
+        for attempt in range(self.max_retries + 1):
+            try:
+                result = self._call_llm(
+                    prompt=user_prompt,
+                    system_prompt=system_prompt,
+                    model=model,
+                    max_tokens=self.max_tokens,
+                    temperature=self.temperature,
+                    timeout=timeout_s,
+                )
+                duration_ms = (time.time() - start_time) * 1000
+                payload = {
+                    "success": True,
+                    "duration_ms": duration_ms,
+                    "stdout": result.get("content", ""),
+                    "stderr": "",
+                    "result": result.get("content"),
+                    "tokens_prompt": result.get("tokens_prompt", 0),
+                    "tokens_completion": result.get("tokens_completion", 0),
+                    "tokens_total": result.get("tokens_total", 0),
+                    "cost_usd": result.get("cost_usd", 0.0),
+                    "finish_reason": result.get("finish_reason", "end_turn"),
+                }
+                return self._attach_retry_metadata(payload, attempts=attempt)
+            except Exception as exc:
+                if self._should_retry(exc, attempt):
+                    self._sleep_with_backoff(attempt)
+                    continue
+
+                duration_ms = (time.time() - start_time) * 1000
+                error_msg = self._redactor.redact(str(exc))
+                error_code = "llm_api_error"
+                error_type = type(exc).__name__
+                if hasattr(exc, "status_code"):
+                    if exc.status_code == 401:
+                        error_code = "authentication_error"
+                    elif exc.status_code == 429:
+                        error_code = "rate_limit_error"
+                    elif exc.status_code == 400:
+                        error_code = "invalid_request"
+                    elif exc.status_code == 500:
+                        error_code = "api_server_error"
+
+                payload = {
+                    "success": False,
+                    "duration_ms": duration_ms,
+                    "stdout": "",
+                    "stderr": error_msg,
+                    "error": error_msg,
+                    "error_type": error_type,
+                    "error_code": error_code,
+                }
+                return self._attach_retry_metadata(payload, attempts=attempt)
+
+        duration_ms = (time.time() - start_time) * 1000
+        fallback = "Unknown error"
+        payload = {
+            "success": False,
+            "duration_ms": duration_ms,
+            "stdout": "",
+            "stderr": fallback,
+            "error": fallback,
+            "error_type": "RuntimeError",
+            "error_code": "llm_api_error",
+        }
+        return self._attach_retry_metadata(payload, attempts=self.max_retries)
 
     def _call_llm(
         self,

@@ -12,7 +12,9 @@ from metamorphic_guard.harness import (
     _compute_bootstrap_ci,
     _compute_delta_ci,
     _compute_relative_risk,
+    _compose_llm_metrics,
     _evaluate_results,
+    _summarize_llm_results,
     run_eval,
 )
 from metamorphic_guard.specs import (
@@ -544,6 +546,52 @@ def test_newcombe_ci_difference():
 
     assert rr > 1
     assert rr_ci[0] < rr_ci[1]
+
+
+def test_summarize_llm_results_and_compose_metrics():
+    baseline_results = [
+        {
+            "success": True,
+            "tokens_prompt": 10,
+            "tokens_completion": 5,
+            "tokens_total": 15,
+            "duration_ms": 120,
+            "cost_usd": 0.02,
+            "retries": 1,
+        },
+        {"success": False, "duration_ms": 140, "retries": 0},
+    ]
+    candidate_results = [
+        {
+            "success": True,
+            "tokens_prompt": 12,
+            "tokens_completion": 7,
+            "tokens_total": 19,
+            "duration_ms": 110,
+            "cost_usd": 0.025,
+            "retries": 2,
+        }
+    ]
+
+    baseline_summary = _summarize_llm_results(baseline_results)
+    candidate_summary = _summarize_llm_results(candidate_results)
+
+    assert baseline_summary["count"] == 2
+    assert baseline_summary["successes"] == 1
+    assert baseline_summary["retry_total"] == 1
+    assert baseline_summary["max_retries"] == 1
+    assert baseline_summary["avg_latency_ms"] == pytest.approx(130.0, rel=1e-6)
+
+    assert candidate_summary["count"] == 1
+    assert candidate_summary["total_tokens"] == 19
+    assert candidate_summary["retry_total"] == 2
+
+    llm_metrics = _compose_llm_metrics(baseline_summary, candidate_summary)
+    assert llm_metrics is not None
+    assert llm_metrics["cost_delta_usd"] == pytest.approx(0.005, rel=1e-6)
+    assert llm_metrics["tokens_delta"] == 4
+    assert llm_metrics["retry_delta"] == 1
+    assert llm_metrics["cost_ratio"] == pytest.approx(0.025 / 0.02, rel=1e-6)
 
 
 def test_run_eval_uses_role_specific_executor_configs(monkeypatch, tmp_path):

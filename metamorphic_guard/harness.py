@@ -331,6 +331,100 @@ def _execute_implementations(
     return baseline_results, candidate_results
 
 
+def _summarize_llm_results(results: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    summary: Dict[str, Any] = {
+        "count": 0,
+        "successes": 0,
+        "failures": 0,
+        "total_cost_usd": 0.0,
+        "total_tokens": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_latency_ms": 0.0,
+        "avg_latency_ms": 0.0,
+        "avg_cost_usd": 0.0,
+        "avg_tokens": 0.0,
+        "retry_total": 0,
+        "avg_retries": 0.0,
+        "max_retries": 0,
+        "success_rate": 0.0,
+    }
+
+    for entry in results:
+        if not isinstance(entry, dict):
+            continue
+        summary["count"] += 1
+        if entry.get("success"):
+            summary["successes"] += 1
+        tokens_prompt = entry.get("tokens_prompt")
+        tokens_completion = entry.get("tokens_completion")
+        tokens_total = entry.get("tokens_total")
+        cost = entry.get("cost_usd")
+        latency = entry.get("duration_ms")
+        retries = entry.get("retries", 0)
+
+        if tokens_prompt is not None:
+            summary["prompt_tokens"] += int(tokens_prompt)
+        if tokens_completion is not None:
+            summary["completion_tokens"] += int(tokens_completion)
+        if tokens_total is not None:
+            summary["total_tokens"] += int(tokens_total)
+        elif tokens_prompt is not None or tokens_completion is not None:
+            summary["total_tokens"] += int(tokens_prompt or 0) + int(tokens_completion or 0)
+
+        if cost is not None:
+            summary["total_cost_usd"] += float(cost)
+        if latency is not None:
+            summary["total_latency_ms"] += float(latency)
+        if isinstance(retries, (int, float)):
+            retry_value = int(retries)
+            summary["retry_total"] += retry_value
+            summary["max_retries"] = max(summary["max_retries"], retry_value)
+
+    summary["failures"] = summary["count"] - summary["successes"]
+    if summary["count"] > 0:
+        summary["avg_latency_ms"] = summary["total_latency_ms"] / summary["count"]
+        summary["avg_cost_usd"] = summary["total_cost_usd"] / summary["count"]
+        summary["avg_tokens"] = summary["total_tokens"] / summary["count"]
+        summary["avg_retries"] = summary["retry_total"] / summary["count"]
+        summary["success_rate"] = summary["successes"] / summary["count"]
+    return summary
+
+
+def _compose_llm_metrics(
+    baseline_summary: Dict[str, Any],
+    candidate_summary: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    if not baseline_summary.get("count") and not candidate_summary.get("count"):
+        return None
+
+    payload: Dict[str, Any] = {
+        "baseline": baseline_summary,
+        "candidate": candidate_summary,
+    }
+    baseline_cost = float(baseline_summary.get("total_cost_usd", 0.0))
+    candidate_cost = float(candidate_summary.get("total_cost_usd", 0.0))
+    payload["cost_delta_usd"] = candidate_cost - baseline_cost
+    payload["cost_ratio"] = (
+        candidate_cost / baseline_cost if baseline_cost > 0 else None
+    )
+
+    baseline_tokens = int(baseline_summary.get("total_tokens", 0))
+    candidate_tokens = int(candidate_summary.get("total_tokens", 0))
+    payload["tokens_delta"] = candidate_tokens - baseline_tokens
+    payload["token_ratio"] = (
+        candidate_tokens / baseline_tokens if baseline_tokens > 0 else None
+    )
+
+    baseline_retries = int(baseline_summary.get("retry_total", 0))
+    candidate_retries = int(candidate_summary.get("retry_total", 0))
+    payload["retry_delta"] = candidate_retries - baseline_retries
+    payload["retry_ratio"] = (
+        candidate_retries / baseline_retries if baseline_retries > 0 else None
+    )
+    return payload
+
+
 def _evaluate_roles(
     *,
     spec: Spec,
@@ -848,6 +942,8 @@ def run_eval(
         candidate_executor=candidate_executor,
         candidate_executor_config=candidate_executor_config,
     )
+    baseline_llm_summary = _summarize_llm_results(baseline_results)
+    candidate_llm_summary = _summarize_llm_results(candidate_results)
     baseline_runtime_meta = next(
         (
             _serialize_for_report(entry.get("sandbox_metadata"))
@@ -1213,6 +1309,10 @@ def run_eval(
             result["trust_scores"]["baseline"] = baseline_trust
         if candidate_trust:
             result["trust_scores"]["candidate"] = candidate_trust
+
+    llm_metrics_payload = _compose_llm_metrics(baseline_llm_summary, candidate_llm_summary)
+    if llm_metrics_payload:
+        result["llm_metrics"] = llm_metrics_payload
 
     log_event(
         "run_eval_complete",

@@ -40,11 +40,9 @@ candidate_result = run_eval(..., executor_config=candidate_config)
 
 ## Rate Limiting
 
-**Issue**: No automatic retry logic for rate limit errors (429).
+**Status**: ✅ Built-in retry logic backs off automatically on retryable errors (429, 5xx). Configure behaviour via `executor_config` keys such as `max_retries`, `retry_backoff_base`, and `retry_jitter`.
 
-**Status**: Rate limit errors are detected and reported with `error_code: "rate_limit_error"`.
-
-**Workaround**: Implement retry logic in your code or use exponential backoff.
+**Tip**: Override `retry_statuses` / `retry_exceptions` when targeting custom providers or sandboxes.
 
 ## Model-Specific Limits
 

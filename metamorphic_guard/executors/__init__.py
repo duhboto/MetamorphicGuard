@@ -2,7 +2,11 @@
 Executor plugins for different execution backends (local, docker, LLM, etc.).
 """
 
-from typing import Any, Dict, Optional
+from __future__ import annotations
+
+import random
+import time
+from typing import Any, Dict, Optional, Sequence
 
 __all__ = ["Executor", "LLMExecutor"]
 
@@ -42,12 +46,27 @@ class LLMExecutor(Executor):
 
     def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
         super().__init__(config)
-        self.provider = config.get("provider", "openai") if config else "openai"
-        self.model = config.get("model", "gpt-3.5-turbo") if config else "gpt-3.5-turbo"
-        self.max_tokens = config.get("max_tokens", 512) if config else 512
-        self.temperature = config.get("temperature", 0.0) if config else 0.0
-        self.seed = config.get("seed") if config else None
-        self.system_prompt = config.get("system_prompt") if config else None
+        cfg = config or {}
+        self.provider = cfg.get("provider", "openai")
+        self.model = cfg.get("model", "gpt-3.5-turbo")
+        self.max_tokens = cfg.get("max_tokens", 512)
+        self.temperature = cfg.get("temperature", 0.0)
+        self.seed = cfg.get("seed")
+        self.system_prompt = cfg.get("system_prompt")
+        self.max_retries = int(cfg.get("max_retries", 3))
+        self.retry_backoff_base = float(cfg.get("retry_backoff_base", 0.5))
+        self.retry_backoff_cap = float(cfg.get("retry_backoff_cap", 8.0))
+        self.retry_jitter = float(cfg.get("retry_jitter", 0.1))
+        retry_statuses = cfg.get("retry_statuses", (429, 500, 502, 503, 504))
+        if isinstance(retry_statuses, Sequence):
+            self.retry_statuses = {int(code) for code in retry_statuses}
+        else:
+            self.retry_statuses = {429, 500, 502, 503, 504}
+        retry_exceptions = cfg.get(
+            "retry_exceptions",
+            ("RateLimitError", "ServiceUnavailableError", "Timeout", "APIError"),
+        )
+        self.retry_exception_tokens = tuple(str(name).lower() for name in retry_exceptions)
 
     def execute(
         self,
@@ -85,4 +104,49 @@ class LLMExecutor(Executor):
             }
         """
         raise NotImplementedError
+
+    # ------------------------------------------------------------------
+    # Retry helpers shared by concrete executors
+
+    def _should_retry(self, exc: Exception, attempt: int) -> bool:
+        """Determine whether another retry should be attempted for the given exception."""
+        if self.max_retries <= 0 or attempt >= self.max_retries:
+            return False
+
+        status_code = getattr(exc, "status_code", None)
+        if status_code is not None and status_code in self.retry_statuses:
+            return True
+        if status_code is not None:
+            try:
+                status_int = int(status_code)
+            except (TypeError, ValueError):
+                status_int = None
+            if status_int is not None and 400 <= status_int < 500:
+                # Explicitly avoid retrying non-429 client errors
+                return False
+
+        exc_name = type(exc).__name__.lower()
+        if any(token in exc_name for token in self.retry_exception_tokens):
+            return True
+
+        message = str(exc).lower()
+        if any(token in message for token in self.retry_exception_tokens):
+            return True
+
+        return False
+
+    def _sleep_with_backoff(self, attempt: int) -> None:
+        if self.retry_backoff_base <= 0:
+            return
+        delay = self.retry_backoff_base * (2 ** attempt)
+        if self.retry_backoff_cap > 0:
+            delay = min(delay, self.retry_backoff_cap)
+        if self.retry_jitter > 0:
+            delay += random.uniform(0, self.retry_jitter)
+        time.sleep(max(delay, 0.0))
+
+    def _attach_retry_metadata(self, payload: Dict[str, Any], attempts: int) -> Dict[str, Any]:
+        payload["retries"] = max(0, attempts)
+        payload.setdefault("retry_limit", self.max_retries)
+        return payload
 

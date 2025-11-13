@@ -140,6 +140,7 @@ HTML reports and JSON output now include monitor summaries.
    - Provide `alert_webhooks=["https://hooks.example.dev/ci"]` (optionally with `alert_metadata={"env": "ci"}`) to reuse the built-in webhook dispatch that the CLI performs after each run.
    - Resolve monitors in-process with `monitor_specs=["latency:percentile=0.99"]`; pass `sandbox_plugins=False` if you trust local plugins and want to mirror `--allow-unsafe-plugins`.
    - **Policy precedence**: thresholds are resolved in three passes—baseline values from `EvaluationConfig`, overrides supplied by a policy preset (if any), and finally the CLI/programmatic flags that flow into `extra_options`. When a preset supplies a value (for example `min_delta`), it replaces the config value so you get a consistent, policy-driven gate.
+   - LLM sandboxes support configurable retries: add `executor_config={"max_retries": 3, "retry_backoff_base": 0.5}` (plus optional `retry_statuses` / `retry_exceptions`) to opt into automatic exponential backoff for transient API errors.
 
 4. **CI/CD snippet (GitHub Actions)**
    ```yaml

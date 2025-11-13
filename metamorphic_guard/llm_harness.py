@@ -219,47 +219,38 @@ class LLMHarness:
         Extracts token usage, costs, and latency from individual test results
         and adds summary statistics to the report.
         """
-        # Extract metrics from baseline and candidate results
-        baseline_metrics = {
-            "total_cost_usd": 0.0,
-            "total_tokens": 0,
-            "total_latency_ms": 0.0,
-            "avg_latency_ms": 0.0,
-            "count": 0,
+        llm_metrics = result.get("llm_metrics")
+        if llm_metrics:
+            baseline = llm_metrics.get("baseline", {})
+            candidate = llm_metrics.get("candidate", {})
+            if "cost_delta_usd" not in llm_metrics:
+                llm_metrics["cost_delta_usd"] = candidate.get("total_cost_usd", 0.0) - baseline.get("total_cost_usd", 0.0)
+            if "cost_ratio" not in llm_metrics:
+                baseline_cost = baseline.get("total_cost_usd", 0.0)
+                candidate_cost = candidate.get("total_cost_usd", 0.0)
+                llm_metrics["cost_ratio"] = (
+                    candidate_cost / baseline_cost if baseline_cost else None
+                )
+            if "tokens_delta" not in llm_metrics:
+                llm_metrics["tokens_delta"] = candidate.get("total_tokens", 0) - baseline.get("total_tokens", 0)
+            if "retry_delta" not in llm_metrics:
+                llm_metrics["retry_delta"] = candidate.get("retry_total", 0) - baseline.get("retry_total", 0)
+            result["llm_metrics"] = llm_metrics
+            return result
+
+        # Fallback: compute minimal metrics from monitors if harness skipped aggregation
+        baseline_metrics = {"total_cost_usd": 0.0, "total_tokens": 0}
+        candidate_metrics = {"total_cost_usd": 0.0, "total_tokens": 0}
+        for monitor_data in result.get("monitors", {}).values():
+            summary = monitor_data.get("summary", {})
+            baseline_metrics.update(summary.get("baseline", {}))
+            candidate_metrics.update(summary.get("candidate", {}))
+
+        result["llm_metrics"] = {
+            "baseline": baseline_metrics,
+            "candidate": candidate_metrics,
+            "cost_delta_usd": candidate_metrics.get("total_cost_usd", 0.0)
+            - baseline_metrics.get("total_cost_usd", 0.0),
         }
-        candidate_metrics = {
-            "total_cost_usd": 0.0,
-            "total_tokens": 0,
-            "total_latency_ms": 0.0,
-            "avg_latency_ms": 0.0,
-            "count": 0,
-        }
-        
-        # Aggregate from individual test results if available
-        # Note: Individual results may not be in the report, so we check monitors
-        if "monitors" in result:
-            for monitor_id, monitor_data in result["monitors"].items():
-                if monitor_id == "llm_cost":
-                    summary = monitor_data.get("summary", {})
-                    if "baseline" in summary:
-                        baseline_metrics["total_cost_usd"] = summary["baseline"].get("total_cost_usd", 0.0)
-                        baseline_metrics["total_tokens"] = summary["baseline"].get("total_tokens", 0)
-                    if "candidate" in summary:
-                        candidate_metrics["total_cost_usd"] = summary["candidate"].get("total_cost_usd", 0.0)
-                        candidate_metrics["total_tokens"] = summary["candidate"].get("total_tokens", 0)
-        
-        # Add aggregated metrics to result
-        if "llm_metrics" not in result:
-            result["llm_metrics"] = {}
-        
-        result["llm_metrics"]["baseline"] = baseline_metrics
-        result["llm_metrics"]["candidate"] = candidate_metrics
-        result["llm_metrics"]["cost_delta_usd"] = candidate_metrics["total_cost_usd"] - baseline_metrics["total_cost_usd"]
-        result["llm_metrics"]["cost_ratio"] = (
-            candidate_metrics["total_cost_usd"] / baseline_metrics["total_cost_usd"]
-            if baseline_metrics["total_cost_usd"] > 0
-            else float("inf")
-        )
-        
         return result
 
