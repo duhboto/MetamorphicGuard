@@ -14,7 +14,18 @@ try:
     HYPOTHESIS_AVAILABLE = True
 except ImportError:
     HYPOTHESIS_AVAILABLE = False
-    pytestmark = pytest.mark.skip("Hypothesis not available")
+    # Create dummy decorators if Hypothesis is not available
+    def given(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+    
+    def settings(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+    
+    st = None
 
 from metamorphic_guard.harness.statistics import (
     compute_bootstrap_ci,
