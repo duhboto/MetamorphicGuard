@@ -117,8 +117,49 @@ def hash_callable(func: Callable[..., Any]) -> str:
     return hashlib.sha256(normalized).hexdigest()
 
 
-def compute_spec_fingerprint(spec: Any) -> dict[str, Any]:
-    """Compute hashes for the critical components of a task spec."""
+# Cache for spec fingerprints to avoid recomputing for the same spec
+_spec_fingerprint_cache: dict[str, dict[str, Any]] = {}
+
+
+def compute_spec_fingerprint(spec: Any, *, use_cache: bool = True) -> dict[str, Any]:
+    """
+    Compute hashes for the critical components of a task spec.
+    
+    Args:
+        spec: The Spec object to fingerprint
+        use_cache: If True, cache results based on spec identity
+    
+    Returns:
+        Dictionary with fingerprint hashes for spec components
+    """
+    # Create a cache key from spec identity
+    # Use a combination of function hashes to create a unique key
+    cache_key = None
+    if use_cache:
+        try:
+            # Create a stable key from the spec's callable hashes
+            key_parts = [
+                hash_callable(spec.gen_inputs),
+                hash_callable(spec.equivalence),
+                hash_callable(spec.fmt_in),
+                hash_callable(spec.fmt_out),
+            ]
+            for prop in spec.properties:
+                key_parts.append(hash_callable(prop.check))
+            for relation in spec.relations:
+                key_parts.append(hash_callable(relation.transform))
+            
+            # Create a composite key
+            import hashlib
+            key_str = "|".join(key_parts)
+            cache_key = hashlib.sha256(key_str.encode("utf-8")).hexdigest()
+            
+            # Check cache
+            if cache_key in _spec_fingerprint_cache:
+                return _spec_fingerprint_cache[cache_key]
+        except Exception:
+            # If caching fails, fall through to computation
+            pass
 
     properties = [
         {
@@ -138,7 +179,7 @@ def compute_spec_fingerprint(spec: Any) -> dict[str, Any]:
         for relation in spec.relations
     ]
 
-    return {
+    fingerprint = {
         "gen_inputs": hash_callable(spec.gen_inputs),
         "properties": properties,
         "relations": relations,
@@ -148,6 +189,12 @@ def compute_spec_fingerprint(spec: Any) -> dict[str, Any]:
             "fmt_out": hash_callable(spec.fmt_out),
         },
     }
+    
+    # Cache the result
+    if use_cache and cache_key:
+        _spec_fingerprint_cache[cache_key] = fingerprint
+    
+    return fingerprint
 
 
 def get_environment_fingerprint() -> dict[str, str]:
