@@ -130,3 +130,43 @@ def test_html_report_from_json(tmp_path: Path) -> None:
     assert json_data["task"] in html_content, \
         "HTML should contain task from JSON report"
 
+
+def test_html_report_includes_llm_metrics(tmp_path: Path) -> None:
+    html_output = tmp_path / "llm.html"
+    payload = {
+        "task": "llm_task",
+        "baseline": {"pass_rate": 0.9, "prop_violations": [], "mr_violations": []},
+        "candidate": {"pass_rate": 0.95, "prop_violations": [], "mr_violations": []},
+        "delta_pass_rate": 0.05,
+        "delta_ci": [0.01, 0.08],
+        "relative_risk": 1.02,
+        "relative_risk_ci": [0.99, 1.05],
+        "decision": {"adopt": True, "reason": "meets_gate"},
+        "llm_metrics": {
+            "baseline": {
+                "total_cost_usd": 0.5,
+                "total_tokens": 1200,
+                "avg_latency_ms": 120.5,
+                "retry_total": 1,
+                "success_rate": 0.95,
+            },
+            "candidate": {
+                "total_cost_usd": 0.4,
+                "total_tokens": 1100,
+                "avg_latency_ms": 110.0,
+                "retry_total": 0,
+                "success_rate": 0.97,
+            },
+            "cost_delta_usd": -0.1,
+            "cost_ratio": 0.8,
+            "tokens_delta": -100,
+            "token_ratio": 1100 / 1200,
+            "retry_delta": -1,
+            "retry_ratio": 0.0,
+        },
+    }
+    render_html_report(payload, html_output)
+    content = html_output.read_text(encoding="utf-8")
+    assert "LLM Metrics" in content
+    assert "Total Cost (USD)" in content
+

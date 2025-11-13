@@ -289,6 +289,7 @@ modeling real ranking or pricing systems:
 - Identify gaps in MR coverage (missing categories)
 - Detect flaky MRs (inconsistent failures)
 - Understand domain-specific failure patterns
+- For LLM evaluations, the JSON and HTML reports expose aggregated **LLM Metrics** (cost, tokens, latency, retries) alongside the Prometheus counter `metamorphic_llm_retries_total`, making it easier to monitor API spend and resiliency.
 
 Each report now includes hashes for the generator function, properties, metamorphic
 relations, and formatter callables (`spec_fingerprint`). This makes it possible to

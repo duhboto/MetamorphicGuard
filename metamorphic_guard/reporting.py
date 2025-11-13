@@ -72,6 +72,7 @@ def render_html_report(payload: Dict[str, Any], destination: Path) -> Path:
     replay_block = _render_replay_block(payload.get("replay"))
     policy_block = _render_policy_block(payload.get("policy"), decision)
     coverage_chart = _build_coverage_chart(payload.get("relation_coverage"))
+    llm_metrics_block = _render_llm_metrics(payload.get("llm_metrics"))
 
     fairness_block = (
         """
@@ -147,6 +148,7 @@ def render_html_report(payload: Dict[str, Any], destination: Path) -> Path:
     <tr><td>Relative Risk</td><td>{payload.get("relative_risk", 0):.3f}</td></tr>
     <tr><td>RR 95% CI</td><td>{payload.get("relative_risk_ci")}</td></tr>
   </table>
+  {llm_metrics_block}
 
   <div class="chart-container">
     <canvas id="pass-rate-chart"></canvas>
@@ -347,6 +349,38 @@ def _format_monitors(monitors: Dict[str, Any] | Sequence[Any]) -> str:
             "</div>"
         )
     return "".join(blocks)
+
+
+def _render_llm_metrics(metrics: Dict[str, Any] | None) -> str:
+    if not metrics:
+        return ""
+    baseline = metrics.get("baseline", {}) or {}
+    candidate = metrics.get("candidate", {}) or {}
+    rows = [
+        ("Total Cost (USD)", baseline.get("total_cost_usd", 0.0), candidate.get("total_cost_usd", 0.0), metrics.get("cost_delta_usd"), metrics.get("cost_ratio")),
+        ("Total Tokens", baseline.get("total_tokens", 0), candidate.get("total_tokens", 0), metrics.get("tokens_delta"), metrics.get("token_ratio")),
+        ("Average Latency (ms)", baseline.get("avg_latency_ms"), candidate.get("avg_latency_ms"), None, None),
+        ("Retry Attempts", baseline.get("retry_total", 0), candidate.get("retry_total", 0), metrics.get("retry_delta"), metrics.get("retry_ratio")),
+        ("Success Rate", baseline.get("success_rate"), candidate.get("success_rate"), None, None),
+    ]
+    body = []
+    for label, base_val, cand_val, delta, ratio in rows:
+        body.append(
+            "<tr>"
+            f"<td>{html.escape(label)}</td>"
+            f"<td>{_format_optional_float(base_val)}</td>"
+            f"<td>{_format_optional_float(cand_val)}</td>"
+            f"<td>{_format_optional_float(delta)}</td>"
+            f"<td>{_format_optional_float(ratio)}</td>"
+            "</tr>"
+        )
+    return (
+        "<h2>LLM Metrics</h2>"
+        "<table>"
+        "<tr><th>Metric</th><th>Baseline</th><th>Candidate</th><th>Δ</th><th>Ratio</th></tr>"
+        + "".join(body)
+        + "</table>"
+    )
 
 
 def _render_relation_coverage(coverage: Dict[str, Any] | None) -> str:
