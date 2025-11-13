@@ -10,6 +10,13 @@ import zlib
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
+# Optional MessagePack support for more efficient serialization
+try:
+    import msgpack  # type: ignore
+    _MSGPACK_AVAILABLE = True
+except ImportError:
+    _MSGPACK_AVAILABLE = False
+
 from .monitoring import Monitor, MonitorRecord
 from .dispatch import Dispatcher, RunCase
 from .observability import (
@@ -31,6 +38,7 @@ class _Task:
     payload: bytes
     call_spec: Optional[Dict[str, Any]] = None
     compressed: bool = True
+    use_msgpack: bool = False
 
 
 @dataclass
@@ -247,6 +255,7 @@ class RedisQueueAdapter(QueueAdapter):
             "payload": task.payload.decode("ascii"),
             "call_spec": task.call_spec,
             "compressed": task.compressed,
+            "use_msgpack": task.use_msgpack,
         }
         self.redis.rpush(self.task_key, json.dumps(payload))
 
@@ -269,6 +278,7 @@ class RedisQueueAdapter(QueueAdapter):
             payload=payload.get("payload", "").encode("ascii"),
             call_spec=payload.get("call_spec"),
             compressed=payload.get("compressed", True),
+            use_msgpack=payload.get("use_msgpack", False),
         )
         if task.job_id != "__shutdown__":
             self.worker_assign(worker_id, task.task_id)
@@ -423,6 +433,7 @@ class QueueDispatcher(Dispatcher):
             enable_requeue = bool(self.config.get("enable_requeue", not self._spawn_local_workers))
             configured_batch_size = max(1, int(self.config.get("batch_size", 1)))
             compress_payloads = bool(self.config.get("compress", True))
+            use_msgpack = bool(self.config.get("use_msgpack", False))
             heartbeat_timeout = float(self.config.get("heartbeat_timeout", 45.0))
             adaptive_batching = bool(self.config.get("adaptive_batching", True))
             adaptive_compress = bool(self.config.get("adaptive_compress", True))
@@ -470,6 +481,7 @@ class QueueDispatcher(Dispatcher):
                     compress_default=compress_payloads,
                     adaptive=adaptive_compress,
                     threshold_bytes=compression_threshold,
+                    use_msgpack=use_msgpack,
                 )
                 task_id = str(uuid.uuid4())
                 task = _Task(
@@ -480,6 +492,7 @@ class QueueDispatcher(Dispatcher):
                     payload=payload,
                     call_spec=call_spec,
                     compressed=compressed_flag,
+                    use_msgpack=use_msgpack,
                 )
                 tasks[task_id] = task
                 deadlines[task_id] = time.monotonic() + lease_seconds
@@ -661,7 +674,7 @@ class _LocalWorker(threading.Thread):
             if task.job_id == "__shutdown__":
                 break
 
-            args_list = _decode_args(task.payload, compress=task.compressed)
+            args_list = _decode_args(task.payload, compress=task.compressed, use_msgpack=task.use_msgpack)
             for idx, args in zip(task.case_indices, args_list):
                 result = self.run_case(idx, args)
                 self.adapter.publish_result(
@@ -681,10 +694,34 @@ def _prepare_payload(
     compress_default: bool,
     adaptive: bool,
     threshold_bytes: int,
+    use_msgpack: bool = False,
 ) -> Tuple[bytes, bool, int, int]:
-    """Prepare a payload for queue publication with optional adaptive compression."""
-
-    raw = json.dumps(args_list).encode("utf-8")
+    """
+    Prepare a payload for queue publication with optional adaptive compression.
+    
+    Args:
+        args_list: List of argument tuples to serialize
+        compress_default: Whether to compress by default
+        adaptive: Whether to adaptively choose compression
+        threshold_bytes: Threshold for adaptive compression
+        use_msgpack: If True, use MessagePack instead of JSON (requires msgpack package)
+    
+    Returns:
+        Tuple of (encoded_bytes, use_compression, raw_length, encoded_length)
+    """
+    # Use MessagePack if available and requested, otherwise use JSON
+    if use_msgpack and _MSGPACK_AVAILABLE:
+        raw = msgpack.packb(args_list, use_bin_type=True)
+    else:
+        if use_msgpack and not _MSGPACK_AVAILABLE:
+            import warnings
+            warnings.warn(
+                "MessagePack requested but not available. Install with: pip install msgpack. "
+                "Falling back to JSON.",
+                UserWarning,
+            )
+        raw = json.dumps(args_list).encode("utf-8")
+    
     raw_len = len(raw)
 
     if not compress_default:
@@ -712,7 +749,27 @@ def _decode_payload(payload: bytes, compress: Optional[bool] = None) -> bytes:
     return decoded
 
 
-def _decode_args(payload: bytes, *, compress: bool) -> List[Tuple[Any, ...]]:
+def _decode_args(
+    payload: bytes, 
+    *, 
+    compress: bool,
+    use_msgpack: bool = False,
+) -> List[Tuple[Any, ...]]:
+    """
+    Decode a payload back to a list of argument tuples.
+    
+    Args:
+        payload: Base64-encoded payload bytes
+        compress: Whether the payload is compressed
+        use_msgpack: Whether the payload was encoded with MessagePack
+    
+    Returns:
+        List of argument tuples
+    """
     decoded = _decode_payload(payload, compress=compress)
-    return json.loads(decoded)
+    
+    if use_msgpack and _MSGPACK_AVAILABLE:
+        return msgpack.unpackb(decoded, raw=False, strict_map_key=False)
+    else:
+        return json.loads(decoded)
 
