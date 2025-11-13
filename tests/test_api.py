@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
 import textwrap
+
+import pytest
 
 from tests.callable_fixtures import (
     bad_candidate_callable,
@@ -15,6 +18,7 @@ from metamorphic_guard.api import (
     Property,
     TaskSpec,
     run,
+    run_with_config,
 )
 
 
@@ -160,8 +164,6 @@ def test_callable_must_be_module_scoped():
     def local_fn(x):
         return {"value": float(x)}
 
-    import pytest
-
     with pytest.raises(ValueError):
         Implementation.from_callable(local_fn)
 
@@ -196,4 +198,63 @@ def test_dotted_path_rejects_bad_input():
 
     with pytest.raises(ValueError):
         Implementation.from_dotted("tests.callable_fixtures")
+
+
+def test_from_specifier_dotted():
+    impl = Implementation.from_specifier("tests.callable_fixtures:baseline_callable")
+    with impl.materialize() as path:
+        assert Path(path).suffix == ".py"
+        assert Path(path).exists()
+
+
+def test_from_specifier_path(tmp_path):
+    impl_file = tmp_path / "impl.py"
+    impl_file.write_text(
+        "def solve(x):\n    return {'value': float(x)}\n",
+        encoding="utf-8",
+    )
+    impl = Implementation.from_specifier(str(impl_file))
+    with impl.materialize() as path:
+        assert Path(path) == impl_file
+
+
+def test_run_with_config(tmp_path):
+    config_text = textwrap.dedent(
+        """
+        [metamorphic_guard]
+        task = "api_test_task"
+        baseline = "tests.callable_fixtures:baseline_callable"
+        candidate = "tests.callable_fixtures:candidate_callable"
+        n = 5
+        seed = 123
+        timeout_s = 2.0
+        mem_mb = 512
+        alpha = 0.05
+        min_delta = 0.0
+        bootstrap_samples = 100
+        ci_method = "bootstrap"
+        rr_ci_method = "log"
+        """
+    )
+    config_path = tmp_path / "guard.toml"
+    config_path.write_text(config_text, encoding="utf-8")
+
+    result = run_with_config(config_path, task=_build_task_spec())
+    assert result.adopt is True
+
+
+def test_run_with_config_requires_matching_task(tmp_path):
+    config_text = textwrap.dedent(
+        """
+        [metamorphic_guard]
+        task = "other_task"
+        baseline = "tests.callable_fixtures:baseline_callable"
+        candidate = "tests.callable_fixtures:candidate_callable"
+        """
+    )
+    config_path = tmp_path / "guard.toml"
+    config_path.write_text(config_text, encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        run_with_config(config_path, task=_build_task_spec())
 

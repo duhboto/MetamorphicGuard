@@ -8,12 +8,13 @@ from __future__ import annotations
 
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 import uuid
 import importlib
 import inspect
 import tempfile
-from pathlib import Path
+from .config import EvaluatorConfig, load_config
 
 from .harness import run_eval
 from .specs import MetamorphicRelation, Metric, Property, Spec, register_spec, unregister_spec
@@ -78,21 +79,6 @@ class Implementation:
         """Create an Implementation backed by a Python callable."""
         return cls(path=None, func=func)
 
-    @staticmethod
-    def _validate_callable(func: Callable[..., Any]) -> None:
-        module = getattr(func, "__module__", None)
-        qualname = getattr(func, "__qualname__", None)
-        if not module or not qualname:
-            raise ValueError("Callable must have importable __module__ and __qualname__ attributes.")
-        if "<locals>" in qualname:
-            raise ValueError(
-                "Callable implementations must be defined at module scope (no nested functions or lambdas)."
-            )
-        try:
-            importlib.import_module(module)
-        except ImportError as exc:
-            raise ValueError(f"Cannot import module '{module}' for callable implementation.") from exc
-
     @classmethod
     def from_dotted(cls, dotted: str) -> "Implementation":
         """
@@ -125,6 +111,42 @@ class Implementation:
             raise ValueError(f"Resolved object '{dotted}' is not callable.")
 
         return cls.from_callable(target)
+
+    @classmethod
+    def from_specifier(cls, specifier: str) -> "Implementation":
+        """
+        Construct an Implementation from either a filesystem path or a dotted callable reference.
+        """
+
+        specifier = specifier.strip()
+        if not specifier:
+            raise ValueError("Implementation specifier cannot be empty.")
+
+        path_candidate = Path(specifier)
+        # On Windows drive letters include ':'. Treat absolute drives as file paths.
+        is_windows_drive = bool(path_candidate.drive)
+        if ":" in specifier and not is_windows_drive:
+            try:
+                return cls.from_dotted(specifier)
+            except ValueError as exc:
+                raise ValueError(f"Unable to resolve implementation specifier '{specifier}': {exc}") from exc
+
+        return cls(path=str(path_candidate))
+
+    @staticmethod
+    def _validate_callable(func: Callable[..., Any]) -> None:
+        module = getattr(func, "__module__", None)
+        qualname = getattr(func, "__qualname__", None)
+        if not module or not qualname:
+            raise ValueError("Callable must have importable __module__ and __qualname__ attributes.")
+        if "<locals>" in qualname:
+            raise ValueError(
+                "Callable implementations must be defined at module scope (no nested functions or lambdas)."
+            )
+        try:
+            importlib.import_module(module)
+        except ImportError as exc:
+            raise ValueError(f"Cannot import module '{module}' for callable implementation.") from exc
 
     @contextmanager
     def materialize(self):
@@ -277,6 +299,47 @@ def _existing_specs() -> Sequence[str]:
     return list_tasks()
 
 
+def _evaluation_config_from_evaluator(cfg: EvaluatorConfig) -> EvaluationConfig:
+    extra_options: Dict[str, Any] = {}
+    if cfg.parallel:
+        extra_options["parallel"] = cfg.parallel
+    if cfg.relation_correction:
+        extra_options["relation_correction"] = cfg.relation_correction
+    if cfg.monitors:
+        extra_options["monitors"] = cfg.monitors
+    if cfg.dispatcher:
+        extra_options["dispatcher"] = cfg.dispatcher
+    if cfg.queue is not None:
+        extra_options["queue_config"] = cfg.queue.model_dump(exclude_none=True)
+    if cfg.executor:
+        extra_options["executor"] = cfg.executor
+    if cfg.executor_config is not None:
+        extra_options["executor_config"] = cfg.executor_config
+    if cfg.policy_version:
+        extra_options["policy_version"] = cfg.policy_version
+
+    # Drop empty or None entries
+    extra_options = {k: v for k, v in extra_options.items() if v not in (None, [], {})}
+
+    return EvaluationConfig(
+        n=cfg.n,
+        seed=cfg.seed,
+        timeout_s=cfg.timeout_s,
+        mem_mb=cfg.mem_mb,
+        alpha=cfg.alpha,
+        violation_cap=cfg.violation_cap,
+        improve_delta=cfg.min_delta,
+        bootstrap_samples=cfg.bootstrap_samples,
+        ci_method=cfg.ci_method,
+        rr_ci_method=cfg.rr_ci_method,
+        min_pass_rate=cfg.min_pass_rate,
+        power_target=cfg.power_target,
+        failed_artifact_limit=cfg.failed_artifact_limit,
+        failed_artifact_ttl_days=cfg.failed_artifact_ttl_days,
+        extra_options=extra_options,
+    )
+
+
 def run(
     task: TaskSpec,
     baseline: Implementation,
@@ -303,12 +366,46 @@ def run(
     return EvaluationResult(report=report)
 
 
+def run_with_config(
+    config: Union[EvaluatorConfig, str, Path],
+    *,
+    task: TaskSpec,
+) -> EvaluationResult:
+    """
+    Execute an evaluation described by a TOML configuration file.
+
+    Args:
+        config: EvaluatorConfig object or path to a TOML file.
+        task: Task specification corresponding to the config's task entry.
+    """
+
+    if not isinstance(config, EvaluatorConfig):
+        config = load_config(Path(config))
+
+    if config.task != task.name:
+        raise ValueError(
+            f"Configuration task '{config.task}' does not match provided TaskSpec name '{task.name}'."
+        )
+
+    baseline_impl = Implementation.from_specifier(config.baseline)
+    candidate_impl = Implementation.from_specifier(config.candidate)
+    eval_cfg = _evaluation_config_from_evaluator(config)
+
+    return run(
+        task=task,
+        baseline=baseline_impl,
+        candidate=candidate_impl,
+        config=eval_cfg,
+    )
+
+
 __all__ = [
     "TaskSpec",
     "Implementation",
     "EvaluationConfig",
     "EvaluationResult",
     "run",
+    "run_with_config",
     "Property",
     "MetamorphicRelation",
     "Metric",
