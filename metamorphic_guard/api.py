@@ -9,7 +9,7 @@ from __future__ import annotations
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union, Mapping
 import uuid
 import importlib
 import inspect
@@ -367,7 +367,7 @@ def run(
 
 
 def run_with_config(
-    config: Union[EvaluatorConfig, str, Path],
+    config: Union[EvaluatorConfig, str, Path, Mapping[str, Any]],
     *,
     task: TaskSpec,
 ) -> EvaluationResult:
@@ -380,7 +380,12 @@ def run_with_config(
     """
 
     if not isinstance(config, EvaluatorConfig):
-        config = load_config(Path(config))
+        if isinstance(config, Mapping):
+            data = dict(config)
+            block = data.get("metamorphic_guard", data)
+            config = EvaluatorConfig.model_validate(block)
+        else:
+            config = load_config(Path(config))
 
     if config.task != task.name:
         raise ValueError(

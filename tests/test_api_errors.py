@@ -81,7 +81,7 @@ def test_run_with_config_toml_error(tmp_path, task_spec):
         run_with_config(config_path, task=task_spec)
 
 
-def test_run_with_config_dict(monkeypatch, task_spec):
+def test_run_with_config_evaluator_config(task_spec):
     from metamorphic_guard.api import EvaluatorConfig
 
     cfg = EvaluatorConfig(
@@ -93,5 +93,20 @@ def test_run_with_config_dict(monkeypatch, task_spec):
         min_delta=0.0,
     )
     result = run_with_config(cfg, task=task_spec)
+    assert result.adopt is True
+
+
+def test_run_with_config_mapping(task_spec):
+    data = {
+        "metamorphic_guard": {
+            "task": "api_test_task",
+            "baseline": "tests.callable_fixtures:baseline_callable",
+            "candidate": "tests.callable_fixtures:baseline_callable",
+            "n": 1,
+            "seed": 99,
+            "min_delta": 0.0,
+        }
+    }
+    result = run_with_config(data, task=task_spec)
     assert result.adopt is True
 

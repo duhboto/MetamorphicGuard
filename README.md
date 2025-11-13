@@ -235,7 +235,7 @@ from metamorphic_guard import run_with_config
 result = run_with_config("guard.toml", task=spec)
 ```
 
-The helper understands both file paths and dotted callables (e.g., `"pkg.module:solve"`) specified in the config’s `baseline` and `candidate` fields.
+The helper understands both file paths and dotted callables (e.g., `"pkg.module:solve"`) specified in the config’s `baseline` and `candidate` fields. You can also pass an in-memory mapping (with an optional `[metamorphic_guard]` section) or an `EvaluatorConfig` instance when generating configs programmatically.
 
 The `run` helper wraps the full harness: it registers your `TaskSpec`, executes both implementations with sandboxing and statistical analysis, and returns an `EvaluationResult` containing the adoption decision and the full JSON report.
 
