@@ -30,11 +30,11 @@ def main() -> None:
         alpha=0.05,
         violation_cap=10,
         parallel=1,
-        improve_delta=0.01,
+        min_delta=0.01,
         bootstrap_samples=200,
     )
 
-    decision = decide_adopt(result, improve_delta=0.01, min_pass_rate=0.8)
+    decision = decide_adopt(result, min_delta=0.01, min_pass_rate=0.8)
     result["decision"] = decision
     report_path = write_report(result)
 

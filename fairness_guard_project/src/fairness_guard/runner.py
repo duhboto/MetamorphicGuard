@@ -61,7 +61,7 @@ def evaluate_candidate(
     seed: int = 42,
     timeout_s: float = 2.0,
     mem_mb: int = 512,
-    improve_delta: float = 0.0,
+    min_delta: float = 0.0,
     min_pass_rate: float = 0.85,
     violation_cap: int = 25,
     parallel: int = 1,
@@ -90,7 +90,7 @@ def evaluate_candidate(
         alpha=0.05,
         violation_cap=violation_cap,
         parallel=parallel,
-        improve_delta=improve_delta,
+        min_delta=min_delta,
         bootstrap_samples=bootstrap_samples,
         executor=executor,
         executor_config=executor_config,
@@ -106,7 +106,7 @@ def evaluate_candidate(
 
     decision = decide_adopt(
         result,
-        improve_delta=improve_delta,
+        min_delta=min_delta,
         min_pass_rate=min_pass_rate,
     )
     result["decision"] = decision

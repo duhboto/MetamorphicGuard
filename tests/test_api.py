@@ -82,7 +82,7 @@ def test_api_run_accepts_candidate(tmp_path):
             n=10,
             seed=123,
             bootstrap_samples=200,
-            improve_delta=0.0,
+            min_delta=0.0,
         ),
     )
 
@@ -118,7 +118,7 @@ def test_api_run_rejects_candidate(tmp_path):
             n=10,
             seed=321,
             bootstrap_samples=200,
-            improve_delta=0.0,
+            min_delta=0.0,
         ),
     )
 
@@ -136,7 +136,7 @@ def test_api_run_accepts_callable():
             n=10,
             seed=777,
             bootstrap_samples=200,
-            improve_delta=0.0,
+            min_delta=0.0,
         ),
     )
 
@@ -153,7 +153,7 @@ def test_api_run_rejects_callable(tmp_path):
             n=10,
             seed=888,
             bootstrap_samples=200,
-            improve_delta=0.0,
+            min_delta=0.0,
         ),
     )
 
@@ -181,7 +181,7 @@ def test_dotted_path_supports_callable():
             n=5,
             seed=999,
             bootstrap_samples=100,
-            improve_delta=0.0,
+            min_delta=0.0,
         ),
     )
     assert result.adopt is True
@@ -258,3 +258,19 @@ def test_run_with_config_requires_matching_task(tmp_path):
     with pytest.raises(ValueError):
         run_with_config(config_path, task=_build_task_spec())
 
+
+def test_evaluation_config_improve_delta_alias_warns():
+    with pytest.warns(DeprecationWarning):
+        cfg = EvaluationConfig(improve_delta=0.01)
+
+    assert cfg.min_delta == pytest.approx(0.01, rel=1e-6)
+    kwargs = cfg.to_kwargs()
+    assert kwargs["min_delta"] == pytest.approx(0.01, rel=1e-6)
+    assert "improve_delta" not in kwargs
+
+
+def test_evaluation_config_prefers_min_delta_over_improve_delta():
+    with pytest.warns(DeprecationWarning):
+        cfg = EvaluationConfig(min_delta=0.03, improve_delta=0.05)
+
+    assert cfg.min_delta == pytest.approx(0.03, rel=1e-6)

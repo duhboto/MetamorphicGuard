@@ -87,7 +87,7 @@ def test_benchmark_positive_lift(benchmark_dir):
         candidate_path=str(candidate),
         n=200,  # Increase n for more stable results
         seed=42,
-        improve_delta=0.05,  # Expect ~0.15 improvement
+        min_delta=0.05,  # Expect ~0.15 improvement
         min_pass_rate=0.70,  # Lower threshold since we're testing MR failures
         ci_method="newcombe",
     )
@@ -112,7 +112,7 @@ def test_benchmark_negative_lift(benchmark_dir):
         candidate_path=str(candidate),
         n=200,  # Increase n for more stable results
         seed=42,
-        improve_delta=0.02,
+        min_delta=0.02,
         min_pass_rate=0.70,  # Lower threshold
         ci_method="newcombe",
     )
@@ -135,7 +135,7 @@ def test_benchmark_no_change(benchmark_dir):
         candidate_path=str(candidate),
         n=100,
         seed=42,
-        improve_delta=0.02,
+        min_delta=0.02,
         min_pass_rate=0.75,
         ci_method="newcombe",
     )
@@ -157,7 +157,7 @@ def test_benchmark_small_positive_lift(benchmark_dir):
         candidate_path=str(candidate),
         n=300,  # Increase n for more stable results
         seed=42,
-        improve_delta=0.05,  # Require 5% improvement
+        min_delta=0.05,  # Require 5% improvement
         min_pass_rate=0.70,
         ci_method="newcombe",
     )
@@ -182,7 +182,7 @@ def test_benchmark_bootstrap_consistency(benchmark_dir):
             candidate_path=str(candidate),
             n=200,  # Increase n for stability
             seed=seed,
-            improve_delta=0.02,
+            min_delta=0.02,
             min_pass_rate=0.70,
             ci_method="bootstrap",
             bootstrap_samples=500,
@@ -227,7 +227,7 @@ def test_benchmark_cluster_bootstrap(benchmark_dir):
         candidate_path=str(candidate),
         n=200,  # Increase n for stability
         seed=42,
-        improve_delta=0.02,
+        min_delta=0.02,
         min_pass_rate=0.70,
         ci_method="bootstrap-cluster",
         bootstrap_samples=500,

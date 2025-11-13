@@ -102,7 +102,7 @@ Makes adoption decisions based on evaluation results:
 ```python
 def decide_adopt(
     result: Dict[str, Any],
-    improve_delta: float = 0.02,
+    min_delta: float = 0.02,
     min_pass_rate: float = 0.80,
     policy: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:

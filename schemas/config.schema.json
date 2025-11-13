@@ -105,10 +105,18 @@
       "title": "Alpha",
       "type": "number"
     },
+    "min_delta": {
+      "default": 0.02,
+      "title": "Min Delta",
+      "type": "number",
+      "description": "Minimum acceptable improvement for the candidate. Previously exposed as improve_delta."
+    },
     "improve_delta": {
       "default": 0.02,
-      "title": "Improve Delta",
-      "type": "number"
+      "title": "Improve Delta (deprecated)",
+      "type": "number",
+      "deprecated": true,
+      "description": "Deprecated alias for min_delta; retained for backwards compatibility."
     },
     "min_pass_rate": {
       "default": 0.8,

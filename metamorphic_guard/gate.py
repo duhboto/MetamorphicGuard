@@ -3,26 +3,39 @@ Adoption gate logic for deciding whether to accept a candidate implementation.
 """
 
 from typing import Any, Dict, Optional
+import warnings
 
 
 def decide_adopt(
     result: Dict[str, Any],
-    improve_delta: float = 0.02,
+    min_delta: float = 0.02,
     min_pass_rate: float = 0.80,
     policy: Optional[Dict[str, Any]] = None,
+    **deprecated_kwargs: Any,
 ) -> Dict[str, Any]:
     """
     Decide whether to adopt the candidate based on evaluation results.
 
     Args:
         result: Full evaluation result from harness
-        improve_delta: Minimum improvement threshold for CI lower bound
+        min_delta: Minimum improvement threshold for CI lower bound
         min_pass_rate: Minimum pass rate required for candidate
         policy: Optional routing-aware policy with SLO constraints
 
     Returns:
         Dict with 'adopt' boolean and 'reason' string
     """
+    if "improve_delta" in deprecated_kwargs:
+        warnings.warn(
+            "The 'improve_delta' argument is deprecated; use 'min_delta' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        min_delta = deprecated_kwargs.pop("improve_delta")
+    if deprecated_kwargs:
+        unexpected = ", ".join(sorted(deprecated_kwargs))
+        raise TypeError(f"decide_adopt() got unexpected keyword arguments: {unexpected}")
+
     # If policy is provided, use routing-aware gate
     if policy:
         return _decide_adopt_with_policy(result, policy)
@@ -53,10 +66,10 @@ def decide_adopt(
         }
 
     # Check improvement threshold
-    if delta_ci[0] < improve_delta:
+    if delta_ci[0] < min_delta:
         return {
             "adopt": False,
-            "reason": f"Improvement insufficient: CI lower bound {delta_ci[0]:.3f} < {improve_delta}",
+            "reason": f"Improvement insufficient: CI lower bound {delta_ci[0]:.3f} < {min_delta}",
         }
 
     # All conditions met

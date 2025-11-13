@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any, Dict, Optional
+import warnings
 
 import pytest
 
@@ -60,7 +61,16 @@ def pytest_runtest_call(item: pytest.Item) -> None:
     seed = marker.kwargs.get("seed", 42)
     timeout_s = marker.kwargs.get("timeout_s", 2.0)
     mem_mb = marker.kwargs.get("mem_mb", 512)
-    improve_delta = marker.kwargs.get("improve_delta", 0.02)
+    if "min_delta" in marker.kwargs:
+        min_delta = marker.kwargs["min_delta"]
+    else:
+        min_delta = marker.kwargs.get("improve_delta", 0.02)
+        if "improve_delta" in marker.kwargs:
+            warnings.warn(
+                "metamorphic marker parameter 'improve_delta' is deprecated; use 'min_delta' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
     expect_adopt = marker.kwargs.get("expect_adopt", True)  # Default: expect adoption to succeed
 
     if not task_name or not baseline_path or not candidate_path:
@@ -76,14 +86,14 @@ def pytest_runtest_call(item: pytest.Item) -> None:
             seed=seed,
             timeout_s=timeout_s,
             mem_mb=mem_mb,
-            improve_delta=improve_delta,
+            min_delta=min_delta,
         )
     except Exception as e:
         pytest.fail(f"Metamorphic Guard evaluation failed: {e}")
 
     # Make adoption decision if not already present
     if "decision" not in result and decide_adopt is not None:
-        result["decision"] = decide_adopt(result, improve_delta=improve_delta)
+        result["decision"] = decide_adopt(result, min_delta=min_delta)
 
     # Store result in item for later use
     item._metamorphic_result = result  # type: ignore

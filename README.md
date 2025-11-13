@@ -196,7 +196,7 @@ result = run(
     task=spec,
     baseline=Implementation(path="baseline.py"),
     candidate=Implementation(path="candidate.py"),
-    config=EvaluationConfig(n=100, seed=123, improve_delta=0.0),
+    config=EvaluationConfig(n=100, seed=123, min_delta=0.0),
 )
 
 if result.adopt:
@@ -212,7 +212,7 @@ result = run(
     task=spec,
     baseline=Implementation.from_callable(baseline_callable),
     candidate=Implementation.from_callable(candidate_callable),
-    config=EvaluationConfig(n=100, seed=123, improve_delta=0.0),
+    config=EvaluationConfig(n=100, seed=123, min_delta=0.0),
 )
 ```
 
@@ -223,7 +223,7 @@ result = run(
     task=spec,
     baseline=Implementation.from_dotted("my_project.models:baseline"),
     candidate=Implementation.from_dotted("my_project.models:candidate"),
-    config=EvaluationConfig(n=100, seed=123, improve_delta=0.0),
+    config=EvaluationConfig(n=100, seed=123, min_delta=0.0),
 )
 ```
 

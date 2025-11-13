@@ -17,7 +17,7 @@ def test_decide_adopt_success():
         "delta_ci": [0.05, 0.15]  # Lower bound > 0.02
     }
     
-    decision = decide_adopt(result, improve_delta=0.02, min_pass_rate=0.80)
+    decision = decide_adopt(result, min_delta=0.02, min_pass_rate=0.80)
     
     assert decision["adopt"] is True
     assert decision["reason"] == "meets_gate"
@@ -34,7 +34,7 @@ def test_decide_adopt_property_violations():
         "delta_ci": [0.05, 0.15]
     }
     
-    decision = decide_adopt(result, improve_delta=0.02, min_pass_rate=0.80)
+    decision = decide_adopt(result, min_delta=0.02, min_pass_rate=0.80)
     
     assert decision["adopt"] is False
     assert "Property violations" in decision["reason"]
@@ -51,7 +51,7 @@ def test_decide_adopt_mr_violations():
         "delta_ci": [0.05, 0.15]
     }
     
-    decision = decide_adopt(result, improve_delta=0.02, min_pass_rate=0.80)
+    decision = decide_adopt(result, min_delta=0.02, min_pass_rate=0.80)
     
     assert decision["adopt"] is False
     assert "Metamorphic relation violations" in decision["reason"]
@@ -68,7 +68,7 @@ def test_decide_adopt_low_pass_rate():
         "delta_ci": [0.05, 0.15]
     }
     
-    decision = decide_adopt(result, improve_delta=0.02, min_pass_rate=0.80)
+    decision = decide_adopt(result, min_delta=0.02, min_pass_rate=0.80)
     
     assert decision["adopt"] is False
     assert "Pass rate too low" in decision["reason"]
@@ -85,7 +85,7 @@ def test_decide_adopt_insufficient_improvement():
         "delta_ci": [0.01, 0.15]  # Lower bound <= 0.02
     }
     
-    decision = decide_adopt(result, improve_delta=0.02, min_pass_rate=0.80)
+    decision = decide_adopt(result, min_delta=0.02, min_pass_rate=0.80)
     
     assert decision["adopt"] is False
     assert "Improvement insufficient" in decision["reason"]
@@ -103,7 +103,7 @@ def test_decide_adopt_boundary_conditions():
         "delta_ci": [0.0201, 0.15]  # Just above threshold
     }
     
-    decision = decide_adopt(result, improve_delta=0.02, min_pass_rate=0.80)
+    decision = decide_adopt(result, min_delta=0.02, min_pass_rate=0.80)
     
     assert decision["adopt"] is True
     assert decision["reason"] == "meets_gate"

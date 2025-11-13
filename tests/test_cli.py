@@ -1068,6 +1068,8 @@ def test_cli_policy_preset_noninferiority(tmp_path):
             assert report_data["config"]["policy_rule"]["name"] == "noninferiority"
             assert report_data["config"]["policy_version"] == "noninferiority"
             assert report_data["config"]["ci_method"] == "bootstrap"
+            assert report_data["config"]["min_delta"] == pytest.approx(-0.01, rel=1e-6)
+            # Backwards compatibility alias retained for this release
             assert report_data["config"]["improve_delta"] == pytest.approx(-0.01, rel=1e-6)
             assert report_data["decision"]["adopt"] is True
 

@@ -102,7 +102,7 @@ def test_html_report_from_json(tmp_path: Path) -> None:
     # Ensure decision is present (run_eval may not add it)
     from metamorphic_guard.gate import decide_adopt
     if "decision" not in result:
-        result["decision"] = decide_adopt(result, improve_delta=0.02)
+        result["decision"] = decide_adopt(result, min_delta=0.02)
     
     json_report = tmp_path / "report.json"
     write_report(result, directory=tmp_path)

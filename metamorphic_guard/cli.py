@@ -747,7 +747,7 @@ def evaluate_command(
                 alpha=alpha,
                 violation_cap=violation_cap,
                 parallel=parallel,
-                improve_delta=min_delta,
+                min_delta=min_delta,
                 bootstrap_samples=bootstrap_samples,
                 ci_method=ci_method,
                 rr_ci_method=rr_ci_method,
@@ -1642,7 +1642,7 @@ def stability_audit_command(
             n=n,
             seed_start=seed_start,
             num_seeds=num_seeds,
-            improve_delta=min_delta,
+            min_delta=min_delta,
             min_pass_rate=min_pass_rate,
             ci_method=ci_method,
         )

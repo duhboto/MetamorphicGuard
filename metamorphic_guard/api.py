@@ -6,15 +6,16 @@ This module provides a minimal, typed surface for downstream users.
 
 from __future__ import annotations
 
+import importlib
+import inspect
+import logging
+import tempfile
+import uuid
+import warnings
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union, Mapping, Iterator
-import uuid
-import importlib
-import inspect
-import tempfile
-import logging
+from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Sequence, Tuple, Union
 
 from .config import EvaluatorConfig, load_config
 from .policy import PolicyLoadError, PolicyParseError, resolve_policy_option
@@ -207,7 +208,7 @@ class Implementation:
             yield str(path)
 
 
-@dataclass
+@dataclass(init=False)
 class EvaluationConfig:
     """
     Configuration knobs forwarded to the evaluation harness.
@@ -221,7 +222,7 @@ class EvaluationConfig:
     mem_mb: int = 512
     alpha: float = 0.05
     violation_cap: int = 25
-    improve_delta: float = 0.02
+    min_delta: float = 0.02
     bootstrap_samples: int = 1000
     ci_method: str = "bootstrap"
     rr_ci_method: str = "log"
@@ -239,6 +240,74 @@ class EvaluationConfig:
     # Flexible extension point for advanced options not yet surfaced above.
     extra_options: Dict[str, Any] = field(default_factory=dict)
 
+    def __init__(
+        self,
+        n: int = 400,
+        seed: int = 42,
+        timeout_s: float = 2.0,
+        mem_mb: int = 512,
+        alpha: float = 0.05,
+        violation_cap: int = 25,
+        min_delta: Optional[float] = None,
+        *,
+        improve_delta: Optional[float] = None,
+        bootstrap_samples: int = 1000,
+        ci_method: str = "bootstrap",
+        rr_ci_method: str = "log",
+        min_pass_rate: float = 0.80,
+        power_target: float = 0.8,
+        failed_artifact_limit: Optional[int] = None,
+        failed_artifact_ttl_days: Optional[int] = None,
+        sequential_method: str = "none",
+        max_looks: int = 1,
+        look_number: int = 1,
+        relation_correction: Optional[str] = None,
+        policy_version: Optional[str] = None,
+        policy_config: Optional[Dict[str, Any]] = None,
+        extra_options: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        if improve_delta is not None:
+            warnings.warn(
+                "EvaluationConfig(improve_delta=...) is deprecated; use min_delta instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        if min_delta is None and improve_delta is not None:
+            resolved_min_delta = float(improve_delta)
+        elif min_delta is not None:
+            resolved_min_delta = float(min_delta)
+            if improve_delta is not None and float(improve_delta) != resolved_min_delta:
+                warnings.warn(
+                    "Both min_delta and improve_delta were provided; ignoring improve_delta.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+        else:
+            resolved_min_delta = 0.02
+
+        self.n = int(n)
+        self.seed = int(seed)
+        self.timeout_s = float(timeout_s)
+        self.mem_mb = int(mem_mb)
+        self.alpha = float(alpha)
+        self.violation_cap = int(violation_cap)
+        self.min_delta = float(resolved_min_delta)
+        self.bootstrap_samples = int(bootstrap_samples)
+        self.ci_method = str(ci_method)
+        self.rr_ci_method = str(rr_ci_method)
+        self.min_pass_rate = float(min_pass_rate)
+        self.power_target = float(power_target)
+        self.failed_artifact_limit = failed_artifact_limit
+        self.failed_artifact_ttl_days = failed_artifact_ttl_days
+        self.sequential_method = sequential_method
+        self.max_looks = int(max_looks)
+        self.look_number = int(look_number)
+        self.relation_correction = relation_correction
+        self.policy_version = policy_version
+        self.policy_config = dict(policy_config) if policy_config is not None else None
+        self.extra_options = dict(extra_options) if extra_options else {}
+
     def to_kwargs(self) -> Dict[str, Any]:
         """Render keyword arguments for the harness without deep-copying extras."""
 
@@ -250,7 +319,7 @@ class EvaluationConfig:
             "alpha": self.alpha,
             "violation_cap": self.violation_cap,
             "parallel": None,
-            "improve_delta": self.improve_delta,
+            "min_delta": self.min_delta,
             "bootstrap_samples": self.bootstrap_samples,
             "ci_method": self.ci_method,
             "rr_ci_method": self.rr_ci_method,
@@ -459,7 +528,7 @@ def _evaluation_config_from_evaluator(
     cfg: EvaluatorConfig,
 ) -> Tuple[EvaluationConfig, Dict[str, Any], List[str], Optional[bool]]:
     extra_options: Dict[str, Any] = {}
-    improve_delta = cfg.min_delta
+    min_delta = cfg.min_delta
     alpha = cfg.alpha
     min_pass_rate = cfg.min_pass_rate
     violation_cap = cfg.violation_cap
@@ -500,7 +569,7 @@ def _evaluation_config_from_evaluator(
 
         gating = policy_payload.get("gating", {})
         if "min_delta" in gating:
-            improve_delta = float(gating["min_delta"])
+            min_delta = float(gating["min_delta"])
         if "min_pass_rate" in gating:
             min_pass_rate = float(gating["min_pass_rate"])
         if "alpha" in gating:
@@ -534,7 +603,7 @@ def _evaluation_config_from_evaluator(
         mem_mb=cfg.mem_mb,
         alpha=alpha,
         violation_cap=violation_cap,
-        improve_delta=improve_delta,
+        min_delta=min_delta,
         bootstrap_samples=cfg.bootstrap_samples,
         ci_method=cfg.ci_method,
         rr_ci_method=cfg.rr_ci_method,
