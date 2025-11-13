@@ -158,6 +158,77 @@ metamorphic-guard --help
 - `--mr-fwer`: Apply Holm-Bonferroni multiple-comparison correction across metamorphic relations.
 - `--mr-fdr`: Apply Benjamini-Hochberg false-discovery-rate correction across metamorphic relations.
 
+### Programmatic API
+
+Prefer running evaluations from Python? Use the high-level helpers in `metamorphic_guard.api`:
+
+```python
+from metamorphic_guard import (
+    TaskSpec,
+    Property,
+    Metric,
+    Implementation,
+    EvaluationConfig,
+    run,
+)
+
+spec = TaskSpec(
+    name="demo_task",
+    gen_inputs=lambda n, seed: [(i,) for i in range(n)],
+    properties=[
+        Property(
+            check=lambda output, x: isinstance(output, dict) and "value" in output,
+            description="Outputs include a value field",
+        )
+    ],
+    relations=[],
+    equivalence=lambda a, b: a == b,
+    metrics=[
+        Metric(
+            name="value_mean",
+            extract=lambda output, _: float(output["value"]),
+            kind="mean",
+        )
+    ],
+)
+
+result = run(
+    task=spec,
+    baseline=Implementation(path="baseline.py"),
+    candidate=Implementation(path="candidate.py"),
+    config=EvaluationConfig(n=100, seed=123, improve_delta=0.0),
+)
+
+if result.adopt:
+    print("Candidate passes:", result.reason)
+else:
+    print("Candidate rejected:", result.reason)
+```
+
+Prefer in-memory functions? Replace the file-backed implementations with callables:
+
+```python
+result = run(
+    task=spec,
+    baseline=Implementation.from_callable(baseline_callable),
+    candidate=Implementation.from_callable(candidate_callable),
+    config=EvaluationConfig(n=100, seed=123, improve_delta=0.0),
+)
+```
+
+Callables already packaged in modules can be referenced without importing them first:
+
+```python
+result = run(
+    task=spec,
+    baseline=Implementation.from_dotted("my_project.models:baseline"),
+    candidate=Implementation.from_dotted("my_project.models:candidate"),
+    config=EvaluationConfig(n=100, seed=123, improve_delta=0.0),
+)
+```
+
+The `run` helper wraps the full harness: it registers your `TaskSpec`, executes both implementations with sandboxing and statistical analysis, and returns an `EvaluationResult` containing the adoption decision and the full JSON report.
+
 ## Example Implementations
 
 The `examples/` directory contains sample implementations for the `top_k` task:

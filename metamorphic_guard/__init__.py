@@ -8,6 +8,13 @@ from .relations import permute_input, add_noise_below_min
 from .stability import multiset_equal
 from .monitoring import Monitor, LatencyMonitor
 from .dispatch import Dispatcher
+from .api import (
+    TaskSpec,
+    Implementation,
+    EvaluationConfig,
+    EvaluationResult,
+    run,
+)
 
 # Version management via setuptools_scm
 try:

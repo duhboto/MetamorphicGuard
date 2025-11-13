@@ -55,8 +55,8 @@ class Spec:
     metrics: List[Metric] = field(default_factory=list)
 
 
-# Global task registry
-_TASK_REGISTRY: Dict[str, Spec] = {}
+# Global task registry storing factories that yield Spec instances
+_TASK_REGISTRY: Dict[str, Callable[[], Spec]] = {}
 
 
 def task(name: str):
@@ -119,3 +119,29 @@ def list_tasks() -> List[str]:
     except ImportError:
         pass
     return sorted(set(tasks))
+
+
+def register_spec(name: str, spec: Spec, *, overwrite: bool = False) -> None:
+    """
+    Register a Spec instance under the provided name.
+
+    Args:
+        name: Registry key
+        spec: Spec instance
+        overwrite: Allow replacing an existing entry
+
+    Raises:
+        ValueError: If name already exists and overwrite is False
+    """
+    if not overwrite and name in _TASK_REGISTRY:
+        raise ValueError(f"Task '{name}' already registered. Use overwrite=True to replace.")
+
+    def factory(spec_obj: Spec = spec) -> Spec:
+        return spec_obj
+
+    _TASK_REGISTRY[name] = factory
+
+
+def unregister_spec(name: str) -> None:
+    """Remove a registered Spec. No error if the name is absent."""
+    _TASK_REGISTRY.pop(name, None)

@@ -1,0 +1,316 @@
+"""
+Public entry points for defining tasks and running evaluations.
+
+This module provides a minimal, typed surface for downstream users.
+"""
+
+from __future__ import annotations
+
+from contextlib import ExitStack, contextmanager
+from dataclasses import asdict, dataclass, field
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+import uuid
+import importlib
+import inspect
+import tempfile
+from pathlib import Path
+
+from .harness import run_eval
+from .specs import MetamorphicRelation, Metric, Property, Spec, register_spec, unregister_spec
+
+# ---------------------------------------------------------------------------
+# User-facing dataclasses
+
+
+@dataclass(frozen=True)
+class TaskSpec:
+    """
+    User-facing task specification.
+
+    Wraps the internal Spec with a stable name so callers can define
+    metamorphic evaluation suites without consulting the registry API.
+    """
+
+    name: str
+    gen_inputs: Callable[[int, int], List[Tuple[Any, ...]]]
+    properties: Sequence[Property]
+    relations: Sequence[MetamorphicRelation]
+    equivalence: Callable[[Any, Any], bool]
+    fmt_in: Callable[[Tuple[Any, ...]], str] = lambda args: str(args)
+    fmt_out: Callable[[Any], str] = lambda result: str(result)
+    cluster_key: Optional[Callable[[Tuple[Any, ...]], Any]] = None
+    metrics: Sequence[Metric] = field(default_factory=tuple)
+
+    def to_spec(self) -> Spec:
+        """Convert to the internal Spec representation."""
+        return Spec(
+            gen_inputs=self.gen_inputs,
+            properties=list(self.properties),
+            relations=list(self.relations),
+            equivalence=self.equivalence,
+            fmt_in=self.fmt_in,
+            fmt_out=self.fmt_out,
+            cluster_key=self.cluster_key,
+            metrics=list(self.metrics),
+        )
+
+
+@dataclass(frozen=True)
+class Implementation:
+    """
+    Reference to a Python file that exposes a `solve` function.
+    """
+
+    path: Optional[str] = None
+    func: Optional[Callable[..., Any]] = None
+
+    def __post_init__(self) -> None:
+        if (self.path is None) == (self.func is None):
+            raise ValueError("Provide exactly one of 'path' or 'func' for Implementation.")
+        if self.path is not None:
+            # Normalize to string path
+            object.__setattr__(self, "path", str(self.path))
+        if self.func is not None:
+            self._validate_callable(self.func)
+
+    @classmethod
+    def from_callable(cls, func: Callable[..., Any]) -> "Implementation":
+        """Create an Implementation backed by a Python callable."""
+        return cls(path=None, func=func)
+
+    @staticmethod
+    def _validate_callable(func: Callable[..., Any]) -> None:
+        module = getattr(func, "__module__", None)
+        qualname = getattr(func, "__qualname__", None)
+        if not module or not qualname:
+            raise ValueError("Callable must have importable __module__ and __qualname__ attributes.")
+        if "<locals>" in qualname:
+            raise ValueError(
+                "Callable implementations must be defined at module scope (no nested functions or lambdas)."
+            )
+        try:
+            importlib.import_module(module)
+        except ImportError as exc:
+            raise ValueError(f"Cannot import module '{module}' for callable implementation.") from exc
+
+    @classmethod
+    def from_dotted(cls, dotted: str) -> "Implementation":
+        """
+        Construct an Implementation from a dotted path of the form 'module:callable'.
+
+        The callable portion can include attribute access (e.g. 'pkg.mod:factory.create').
+        """
+
+        if ":" not in dotted:
+            raise ValueError("Dotted path must be in the form 'module:callable'.")
+
+        module_name, attr_path = dotted.split(":", 1)
+        module_name = module_name.strip()
+        attr_path = attr_path.strip()
+        if not module_name or not attr_path:
+            raise ValueError("Both module and callable must be provided in dotted path.")
+
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError as exc:
+            raise ValueError(f"Cannot import module '{module_name}'.") from exc
+
+        target: Any = module
+        for part in attr_path.split("."):
+            if not hasattr(target, part):
+                raise ValueError(f"Attribute '{part}' not found while resolving '{dotted}'.")
+            target = getattr(target, part)
+
+        if not callable(target):
+            raise ValueError(f"Resolved object '{dotted}' is not callable.")
+
+        return cls.from_callable(target)
+
+    @contextmanager
+    def materialize(self):
+        """Yield a file path that exposes a `solve` function."""
+        if self.path is not None:
+            yield self.path
+            return
+        yield from self._materialize_callable()
+
+    def _materialize_callable(self):
+        assert self.func is not None  # for type-checkers
+
+        module = self.func.__module__  # validated in __post_init__
+        qualname = self.func.__qualname__
+        parts = qualname.split(".")
+        if any(part == "<locals>" for part in parts):
+            raise ValueError("Callable implementations must be defined at module scope.")
+
+        try:
+            source_file = inspect.getfile(self.func)
+        except (OSError, TypeError) as exc:
+            raise ValueError("Callable implementations must originate from Python source files.") from exc
+
+        root_dir = Path(source_file).resolve()
+        for _ in range(len(module.split("."))):
+            root_dir = root_dir.parent
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "callable_impl.py"
+            attr_lines = ["    attr = module"]
+            for part in parts:
+                attr_lines.append(f"    attr = getattr(attr, {part!r})")
+            attr_lines.append("    return attr")
+            loader_body = "\n".join(attr_lines)
+            source = (
+                "from importlib import import_module\n"
+                "import sys\n\n"
+                f"def _load():\n"
+                f"    search_path = {str(root_dir)!r}\n"
+                "    if search_path not in sys.path:\n"
+                "        sys.path.insert(0, search_path)\n"
+                f"    module = import_module({module!r})\n"
+                f"{loader_body}\n\n"
+                "_FUNC = _load()\n\n"
+                "def solve(*args, **kwargs):\n"
+                "    return _FUNC(*args, **kwargs)\n"
+            )
+            path.write_text(source, encoding="utf-8")
+            yield str(path)
+
+
+@dataclass
+class EvaluationConfig:
+    """
+    Configuration knobs forwarded to the evaluation harness.
+
+    The defaults match the CLI behavior.
+    """
+
+    n: int = 400
+    seed: int = 42
+    timeout_s: float = 2.0
+    mem_mb: int = 512
+    alpha: float = 0.05
+    violation_cap: int = 25
+    improve_delta: float = 0.02
+    bootstrap_samples: int = 1000
+    ci_method: str = "bootstrap"
+    rr_ci_method: str = "log"
+    min_pass_rate: float = 0.80
+    power_target: float = 0.8
+    failed_artifact_limit: Optional[int] = None
+    failed_artifact_ttl_days: Optional[int] = None
+    sequential_method: str = "none"
+    max_looks: int = 1
+    look_number: int = 1
+    relation_correction: Optional[str] = None
+    policy_version: Optional[str] = None
+    policy_config: Optional[Dict[str, Any]] = None
+
+    # Flexible extension point for advanced options not yet surfaced above.
+    extra_options: Dict[str, Any] = field(default_factory=dict)
+
+    def to_kwargs(self) -> Dict[str, Any]:
+        """Render keyword arguments for the harness."""
+        payload = asdict(self)
+        # extra_options should not be forwarded as a nested dict
+        extra = payload.pop("extra_options", {}) or {}
+        # Remove None entries so we preserve harness defaults
+        filtered = {k: v for k, v in payload.items() if v is not None}
+        filtered.update(extra)
+        return filtered
+
+
+@dataclass
+class EvaluationResult:
+    """Wrapper over the harness response."""
+
+    report: Dict[str, Any]
+
+    @property
+    def adopt(self) -> bool:
+        decision = self.report.get("decision") or {}
+        return bool(decision.get("adopt"))
+
+    @property
+    def reason(self) -> str:
+        decision = self.report.get("decision") or {}
+        return decision.get("reason", "")
+
+    def to_json(self, path: str, *, indent: int = 2) -> None:
+        """Serialize the full report to disk."""
+        import json
+
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(self.report, handle, indent=indent, sort_keys=True)
+
+
+# ---------------------------------------------------------------------------
+# Execution helpers
+
+
+@contextmanager
+def _registered_spec(spec: TaskSpec):
+    """
+    Temporarily register a TaskSpec under its name.
+
+    If the name already exists we create a unique temporary namespace instead.
+    """
+
+    target_name = spec.name
+    temp_name: Optional[str] = None
+
+    if target_name in _existing_specs():
+        temp_name = f"{target_name}__{uuid.uuid4().hex}"
+        target_name = temp_name
+
+    internal_spec = spec.to_spec()
+    register_spec(target_name, internal_spec, overwrite=True)
+
+    try:
+        yield target_name
+    finally:
+        unregister_spec(target_name)
+
+
+def _existing_specs() -> Sequence[str]:
+    from .specs import list_tasks
+
+    return list_tasks()
+
+
+def run(
+    task: TaskSpec,
+    baseline: Implementation,
+    candidate: Implementation,
+    config: Optional[EvaluationConfig] = None,
+) -> EvaluationResult:
+    """
+    Execute baseline vs candidate under the provided task.
+    """
+
+    cfg = config or EvaluationConfig()
+
+    with _registered_spec(task) as task_name, ExitStack() as stack:
+        baseline_path = stack.enter_context(baseline.materialize())
+        candidate_path = stack.enter_context(candidate.materialize())
+        kwargs = cfg.to_kwargs()
+        report = run_eval(
+            task_name=task_name,
+            baseline_path=baseline_path,
+            candidate_path=candidate_path,
+            **kwargs,
+        )
+
+    return EvaluationResult(report=report)
+
+
+__all__ = [
+    "TaskSpec",
+    "Implementation",
+    "EvaluationConfig",
+    "EvaluationResult",
+    "run",
+    "Property",
+    "MetamorphicRelation",
+    "Metric",
+]
+
