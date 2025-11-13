@@ -610,3 +610,100 @@ def compute_bayesian_ci(
     
     return [ci_lower, ci_upper]
 
+
+def compute_cohens_d(
+    baseline_values: Sequence[float],
+    candidate_values: Sequence[float],
+) -> Optional[Dict[str, float]]:
+    """
+    Compute Cohen's d effect size for continuous metrics.
+    
+    Cohen's d measures the standardized difference between two means.
+    Common interpretations:
+    - |d| < 0.2: negligible
+    - 0.2 <= |d| < 0.5: small
+    - 0.5 <= |d| < 0.8: medium
+    - |d| >= 0.8: large
+    
+    Args:
+        baseline_values: Sequence of baseline metric values
+        candidate_values: Sequence of candidate metric values (paired with baseline)
+    
+    Returns:
+        Dictionary with 'd' (Cohen's d), 'pooled_std' (pooled standard deviation),
+        and 'interpretation' (small/medium/large), or None if insufficient data
+    """
+    if len(baseline_values) != len(candidate_values):
+        return None
+    
+    # Filter out None values and ensure we have pairs
+    valid_pairs = [
+        (b, c)
+        for b, c in zip(baseline_values, candidate_values)
+        if b is not None and c is not None
+    ]
+    
+    if len(valid_pairs) < 2:
+        return None
+    
+    baseline_vals = [b for b, c in valid_pairs]
+    candidate_vals = [c for b, c in valid_pairs]
+    
+    # Compute means
+    baseline_mean = sum(baseline_vals) / len(baseline_vals)
+    candidate_mean = sum(candidate_vals) / len(candidate_vals)
+    
+    # Compute variances and standard deviations
+    n_baseline = len(baseline_vals)
+    n_candidate = len(candidate_vals)
+    
+    if n_baseline > 1:
+        baseline_var = sum((x - baseline_mean) ** 2 for x in baseline_vals) / (n_baseline - 1)
+        baseline_std = math.sqrt(baseline_var)
+    else:
+        baseline_var = 0.0
+        baseline_std = 0.0
+    
+    if n_candidate > 1:
+        candidate_var = sum((x - candidate_mean) ** 2 for x in candidate_vals) / (n_candidate - 1)
+        candidate_std = math.sqrt(candidate_var)
+    else:
+        candidate_var = 0.0
+        candidate_std = 0.0
+    
+    # Pooled standard deviation
+    if n_baseline + n_candidate - 2 == 0:
+        return None
+    
+    pooled_var = (
+        ((n_baseline - 1) * baseline_var + (n_candidate - 1) * candidate_var) /
+        (n_baseline + n_candidate - 2)
+    )
+    pooled_std = math.sqrt(pooled_var)
+    
+    if pooled_std == 0:
+        # If both groups have zero variance, effect size is undefined
+        return None
+    
+    # Cohen's d
+    d = (candidate_mean - baseline_mean) / pooled_std
+    
+    # Interpretation
+    abs_d = abs(d)
+    if abs_d < 0.2:
+        interpretation = "negligible"
+    elif abs_d < 0.5:
+        interpretation = "small"
+    elif abs_d < 0.8:
+        interpretation = "medium"
+    else:
+        interpretation = "large"
+    
+    return {
+        "d": float(d),
+        "pooled_std": float(pooled_std),
+        "interpretation": interpretation,
+        "baseline_mean": float(baseline_mean),
+        "candidate_mean": float(candidate_mean),
+    }
+

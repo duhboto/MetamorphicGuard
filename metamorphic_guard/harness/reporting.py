@@ -756,6 +756,13 @@ def collect_metrics(
                 )
                 if ci_result:
                     delta_payload["ci"] = ci_result
+        
+        # Compute Cohen's d for continuous metrics
+        if metric.kind == "continuous":
+            from .statistics import compute_cohens_d
+            cohens_d_result = compute_cohens_d(baseline_values, candidate_values)
+            if cohens_d_result:
+                delta_payload["cohens_d"] = cohens_d_result
 
         metric_entry: Dict[str, Any] = {
             "kind": metric.kind,
