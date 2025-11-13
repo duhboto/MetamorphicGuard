@@ -85,24 +85,24 @@ if HYPOTHESIS_AVAILABLE:
     ) -> None:
             """Test that Newcombe CI has correct properties."""
             if baseline_passes > baseline_total or candidate_passes > candidate_total:
-            return
-        
+                return
+            
             ci = compute_newcombe_ci(
-            baseline_passes,
-            baseline_total,
-            candidate_passes,
-            candidate_total,
-            alpha=alpha,
+                baseline_passes,
+                baseline_total,
+                candidate_passes,
+                candidate_total,
+                alpha=alpha,
             )
-        
+            
             # Property 1: Lower bound <= upper bound
             assert ci[0] <= ci[1]
-        
+            
             # Property 2: CI contains observed delta (approximately)
             p_b = baseline_passes / baseline_total if baseline_total > 0 else 0.0
             p_c = candidate_passes / candidate_total if candidate_total > 0 else 0.0
             delta = p_c - p_b
-        
+            
             # Delta should be within CI bounds (with some margin for approximation)
             assert ci[0] <= delta + 0.2
             assert ci[1] >= delta - 0.2
