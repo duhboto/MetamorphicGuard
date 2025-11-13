@@ -1,0 +1,79 @@
+# Metamorphic Guard Evaluation Template for GitLab CI
+#
+# Usage:
+#   1. Include this template in your .gitlab-ci.yml:
+#      include:
+#        - local: '.gitlab-ci/templates/metamorphic-guard.yml'
+#   2. Define variables in GitLab CI/CD settings or .gitlab-ci.yml
+#   3. Customize the task, baseline, and candidate paths
+
+.metamorphic_guard_template: &metamorphic_guard_template
+  image: python:3.11
+  before_script:
+    - pip install --upgrade pip
+    - pip install metamorphic-guard
+    - pip install -r requirements.txt || true
+  variables:
+    MG_TASK_NAME: "top_k"
+    MG_BASELINE_PATH: "baseline.py"
+    MG_CANDIDATE_PATH: "candidate.py"
+    MG_N: "400"
+    MG_MIN_DELTA: "0.02"
+    MG_MIN_PASS_RATE: "0.80"
+  script:
+    - |
+      metamorphic-guard evaluate \
+        --task ${MG_TASK_NAME} \
+        --baseline ${MG_BASELINE_PATH} \
+        --candidate ${MG_CANDIDATE_PATH} \
+        --n ${MG_N} \
+        --min-delta ${MG_MIN_DELTA} \
+        --min-pass-rate ${MG_MIN_PASS_RATE} \
+        --report-dir reports \
+        --html-report reports/report.html \
+        --junit-report reports/junit.xml
+  artifacts:
+    when: always
+    paths:
+      - reports/
+    reports:
+      junit: reports/junit.xml
+    expire_in: 30 days
+  only:
+    - merge_requests
+    - main
+    - develop
+
+metamorphic_guard_evaluation:
+  <<: *metamorphic_guard_template
+  stage: test
+  tags:
+    - docker
+
+# Example: LLM evaluation with API keys
+metamorphic_guard_llm:
+  <<: *metamorphic_guard_template
+  stage: test
+  variables:
+    MG_TASK_NAME: "llm_task"
+    MG_EXECUTOR: "openai"
+    MG_EXECUTOR_CONFIG: '{"model": "gpt-3.5-turbo"}'
+  before_script:
+    - pip install --upgrade pip
+    - pip install metamorphic-guard[llm]
+    - pip install -r requirements.txt || true
+  script:
+    - |
+      metamorphic-guard evaluate \
+        --task ${MG_TASK_NAME} \
+        --baseline ${MG_BASELINE_PATH} \
+        --candidate ${MG_CANDIDATE_PATH} \
+        --executor ${MG_EXECUTOR} \
+        --executor-config ${MG_EXECUTOR_CONFIG} \
+        --n ${MG_N} \
+        --estimate-cost \
+        --report-dir reports
+  secrets:
+    OPENAI_API_KEY:
+      vault: OPENAI_API_KEY  # Store in GitLab CI/CD variables
+
