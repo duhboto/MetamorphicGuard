@@ -164,6 +164,7 @@ HTML reports and JSON output now include monitor summaries.
 - Resource budgets: `--monitor resource:metric=cpu_ms,alert_ratio=1.4` consumes values from
   `result["resource_usage"]["cpu_ms"]` (or top-level keys) and alerts when the candidate mean exceeds the
   baseline by the configured ratio.
+- Prometheus now exports `metamorphic_llm_retries_total{provider,role}`—enable metrics (`METAMORPHIC_GUARD_PROMETHEUS=1`) to watch retry volumes and tune `executor_config.max_retries`.
 
 Send alert summaries to downstream systems via `--alert-webhook https://hooks.internal.dev/metaguard`.
 The webhook receives JSON containing flattened monitor alerts plus run metadata, making it easy to plug into

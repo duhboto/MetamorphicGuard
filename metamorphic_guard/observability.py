@@ -59,6 +59,12 @@ if _METRICS_ENABLED and _PROMETHEUS_IMPORTED:
             "Total evaluation cases requeued after lease expiry or heartbeat timeout",
             registry=_PROM_REGISTRY,
         ),
+        "llm_retries": Counter(  # type: ignore[call-arg]
+            "metamorphic_llm_retries_total",
+            "Total retry attempts performed by LLM executors",
+            ["provider", "role"],
+            registry=_PROM_REGISTRY,
+        ),
     }
     _PROM_GAUGES = {
         "queue_pending": Gauge(  # type: ignore[call-arg]
@@ -266,6 +272,15 @@ def increment_queue_requeued(count: int = 1) -> None:
     counter = _PROM_COUNTERS.get("queue_requeued")
     if counter is not None:
         counter.inc(count)
+
+
+def increment_llm_retries(provider: str, role: str, count: int) -> None:
+    if not metrics_enabled() or count <= 0:
+        return
+    counter = _PROM_COUNTERS.get("llm_retries")
+    if counter is None:
+        return
+    counter.labels(provider=provider, role=role).inc(count)
 
 
 def observe_queue_pending_tasks(count: int) -> None:

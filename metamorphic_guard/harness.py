@@ -47,7 +47,7 @@ def _serialize_for_report(value: Any) -> Any:
         return repr(value)
 from .dispatch import Dispatcher, ensure_dispatcher
 from .monitoring import Monitor, MonitorContext
-from .observability import add_log_context, increment_metric, log_event
+from .observability import add_log_context, increment_llm_retries, increment_metric, log_event
 from .gate import decide_adopt
 from .multiple_comparisons import apply_multiple_comparisons_correction
 
@@ -1313,6 +1313,30 @@ def run_eval(
     llm_metrics_payload = _compose_llm_metrics(baseline_llm_summary, candidate_llm_summary)
     if llm_metrics_payload:
         result["llm_metrics"] = llm_metrics_payload
+        baseline_provider = baseline_exec or executor or "unknown"
+        candidate_provider = candidate_exec or executor or "unknown"
+
+        baseline_retries = int(baseline_llm_summary.get("retry_total", 0))
+        candidate_retries = int(candidate_llm_summary.get("retry_total", 0))
+
+        if baseline_retries > 0:
+            increment_llm_retries(baseline_provider, "baseline", baseline_retries)
+        if candidate_retries > 0:
+            increment_llm_retries(candidate_provider, "candidate", candidate_retries)
+
+        log_event(
+            "llm_retry_summary",
+            baseline={
+                "provider": baseline_provider,
+                "retries": baseline_retries,
+                "success_rate": baseline_llm_summary.get("success_rate"),
+            },
+            candidate={
+                "provider": candidate_provider,
+                "retries": candidate_retries,
+                "success_rate": candidate_llm_summary.get("success_rate"),
+            },
+        )
 
     log_event(
         "run_eval_complete",
