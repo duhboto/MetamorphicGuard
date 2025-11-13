@@ -6,7 +6,13 @@ from typing import Any, Dict
 
 import pytest
 
-from metamorphic_guard.api import Implementation, TaskSpec, run_with_config
+from metamorphic_guard.api import (
+    Implementation,
+    TaskSpec,
+    EvaluationConfig,
+    run,
+    run_with_config,
+)
 from tests.callable_fixtures import baseline_callable
 
 
@@ -238,4 +244,45 @@ def test_run_with_config_observability(monkeypatch, task_spec, tmp_path):
     assert calls["metrics"]["port"] == 9200
     assert calls["metrics"]["host"] == "127.0.0.2"
     assert calls["closed"] is True
+
+
+def test_run_applies_dispatcher_and_queue(monkeypatch, task_spec):
+    captured: Dict[str, Any] = {}
+
+    def fake_run_eval(*args, **kwargs):
+        captured.update(kwargs)
+        return {
+            "task": task_spec.name,
+            "n": 1,
+            "seed": 1,
+            "decision": {"adopt": True, "reason": "ok"},
+            "baseline": {"pass_rate": 1.0, "passes": 1, "total": 1, "prop_violations": [], "mr_violations": []},
+            "candidate": {"pass_rate": 1.0, "passes": 1, "total": 1, "prop_violations": [], "mr_violations": []},
+            "delta_pass_rate": 0.0,
+            "delta_ci": [0.0, 0.0],
+            "relative_risk": 1.0,
+            "relative_risk_ci": [1.0, 1.0],
+            "monitors": {},
+            "config": {},
+        }
+
+    monkeypatch.setattr("metamorphic_guard.api.run_eval", fake_run_eval)
+    monkeypatch.setattr("metamorphic_guard.api._dispatch_alerts", lambda *args, **kwargs: None)
+
+    monitor_obj = "monitor-sentinel"
+
+    result = run(
+        task=task_spec,
+        baseline=Implementation.from_callable(baseline_callable),
+        candidate=Implementation.from_callable(baseline_callable),
+        config=EvaluationConfig(n=1, seed=1),
+        dispatcher="queue",
+        queue_config={"backend": "redis"},
+        monitors=[monitor_obj],
+    )
+
+    assert result.adopt is True
+    assert captured["dispatcher"] == "queue"
+    assert captured["queue_config"] == {"backend": "redis"}
+    assert captured["monitors"] == [monitor_obj]
 

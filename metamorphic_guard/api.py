@@ -7,7 +7,7 @@ This module provides a minimal, typed surface for downstream users.
 from __future__ import annotations
 
 from contextlib import ExitStack, contextmanager
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union, Mapping, Iterator
 import uuid
@@ -22,6 +22,8 @@ from .notifications import collect_alerts, send_webhook_alerts
 from .observability import configure_logging, configure_metrics, close_logging
 
 from .harness import run_eval
+from .dispatch import Dispatcher
+from .monitoring import Monitor
 from .specs import MetamorphicRelation, Metric, Property, Spec, register_spec, unregister_spec
 
 logger = logging.getLogger(__name__)
@@ -472,6 +474,9 @@ def run(
     *,
     alert_webhooks: Optional[Sequence[str]] = None,
     alert_metadata: Optional[Mapping[str, Any]] = None,
+    dispatcher: Optional[Union[str, Dispatcher]] = None,
+    queue_config: Optional[Mapping[str, Any]] = None,
+    monitors: Optional[Sequence[Monitor]] = None,
     logging_enabled: Optional[bool] = None,
     log_path: Optional[str | Path] = None,
     log_context: Optional[Mapping[str, Any]] = None,
@@ -484,6 +489,14 @@ def run(
     """
 
     cfg = config or EvaluationConfig()
+    extra_options = dict(cfg.extra_options)
+    if dispatcher is not None:
+        extra_options["dispatcher"] = dispatcher
+    if queue_config is not None:
+        extra_options["queue_config"] = dict(queue_config)
+    if monitors is not None:
+        extra_options["monitors"] = list(monitors)
+    cfg = replace(cfg, extra_options=extra_options)
 
     with _observability_context(
         logging_enabled=logging_enabled,
@@ -515,6 +528,9 @@ def run_with_config(
     task: TaskSpec,
     alert_webhooks: Optional[Sequence[str]] = None,
     alert_metadata: Optional[Mapping[str, Any]] = None,
+    dispatcher: Optional[Union[str, Dispatcher]] = None,
+    queue_config: Optional[Mapping[str, Any]] = None,
+    monitors: Optional[Sequence[Monitor]] = None,
     logging_enabled: Optional[bool] = None,
     log_path: Optional[str | Path] = None,
     log_context: Optional[Mapping[str, Any]] = None,
@@ -560,6 +576,15 @@ def run_with_config(
     if metrics_host is not None:
         observability["metrics_host"] = metrics_host
 
+    extra_options = dict(eval_cfg.extra_options)
+    if dispatcher is not None:
+        extra_options["dispatcher"] = dispatcher
+    if queue_config is not None:
+        extra_options["queue_config"] = dict(queue_config)
+    if monitors is not None:
+        extra_options["monitors"] = list(monitors)
+    eval_cfg = replace(eval_cfg, extra_options=extra_options)
+
     return run(
         task=task,
         baseline=baseline_impl,
@@ -568,6 +593,9 @@ def run_with_config(
         alert_webhooks=alert_webhooks,
         alert_metadata=alert_metadata,
         **observability,
+        dispatcher=dispatcher,
+        queue_config=queue_config,
+        monitors=monitors,
     )
 
 
