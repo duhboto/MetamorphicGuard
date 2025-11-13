@@ -51,8 +51,48 @@ from .observability import add_log_context, increment_llm_retries, increment_met
 from .gate import decide_adopt
 from .multiple_comparisons import apply_multiple_comparisons_correction
 
+# Import from refactored modules
+from .harness.statistics import (
+    compute_delta_ci as _compute_delta_ci_new,
+    compute_paired_stats as _compute_paired_stats_new,
+    compute_relative_risk as _compute_relative_risk_new,
+    estimate_power as _estimate_power_new,
+)
+from .harness.execution import (
+    ExecutionPlan,
+    build_call_spec as _build_call_spec_new,
+    execute_implementations as _execute_implementations_new,
+    prepare_execution_plan as _prepare_execution_plan_new,
+    relation_cache_key as _relation_cache_key_new,
+    relation_rng as _relation_rng_new,
+)
+from .harness.reporting import (
+    aggregate_metric_values as _aggregate_metric_values_new,
+    bootstrap_metric_delta as _bootstrap_metric_delta_new,
+    collect_metrics as _collect_metrics_new,
+    compose_llm_metrics as _compose_llm_metrics_new,
+    evaluate_results as _evaluate_results_new,
+    evaluate_roles as _evaluate_roles_new,
+    get_or_compute_metric_value as _get_or_compute_metric_value_new,
+    safe_extract_metric as _safe_extract_metric_new,
+    should_sample_metric as _should_sample_metric_new,
+    summarize_llm_results as _summarize_llm_results_new,
+    summarize_relations as _summarize_relations_new,
+)
+from .harness.trust import compute_trust_scores as _compute_trust_scores_new
 
+
+# Backward compatibility aliases - use new module functions
 def _compute_trust_scores(
+    results: Sequence[Dict[str, Any]],
+    test_inputs: Sequence[Tuple[Any, ...]],
+    spec: Spec,
+) -> Optional[Dict[str, Any]]:
+    """Backward compatibility wrapper for compute_trust_scores."""
+    return _compute_trust_scores_new(results, test_inputs, spec)
+
+
+def _compute_trust_scores_old(
     results: Sequence[Dict[str, Any]],
     test_inputs: Sequence[Tuple[Any, ...]],
     spec: Spec,
@@ -141,6 +181,7 @@ def _compute_trust_scores(
     return None
 
 
+# Backward compatibility alias
 def _estimate_power(
     p_baseline: float,
     p_candidate: float,
@@ -149,35 +190,10 @@ def _estimate_power(
     delta_value: float,
     power_target: float,
 ) -> Tuple[float, Optional[int]]:
-    if sample_size == 0:
-        return 0.0, None
-
-    effect = p_candidate - p_baseline
-    pooled_var = p_baseline * (1 - p_baseline) + p_candidate * (1 - p_candidate)
-    if pooled_var == 0:
-        power_val = 1.0 if effect >= delta_value else 0.0
-        return power_val, None
-
-    se = math.sqrt(pooled_var / sample_size)
-    if se == 0:
-        power_val = 1.0 if effect >= delta_value else 0.0
-        return power_val, None
-
-    z_alpha = NormalDist().inv_cdf(1 - alpha_value)
-    z_effect = (effect - delta_value) / se
-    power_val = 1 - NormalDist().cdf(z_alpha - z_effect)
-    power_val = max(0.0, min(1.0, power_val))
-
-    recommended_n = None
-    if delta_value > 0 and 0 < power_target < 1:
-        p1 = p_baseline
-        p2 = max(0.0, min(1.0, p_baseline + delta_value))
-        var_target = p1 * (1 - p1) + p2 * (1 - p2)
-        if var_target > 0:
-            z_beta = NormalDist().inv_cdf(power_target)
-            recommended_n = math.ceil(((z_alpha + z_beta) ** 2 * var_target) / (delta_value ** 2))
-
-    return power_val, recommended_n
+    """Backward compatibility wrapper for estimate_power."""
+    return _estimate_power_new(
+        p_baseline, p_candidate, sample_size, alpha_value, delta_value, power_target
+    )
 
 
 def _fingerprint_payload(payload: Any) -> str:
@@ -186,20 +202,10 @@ def _fingerprint_payload(payload: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-@dataclass
-class ExecutionPlan:
-    spec: Spec
-    test_inputs: List[Tuple[Any, ...]]
-    dispatcher: Dispatcher
-    monitors: List[Monitor]
-    worker_count: int
-    run_id: str
+# Use ExecutionPlan from new module (already imported above)
+# ExecutionPlan is re-exported for backward compatibility
 
-    @property
-    def total_cases(self) -> int:
-        return len(self.test_inputs)
-
-
+# Backward compatibility alias
 def _prepare_execution_plan(
     *,
     task_name: str,
@@ -213,40 +219,22 @@ def _prepare_execution_plan(
     explicit_inputs: Optional[List[Tuple[Any, ...]]],
     executor: Optional[str],
 ) -> ExecutionPlan:
-    if explicit_inputs is not None:
-        test_inputs = [tuple(case) for case in explicit_inputs]
-    else:
-        test_inputs = spec.gen_inputs(n, seed)
-
-    worker_count = max(1, parallel or 1)
-    dispatcher_obj = ensure_dispatcher(dispatcher, worker_count, queue_config)
-
-    monitor_objs = list(monitors or [])
-    if monitor_objs:
-        context = MonitorContext(task=task_name, total_cases=len(test_inputs))
-        for monitor in monitor_objs:
-            monitor.start(context)
-
-    run_id = f"eval-{uuid.uuid4().hex}"
-    add_log_context(run_id=run_id)
-    log_event(
-        "run_eval_start",
-        task=task_name,
-        total_cases=len(test_inputs),
-        dispatcher=getattr(dispatcher_obj, "kind", "local"),
-            executor=executor,
-    )
-
-    return ExecutionPlan(
+    """Backward compatibility wrapper for prepare_execution_plan."""
+    return _prepare_execution_plan_new(
+        task_name=task_name,
         spec=spec,
-        test_inputs=list(test_inputs),
-        dispatcher=dispatcher_obj,
-        monitors=monitor_objs,
-        worker_count=worker_count,
-        run_id=run_id,
+        n=n,
+        seed=seed,
+        parallel=parallel,
+        dispatcher=dispatcher,
+        queue_config=queue_config,
+        monitors=monitors,
+        explicit_inputs=explicit_inputs,
+        executor=executor,
     )
 
 
+# Backward compatibility alias
 def _execute_implementations(
     plan: ExecutionPlan,
     *,
@@ -261,170 +249,38 @@ def _execute_implementations(
     candidate_executor: Optional[str],
     candidate_executor_config: Dict[str, Any] | None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    def make_runner(
-        file_path: str,
-        role_executor: Optional[str],
-        role_executor_config: Dict[str, Any] | None,
-    ) -> Callable[[int, Tuple[Any, ...]], Dict[str, Any]]:
-        def _run_case(index: int, call_args: Tuple[Any, ...]) -> Dict[str, Any]:
-            return run_in_sandbox(
-                file_path,
-                "solve",
-                call_args,
-                timeout_s,
-                mem_mb,
-                executor=role_executor,
-                executor_config=role_executor_config,
-            )
-
-        return _run_case
-
-    dispatcher_obj = plan.dispatcher
-    monitors = plan.monitors
-    test_inputs = plan.test_inputs
-
-    baseline_effective_executor = baseline_executor if baseline_executor is not None else executor
-    baseline_effective_config = (
-        baseline_executor_config if baseline_executor_config is not None else executor_config
-    )
-    candidate_effective_executor = (
-        candidate_executor if candidate_executor is not None else executor
-    )
-    candidate_effective_config = (
-        candidate_executor_config if candidate_executor_config is not None else executor_config
+    """Backward compatibility wrapper for execute_implementations."""
+    return _execute_implementations_new(
+        plan,
+        baseline_path=baseline_path,
+        candidate_path=candidate_path,
+        timeout_s=timeout_s,
+        mem_mb=mem_mb,
+        executor=executor,
+        executor_config=executor_config,
+        baseline_executor=baseline_executor,
+        baseline_executor_config=baseline_executor_config,
+        candidate_executor=candidate_executor,
+        candidate_executor_config=candidate_executor_config,
     )
 
-    baseline_results = dispatcher_obj.execute(
-        test_inputs=test_inputs,
-        run_case=make_runner(
-            baseline_path,
-            baseline_effective_executor,
-            baseline_effective_config,
-        ),
-        role="baseline",
-        monitors=monitors,
-        call_spec=_build_call_spec(
-            baseline_path,
-            timeout_s=timeout_s,
-            mem_mb=mem_mb,
-            executor=baseline_effective_executor,
-            executor_config=baseline_effective_config,
-        ),
-    )
-    candidate_results = dispatcher_obj.execute(
-        test_inputs=test_inputs,
-        run_case=make_runner(
-            candidate_path,
-            candidate_effective_executor,
-            candidate_effective_config,
-        ),
-        role="candidate",
-        monitors=monitors,
-        call_spec=_build_call_spec(
-            candidate_path,
-            timeout_s=timeout_s,
-            mem_mb=mem_mb,
-            executor=candidate_effective_executor,
-            executor_config=candidate_effective_config,
-        ),
-    )
-    return baseline_results, candidate_results
 
-
+# Backward compatibility alias
 def _summarize_llm_results(results: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
-    summary: Dict[str, Any] = {
-        "count": 0,
-        "successes": 0,
-        "failures": 0,
-        "total_cost_usd": 0.0,
-        "total_tokens": 0,
-        "prompt_tokens": 0,
-        "completion_tokens": 0,
-        "total_latency_ms": 0.0,
-        "avg_latency_ms": 0.0,
-        "avg_cost_usd": 0.0,
-        "avg_tokens": 0.0,
-        "retry_total": 0,
-        "avg_retries": 0.0,
-        "max_retries": 0,
-        "success_rate": 0.0,
-    }
-
-    for entry in results:
-        if not isinstance(entry, dict):
-            continue
-        summary["count"] += 1
-        if entry.get("success"):
-            summary["successes"] += 1
-        tokens_prompt = entry.get("tokens_prompt")
-        tokens_completion = entry.get("tokens_completion")
-        tokens_total = entry.get("tokens_total")
-        cost = entry.get("cost_usd")
-        latency = entry.get("duration_ms")
-        retries = entry.get("retries", 0)
-
-        if tokens_prompt is not None:
-            summary["prompt_tokens"] += int(tokens_prompt)
-        if tokens_completion is not None:
-            summary["completion_tokens"] += int(tokens_completion)
-        if tokens_total is not None:
-            summary["total_tokens"] += int(tokens_total)
-        elif tokens_prompt is not None or tokens_completion is not None:
-            summary["total_tokens"] += int(tokens_prompt or 0) + int(tokens_completion or 0)
-
-        if cost is not None:
-            summary["total_cost_usd"] += float(cost)
-        if latency is not None:
-            summary["total_latency_ms"] += float(latency)
-        if isinstance(retries, (int, float)):
-            retry_value = int(retries)
-            summary["retry_total"] += retry_value
-            summary["max_retries"] = max(summary["max_retries"], retry_value)
-
-    summary["failures"] = summary["count"] - summary["successes"]
-    if summary["count"] > 0:
-        summary["avg_latency_ms"] = summary["total_latency_ms"] / summary["count"]
-        summary["avg_cost_usd"] = summary["total_cost_usd"] / summary["count"]
-        summary["avg_tokens"] = summary["total_tokens"] / summary["count"]
-        summary["avg_retries"] = summary["retry_total"] / summary["count"]
-        summary["success_rate"] = summary["successes"] / summary["count"]
-    return summary
+    """Backward compatibility wrapper for summarize_llm_results."""
+    return _summarize_llm_results_new(results)
 
 
+# Backward compatibility alias
 def _compose_llm_metrics(
     baseline_summary: Dict[str, Any],
     candidate_summary: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
-    if not baseline_summary.get("count") and not candidate_summary.get("count"):
-        return None
-
-    payload: Dict[str, Any] = {
-        "baseline": baseline_summary,
-        "candidate": candidate_summary,
-    }
-    baseline_cost = float(baseline_summary.get("total_cost_usd", 0.0))
-    candidate_cost = float(candidate_summary.get("total_cost_usd", 0.0))
-    payload["cost_delta_usd"] = candidate_cost - baseline_cost
-    payload["cost_ratio"] = (
-        candidate_cost / baseline_cost if baseline_cost > 0 else None
-    )
-
-    baseline_tokens = int(baseline_summary.get("total_tokens", 0))
-    candidate_tokens = int(candidate_summary.get("total_tokens", 0))
-    payload["tokens_delta"] = candidate_tokens - baseline_tokens
-    payload["token_ratio"] = (
-        candidate_tokens / baseline_tokens if baseline_tokens > 0 else None
-    )
-
-    baseline_retries = int(baseline_summary.get("retry_total", 0))
-    candidate_retries = int(candidate_summary.get("retry_total", 0))
-    payload["retry_delta"] = candidate_retries - baseline_retries
-    payload["retry_ratio"] = (
-        candidate_retries / baseline_retries if baseline_retries > 0 else None
-    )
-    return payload
+    """Backward compatibility wrapper for compose_llm_metrics."""
+    return _compose_llm_metrics_new(baseline_summary, candidate_summary)
 
 
+# Backward compatibility alias
 def _evaluate_roles(
     *,
     spec: Spec,
@@ -441,45 +297,25 @@ def _evaluate_roles(
     executor_config: Dict[str, Any] | None,
     shrink_violations: bool,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    baseline_metrics = _evaluate_results(
-        baseline_results,
-        spec,
-        test_inputs,
-        violation_cap,
-        role="baseline",
+    """Backward compatibility wrapper for evaluate_roles."""
+    return _evaluate_roles_new(
+        spec=spec,
+        test_inputs=test_inputs,
+        baseline_results=baseline_results,
+        candidate_results=candidate_results,
+        baseline_path=baseline_path,
+        candidate_path=candidate_path,
+        timeout_s=timeout_s,
+        mem_mb=mem_mb,
+        violation_cap=violation_cap,
         seed=seed,
-        rerun=lambda call_args: run_in_sandbox(
-            baseline_path,
-            "solve",
-            call_args,
-            timeout_s,
-            mem_mb,
-            executor=executor,
-            executor_config=executor_config,
-        ),
+        executor=executor,
+        executor_config=executor_config,
         shrink_violations=shrink_violations,
     )
-    candidate_metrics = _evaluate_results(
-        candidate_results,
-        spec,
-        test_inputs,
-        violation_cap,
-        role="candidate",
-        seed=seed,
-        rerun=lambda call_args: run_in_sandbox(
-            candidate_path,
-            "solve",
-            call_args,
-            timeout_s,
-            mem_mb,
-            executor=executor,
-            executor_config=executor_config,
-        ),
-        shrink_violations=shrink_violations,
-    )
-    return baseline_metrics, candidate_metrics
 
 
+# Backward compatibility alias
 def _summarize_relations(
     spec: Spec,
     baseline_metrics: Dict[str, Any],
@@ -488,133 +324,24 @@ def _summarize_relations(
     alpha: float,
     relation_correction: Optional[str],
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]], Optional[Dict[str, Any]]]:
-    relation_summary: List[Dict[str, Any]] = []
-    relation_p_values: List[float] = []
-    category_totals: Dict[str, Dict[str, Any]] = {}
-
-    def _pass_rate(total: int, failures: int) -> Optional[float]:
-        if total <= 0:
-            return None
-        return (total - failures) / total
-
-    baseline_relation_stats = baseline_metrics.get("relation_stats", {})
-    candidate_relation_stats = candidate_metrics.get("relation_stats", {})
-
-    for relation in spec.relations:
-        name = relation.name
-        baseline_entry = baseline_relation_stats.get(name, {})
-        candidate_entry = candidate_relation_stats.get(name, {})
-
-        category = (
-            baseline_entry.get("category")
-            or candidate_entry.get("category")
-            or relation.category
-            or "uncategorized"
-        )
-        description = (
-            relation.description
-            or baseline_entry.get("description")
-            or candidate_entry.get("description")
-        )
-
-        base_total = baseline_entry.get("total", 0)
-        base_fail = baseline_entry.get("failures", 0)
-        cand_total = candidate_entry.get("total", 0)
-        cand_fail = candidate_entry.get("failures", 0)
-
-        base_passes = base_total - base_fail
-        cand_passes = cand_total - cand_fail
-        p_value = _two_proportion_p_value(
-            base_passes,
-            base_total,
-            cand_passes,
-            cand_total,
-        )
-        relation_p_values.append(p_value)
-
-        relation_summary.append(
-            {
-                "name": name,
-                "category": category,
-                "description": description,
-                "baseline": {
-                    "total": base_total,
-                    "failures": base_fail,
-                    "pass_rate": _pass_rate(base_total, base_fail),
-                },
-                "candidate": {
-                    "total": cand_total,
-                    "failures": cand_fail,
-                    "pass_rate": _pass_rate(cand_total, cand_fail),
-                },
-                "p_value": p_value,
-            }
-        )
-
-        cat_entry = category_totals.setdefault(
-            category,
-            {
-                "relations": 0,
-                "baseline_total": 0,
-                "baseline_failures": 0,
-                "candidate_total": 0,
-                "candidate_failures": 0,
-            },
-        )
-        cat_entry["relations"] += 1
-        cat_entry["baseline_total"] += base_total
-        cat_entry["baseline_failures"] += base_fail
-        cat_entry["candidate_total"] += cand_total
-        cat_entry["candidate_failures"] += cand_fail
-
-    for cat_entry in category_totals.values():
-        cat_entry["baseline_pass_rate"] = _pass_rate(
-            cat_entry["baseline_total"], cat_entry["baseline_failures"]
-        )
-        cat_entry["candidate_pass_rate"] = _pass_rate(
-            cat_entry["candidate_total"], cat_entry["candidate_failures"]
-        )
-
-    correction_metadata: Optional[Dict[str, Any]] = None
-    if relation_summary and relation_correction and relation_p_values:
-        correction_method = "holm" if relation_correction == "holm" else "fdr"
-        corrected = apply_multiple_comparisons_correction(
-            relation_p_values,
-            method=correction_method,
-            alpha=alpha,
-        )
-        for index, adjusted_p, significant in corrected:
-            relation_summary[index]["adjusted_p_value"] = adjusted_p
-            relation_summary[index]["significant"] = significant
-        correction_metadata = {
-            "method": "holm-bonferroni"
-            if relation_correction == "holm"
-            else "benjamini-hochberg",
-            "alpha": alpha,
-        }
-
-    return relation_summary, category_totals, correction_metadata
+    """Backward compatibility wrapper for summarize_relations."""
+    return _summarize_relations_new(
+        spec, baseline_metrics, candidate_metrics, alpha=alpha, relation_correction=relation_correction
+    )
 
 
+# Backward compatibility aliases for metric functions
 def _safe_extract_metric(metric: Metric, result: Dict[str, Any], args: Tuple[Any, ...]) -> Optional[float]:
-    if not result.get("success"):
-        return None
-    try:
-        value = metric.extract(result.get("result"), args)
-        if value is None:
-            return None
-        return float(value)
-    except Exception:
-        return None
-
+    """Backward compatibility wrapper."""
+    return _safe_extract_metric_new(metric, result, args)
 
 def _metric_memo_key(metric: Metric) -> Optional[str]:
+    """Backward compatibility wrapper."""
     if getattr(metric, "memoize_key", None):
         return metric.memoize_key
     if getattr(metric, "memoize", False):
         return metric.name
     return None
-
 
 def _get_or_compute_metric_value(
     metric: Metric,
@@ -625,34 +352,12 @@ def _get_or_compute_metric_value(
     cache: Dict[str, Dict[int, Optional[float]]],
     index: int,
 ) -> Optional[float]:
-    if memo_key is None:
-        return _safe_extract_metric(metric, result, args)
-    bucket = cache.setdefault(memo_key, {})
-    if index in bucket:
-        return bucket[index]
-    value = _safe_extract_metric(metric, result, args)
-    bucket[index] = value
-    return value
-
+    """Backward compatibility wrapper."""
+    return _get_or_compute_metric_value_new(metric, result, args, memo_key=memo_key, cache=cache, index=index)
 
 def _should_sample_metric(metric: Metric, index: int, global_seed: Optional[int]) -> bool:
-    rate = getattr(metric, "sample_rate", 1.0)
-    try:
-        rate = float(rate)
-    except Exception:
-        rate = 1.0
-    rate = max(0.0, min(1.0, rate))
-    if rate <= 0.0:
-        return False
-    if rate >= 1.0:
-        return True
-    base_seed = metric.seed if metric.seed is not None else global_seed
-    if base_seed is None:
-        base_seed = 0
-    random_seed = int(base_seed) + (index + 1) * 1013904223
-    rng = random.Random(random_seed & 0xFFFFFFFF)
-    return rng.random() < rate
-
+    """Backward compatibility wrapper."""
+    return _should_sample_metric_new(metric, index, global_seed)
 
 def _aggregate_metric_values(
     values: Sequence[Optional[float]],
@@ -660,36 +365,8 @@ def _aggregate_metric_values(
     kind: str,
     total_count: int,
 ) -> Dict[str, Any]:
-    summary: Dict[str, Any] = {"count": 0, "missing": total_count}
-    if total_count <= 0:
-        return summary
-
-    filtered = [float(v) for v in values if v is not None]
-    summary["count"] = len(filtered)
-    summary["missing"] = total_count - len(filtered)
-
-    if not filtered:
-        return summary
-
-    summary["min"] = min(filtered)
-    summary["max"] = max(filtered)
-
-    if kind == "mean":
-        mean = sum(filtered) / len(filtered)
-        summary["mean"] = mean
-        summary["value"] = mean
-        if len(filtered) > 1:
-            variance = sum((v - mean) ** 2 for v in filtered) / (len(filtered) - 1)
-            summary["stddev"] = math.sqrt(variance)
-    elif kind == "sum":
-        total = sum(filtered)
-        summary["sum"] = total
-        summary["value"] = total
-    else:
-        raise ValueError(f"Unsupported metric kind: {kind}")
-
-    return summary
-
+    """Backward compatibility wrapper."""
+    return _aggregate_metric_values_new(values, kind=kind, total_count=total_count)
 
 def _bootstrap_metric_delta(
     deltas: Sequence[float],
@@ -699,42 +376,8 @@ def _bootstrap_metric_delta(
     alpha: float,
     seed: Optional[int],
 ) -> Optional[Dict[str, Any]]:
-    count = len(deltas)
-    if count == 0 or samples <= 0:
-        return None
-
-    rng = random.Random(seed if seed is not None else 0)
-    resampled_means: List[float] = []
-    for _ in range(max(1, samples)):
-        sample = [deltas[rng.randrange(count)] for _ in range(count)]
-        resampled_means.append(sum(sample) / count)
-
-    resampled_means.sort()
-    lower_mean = _percentile(resampled_means, alpha / 2)
-    upper_mean = _percentile(resampled_means, 1 - alpha / 2)
-
-    observed_mean = sum(deltas) / count
-    ci_payload: Dict[str, Any] = {
-        "method": "bootstrap",
-        "level": 1 - alpha,
-        "mean": {
-            "estimate": observed_mean,
-            "lower": lower_mean,
-            "upper": upper_mean,
-        },
-    }
-    if kind == "sum":
-        observed_sum = observed_mean * count
-        lower_sum = lower_mean * count
-        upper_sum = upper_mean * count
-        ci_payload["sum"] = {
-            "estimate": observed_sum,
-            "lower": lower_sum,
-            "upper": upper_sum,
-        }
-
-    return ci_payload
-
+    """Backward compatibility wrapper."""
+    return _bootstrap_metric_delta_new(deltas, kind=kind, samples=samples, alpha=alpha, seed=seed)
 
 def _collect_metrics(
     metrics: Sequence[Metric],
@@ -744,103 +387,8 @@ def _collect_metrics(
     *,
     seed: Optional[int],
 ) -> Dict[str, Any]:
-    if not metrics:
-        return {}
-
-    metrics_payload: Dict[str, Any] = {}
-    global_seed = seed
-    shared_baseline_cache: Dict[str, Dict[int, Optional[float]]] = defaultdict(dict)
-    shared_candidate_cache: Dict[str, Dict[int, Optional[float]]] = defaultdict(dict)
-
-    for metric in metrics:
-        baseline_values: List[Optional[float]] = []
-        candidate_values: List[Optional[float]] = []
-        memo_key = _metric_memo_key(metric)
-
-        for index, (args, b_result, c_result) in enumerate(
-            zip(test_inputs, baseline_results, candidate_results)
-        ):
-            include_case = _should_sample_metric(metric, index, global_seed)
-            if not include_case:
-                baseline_values.append(None)
-                candidate_values.append(None)
-                continue
-
-            baseline_values.append(
-                _get_or_compute_metric_value(
-                    metric,
-                    b_result,
-                    args,
-                    memo_key=memo_key,
-                    cache=shared_baseline_cache,
-                    index=index,
-                )
-            )
-            candidate_values.append(
-                _get_or_compute_metric_value(
-                    metric,
-                    c_result,
-                    args,
-                    memo_key=memo_key,
-                    cache=shared_candidate_cache,
-                    index=index,
-                )
-            )
-
-        total_count = len(baseline_values)
-        baseline_summary = _aggregate_metric_values(
-            baseline_values,
-            kind=metric.kind,
-            total_count=total_count,
-        )
-        candidate_summary = _aggregate_metric_values(
-            candidate_values,
-            kind=metric.kind,
-            total_count=len(candidate_values),
-        )
-
-        delta_payload: Dict[str, Any] = {}
-        baseline_value = baseline_summary.get("value")
-        candidate_value = candidate_summary.get("value")
-        if baseline_value is not None and candidate_value is not None:
-            delta_payload["difference"] = candidate_value - baseline_value
-            if baseline_value != 0:
-                delta_payload["ratio"] = candidate_value / baseline_value
-
-        paired_deltas = [
-            cand - base
-            for base, cand in zip(baseline_values, candidate_values)
-            if base is not None and cand is not None
-        ]
-        paired_count = len(paired_deltas)
-        delta_payload["paired_count"] = paired_count
-        if paired_deltas:
-            paired_mean = sum(paired_deltas) / paired_count
-            delta_payload["paired_mean"] = paired_mean
-
-            if metric.ci_method and metric.ci_method.lower() == "bootstrap" and paired_count > 1:
-                ci_result = _bootstrap_metric_delta(
-                    paired_deltas,
-                    kind=metric.kind,
-                    samples=max(1, metric.bootstrap_samples),
-                    alpha=metric.alpha,
-                    seed=metric.seed,
-                )
-                if ci_result:
-                    delta_payload["ci"] = ci_result
-
-        metric_entry: Dict[str, Any] = {
-            "kind": metric.kind,
-            "higher_is_better": metric.higher_is_better,
-            "baseline": baseline_summary,
-            "candidate": candidate_summary,
-        }
-        if delta_payload:
-            metric_entry["delta"] = delta_payload
-
-        metrics_payload[metric.name] = metric_entry
-
-    return metrics_payload
+    """Backward compatibility wrapper."""
+    return _collect_metrics_new(metrics, baseline_results, candidate_results, test_inputs, seed=seed)
 
 
 def run_eval(
@@ -977,7 +525,7 @@ def run_eval(
         shrink_violations=shrink_violations,
     )
 
-    paired_stats = _compute_paired_stats(
+    paired_stats = _compute_paired_stats_new(
         baseline_metrics.get("pass_indicators", []),
         candidate_metrics.get("pass_indicators", []),
     )
@@ -1005,7 +553,7 @@ def run_eval(
     baseline_trust = _compute_trust_scores(baseline_results, test_inputs, spec)
     candidate_trust = _compute_trust_scores(candidate_results, test_inputs, spec)
 
-    delta_ci = _compute_delta_ci(
+    delta_ci = _compute_delta_ci_new(
         baseline_metrics,
         candidate_metrics,
         alpha=alpha,
@@ -1015,7 +563,7 @@ def run_eval(
     )
 
     def _recompute_delta_ci(new_alpha: float) -> List[float]:
-        return _compute_delta_ci(
+        return _compute_delta_ci_new(
             baseline_metrics,
             candidate_metrics,
             alpha=new_alpha,
@@ -1044,7 +592,7 @@ def run_eval(
     baseline_hash = sha256_file(baseline_path)
     candidate_hash = sha256_file(candidate_path)
     spec_fingerprint = compute_spec_fingerprint(spec)
-    rr_value, rr_ci = _compute_relative_risk(
+    rr_value, rr_ci = _compute_relative_risk_new(
         baseline_metrics,
         candidate_metrics,
         alpha=alpha,
@@ -1154,7 +702,7 @@ def run_eval(
         "task": task_name,
     }
 
-    power_estimate, recommended_n = _estimate_power(
+    power_estimate, recommended_n = _estimate_power_new(
         baseline_metrics["pass_rate"],
         candidate_metrics["pass_rate"],
         n,
@@ -1193,7 +741,7 @@ def run_eval(
         if correction_metadata:
             result["statistics"]["relation_correction"] = correction_metadata
 
-    metrics_payload = _collect_metrics(
+    metrics_payload = _collect_metrics_new(
         spec.metrics,
         baseline_results,
         candidate_results,
@@ -1364,7 +912,26 @@ def run_eval(
     return result
 
 
+# Backward compatibility alias
 def _evaluate_results(
+    results: Sequence[Dict[str, Any]],
+    spec: Spec,
+    test_inputs: Sequence[Tuple[Any, ...]],
+    violation_cap: int,
+    *,
+    role: str,
+    seed: int,
+    rerun: Callable[[Tuple[Any, ...]], Dict[str, Any]],
+    shrink_violations: bool = False,
+) -> Dict[str, Any]:
+    """Backward compatibility wrapper for evaluate_results."""
+    return _evaluate_results_new(
+        results, spec, test_inputs, violation_cap,
+        role=role, seed=seed, rerun=rerun, shrink_violations=shrink_violations
+    )
+
+
+def _evaluate_results_old(
     results: Sequence[Dict[str, Any]],
     spec: Spec,
     test_inputs: Sequence[Tuple[Any, ...]],
@@ -1459,7 +1026,7 @@ def _evaluate_results(
             stats_entry["total"] += 1
             relation_rng = None
             if relation.accepts_rng:
-                relation_rng = _relation_rng(seed, idx, relation_index, relation.name)
+                relation_rng = _relation_rng_new(seed, idx, relation_index, relation.name)
             try:
                 if relation.accepts_rng:
                     transformed_args = relation.transform(*args, rng=relation_rng)
@@ -1480,7 +1047,7 @@ def _evaluate_results(
                     )
                 break
 
-            cache_key = _relation_cache_key(relation_index, transformed_args)
+            cache_key = _relation_cache_key_new(relation_index, transformed_args)
             if cache_key in rerun_cache:
                 relation_result = rerun_cache[cache_key]
             else:
@@ -1645,28 +1212,19 @@ def _compute_paired_stats(
     }
 
 
+# Backward compatibility aliases
 def _relation_rng(
     seed: int,
     case_index: int,
     relation_index: int,
     relation_name: str,
 ) -> random.Random:
-    """
-    Build a deterministic RNG for a relation invocation.
-
-    The construction uses a stable hash so results are reproducible across Python
-    invocations regardless of PYTHONHASHSEED.
-    """
-    payload = f"{seed}:{case_index}:{relation_index}:{relation_name}".encode("utf-8")
-    digest = hashlib.sha256(payload).digest()
-    seed_int = int.from_bytes(digest[:8], "big")
-    return random.Random(seed_int)
-
+    """Backward compatibility wrapper for relation_rng."""
+    return _relation_rng_new(seed, case_index, relation_index, relation_name)
 
 def _relation_cache_key(relation_index: int, args: Tuple[Any, ...]) -> str:
-    """Build a stable cache key for relation reruns."""
-    return f"{relation_index}:{repr(args)}"
-
+    """Backward compatibility wrapper for relation_cache_key."""
+    return _relation_cache_key_new(relation_index, args)
 
 def _build_call_spec(
     file_path: str,
@@ -1676,17 +1234,8 @@ def _build_call_spec(
     executor: str | None,
     executor_config: Dict[str, Any] | None,
 ) -> Dict[str, Any]:
-    spec: Dict[str, Any] = {
-        "file_path": file_path,
-        "func_name": "solve",
-        "timeout_s": timeout_s,
-        "mem_mb": mem_mb,
-    }
-    if executor is not None:
-        spec["executor"] = executor
-    if executor_config is not None:
-        spec["executor_config"] = executor_config
-    return spec
+    """Backward compatibility wrapper for build_call_spec."""
+    return _build_call_spec_new(file_path, timeout_s=timeout_s, mem_mb=mem_mb, executor=executor, executor_config=executor_config)
 
 
 def _compute_delta_ci(
