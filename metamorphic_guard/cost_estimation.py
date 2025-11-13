@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Sequence
 from .executors import LLMExecutor
 from .judges import LLMJudge
 from .mutants import PromptMutant
-from .plugins import executor_plugins, judge_plugins
+from .plugins import executor_plugins
 
 
 def estimate_llm_cost(

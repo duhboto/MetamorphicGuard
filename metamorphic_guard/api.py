@@ -13,7 +13,7 @@ import tempfile
 import uuid
 import warnings
 from contextlib import ExitStack, contextmanager
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Sequence, Tuple, Union
 
