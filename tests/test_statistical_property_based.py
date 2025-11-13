@@ -33,13 +33,13 @@ if HYPOTHESIS_AVAILABLE:
     class TestStatisticalProperties:
         """Property-based tests for statistical functions."""
 
-    @given(
-        successes=st.integers(min_value=0, max_value=100),
-        total=st.integers(min_value=1, max_value=100),
-        alpha=st.floats(min_value=0.01, max_value=0.5),
-    )
-    @settings(max_examples=50, deadline=5000)
-    def test_wilson_interval_properties(self, successes: int, total: int, alpha: float) -> None:
+        @given(
+            successes=st.integers(min_value=0, max_value=100),
+            total=st.integers(min_value=1, max_value=100),
+            alpha=st.floats(min_value=0.01, max_value=0.5),
+        )
+        @settings(max_examples=50, deadline=5000)
+        def test_wilson_interval_properties(self, successes: int, total: int, alpha: float) -> None:
         """Test that Wilson interval has correct properties."""
         if successes > total:
             return
@@ -67,16 +67,16 @@ if HYPOTHESIS_AVAILABLE:
             # Width should generally decrease (allowing for randomness)
             assert width2 <= width1 * 1.5  # Allow some variance
 
-    @given(
-        baseline_passes=st.integers(min_value=0, max_value=100),
-        baseline_total=st.integers(min_value=1, max_value=100),
-        candidate_passes=st.integers(min_value=0, max_value=100),
-        candidate_total=st.integers(min_value=1, max_value=100),
-        alpha=st.floats(min_value=0.01, max_value=0.5),
-    )
-    @settings(max_examples=50, deadline=5000)
-    def test_newcombe_ci_properties(
-        self,
+        @given(
+            baseline_passes=st.integers(min_value=0, max_value=100),
+            baseline_total=st.integers(min_value=1, max_value=100),
+            candidate_passes=st.integers(min_value=0, max_value=100),
+            candidate_total=st.integers(min_value=1, max_value=100),
+            alpha=st.floats(min_value=0.01, max_value=0.5),
+        )
+        @settings(max_examples=50, deadline=5000)
+        def test_newcombe_ci_properties(
+            self,
         baseline_passes: int,
         baseline_total: int,
         candidate_passes: int,
@@ -107,12 +107,12 @@ if HYPOTHESIS_AVAILABLE:
         assert ci[0] <= delta + 0.2
         assert ci[1] >= delta - 0.2
 
-    @given(
-        values=st.lists(st.floats(min_value=0.0, max_value=100.0), min_size=1, max_size=100),
-        q=st.floats(min_value=0.0, max_value=1.0),
-    )
-    @settings(max_examples=50, deadline=5000)
-    def test_percentile_properties(self, values: List[float], q: float) -> None:
+        @given(
+            values=st.lists(st.floats(min_value=0.0, max_value=100.0), min_size=1, max_size=100),
+            q=st.floats(min_value=0.0, max_value=1.0),
+        )
+        @settings(max_examples=50, deadline=5000)
+        def test_percentile_properties(self, values: List[float], q: float) -> None:
         """Test that percentile function has correct properties."""
         if not values:
             return
@@ -134,15 +134,15 @@ if HYPOTHESIS_AVAILABLE:
             p2 = percentile(values, 0.75)
             assert p1 <= p2
 
-    @given(
-        baseline_indicators=st.lists(st.integers(min_value=0, max_value=1), min_size=10, max_size=100),
-        candidate_indicators=st.lists(st.integers(min_value=0, max_value=1), min_size=10, max_size=100),
-        alpha=st.floats(min_value=0.01, max_value=0.5),
-        seed=st.integers(min_value=0, max_value=2**31 - 1),
-    )
-    @settings(max_examples=30, deadline=10000)
-    def test_bootstrap_ci_properties(
-        self,
+        @given(
+            baseline_indicators=st.lists(st.integers(min_value=0, max_value=1), min_size=10, max_size=100),
+            candidate_indicators=st.lists(st.integers(min_value=0, max_value=1), min_size=10, max_size=100),
+            alpha=st.floats(min_value=0.01, max_value=0.5),
+            seed=st.integers(min_value=0, max_value=2**31 - 1),
+        )
+        @settings(max_examples=30, deadline=10000)
+        def test_bootstrap_ci_properties(
+            self,
         baseline_indicators: List[int],
         candidate_indicators: List[int],
         alpha: float,
@@ -181,13 +181,13 @@ if HYPOTHESIS_AVAILABLE:
         assert ci[0] <= delta + 0.3
         assert ci[1] >= delta - 0.3
 
-    @given(
-        baseline_indicators=st.lists(st.integers(min_value=0, max_value=1), min_size=10, max_size=50),
-        candidate_indicators=st.lists(st.integers(min_value=0, max_value=1), min_size=10, max_size=50),
-    )
-    @settings(max_examples=30, deadline=5000)
-    def test_paired_stats_properties(
-        self,
+        @given(
+            baseline_indicators=st.lists(st.integers(min_value=0, max_value=1), min_size=10, max_size=50),
+            candidate_indicators=st.lists(st.integers(min_value=0, max_value=1), min_size=10, max_size=50),
+        )
+        @settings(max_examples=30, deadline=5000)
+        def test_paired_stats_properties(
+            self,
         baseline_indicators: List[int],
         candidate_indicators: List[int],
     ) -> None:
@@ -223,17 +223,17 @@ if HYPOTHESIS_AVAILABLE:
         # Property 5: P-value is in [0, 1]
         assert 0.0 <= stats["mcnemar_p"] <= 1.0
 
-    @given(
-        p_baseline=st.floats(min_value=0.1, max_value=0.9),
-        p_candidate=st.floats(min_value=0.1, max_value=0.9),
-        sample_size=st.integers(min_value=10, max_value=1000),
-        alpha=st.floats(min_value=0.01, max_value=0.1),
-        delta_value=st.floats(min_value=0.01, max_value=0.2),
-        power_target=st.floats(min_value=0.7, max_value=0.95),
-    )
-    @settings(max_examples=30, deadline=5000)
-    def test_power_estimation_properties(
-        self,
+        @given(
+            p_baseline=st.floats(min_value=0.1, max_value=0.9),
+            p_candidate=st.floats(min_value=0.1, max_value=0.9),
+            sample_size=st.integers(min_value=10, max_value=1000),
+            alpha=st.floats(min_value=0.01, max_value=0.1),
+            delta_value=st.floats(min_value=0.01, max_value=0.2),
+            power_target=st.floats(min_value=0.7, max_value=0.95),
+        )
+        @settings(max_examples=30, deadline=5000)
+        def test_power_estimation_properties(
+            self,
         p_baseline: float,
         p_candidate: float,
         sample_size: int,
@@ -272,14 +272,14 @@ if HYPOTHESIS_AVAILABLE:
             # Power should generally increase (allowing for edge cases)
             assert power2 >= power - 0.1  # Allow some variance
 
-    @given(
-        successes=st.integers(min_value=0, max_value=100),
-        total=st.integers(min_value=1, max_value=100),
-        alpha=st.floats(min_value=0.01, max_value=0.5),
-    )
-    @settings(max_examples=30, deadline=5000)
-    def test_bayesian_ci_properties(
-        self,
+        @given(
+            successes=st.integers(min_value=0, max_value=100),
+            total=st.integers(min_value=1, max_value=100),
+            alpha=st.floats(min_value=0.01, max_value=0.5),
+        )
+        @settings(max_examples=30, deadline=5000)
+        def test_bayesian_ci_properties(
+            self,
         successes: int,
         total: int,
         alpha: float,
