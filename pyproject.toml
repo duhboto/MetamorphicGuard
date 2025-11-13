@@ -69,6 +69,7 @@ length = "metamorphic_guard.judges.builtin:LengthJudge"
 no_pii = "metamorphic_guard.judges.builtin:NoPIIJudge"
 rubric = "metamorphic_guard.judges.structured:RubricJudge"
 citation = "metamorphic_guard.judges.structured:CitationJudge"
+llm_as_judge = "metamorphic_guard.judges.llm_as_judge:LLMAsJudge"
 
 [project.entry-points."pytest11"]
 metamorphic = "pytest_metamorphic.plugin"
