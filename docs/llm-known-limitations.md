@@ -32,11 +32,17 @@ candidate_result = run_eval(..., executor_config=candidate_config)
 
 ## Pricing Data
 
-**Issue**: Pricing data in executors is hardcoded and may be outdated.
+**Issue**: Pricing data in executors is approximate and may drift as providers update rates.
 
-**Status**: Pricing is marked as "approximate" in code comments. Users should verify current rates.
+**Status**: ✅ Supply `pricing` overrides in `executor_config` (per-model `prompt` / `completion` prices). Example:
+```toml
+[metamorphic_guard.executor_config.pricing."gpt-4"]
+prompt = 0.03
+completion = 0.06
+```
+*or via CLI JSON*: `--executor-config '{"pricing":{"gpt-4":{"prompt":0.03,"completion":0.06}}}'`
 
-**Workaround**: Override pricing in executor config if needed (future enhancement).
+**Recommendation**: Keep overrides in configuration so audits record the exact tariff used for cost analysis.
 
 ## Rate Limiting
 

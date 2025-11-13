@@ -43,11 +43,26 @@ class OpenAIExecutor(LLMExecutor):
 
         self.client = openai.OpenAI(api_key=self.api_key)
         # Pricing per 1K tokens (approximate, as of 2024 - verify current rates)
-        self.pricing = {
+        default_pricing = {
             "gpt-4": {"prompt": 0.03, "completion": 0.06},
             "gpt-4-turbo": {"prompt": 0.01, "completion": 0.03},
             "gpt-3.5-turbo": {"prompt": 0.0015, "completion": 0.002},
         }
+        cfg_pricing = (config or {}).get("pricing")
+        if isinstance(cfg_pricing, dict):
+            merged = {**default_pricing}
+            for model_name, model_prices in cfg_pricing.items():
+                if isinstance(model_prices, dict):
+                    base = merged.get(model_name, {})
+                    base_prompt = model_prices.get("prompt", base.get("prompt"))
+                    base_completion = model_prices.get("completion", base.get("completion"))
+                    merged[model_name] = {
+                        "prompt": float(base_prompt) if base_prompt is not None else base.get("prompt", 0.0),
+                        "completion": float(base_completion) if base_completion is not None else base.get("completion", 0.0),
+                    }
+            self.pricing = merged
+        else:
+            self.pricing = default_pricing
         self._redactor = get_redactor(config)
 
     def execute(

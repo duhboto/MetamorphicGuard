@@ -137,3 +137,29 @@ def test_anthropic_executor_retries(monkeypatch):
     assert result["retries"] == 1
     assert attempts["count"] == 2
 
+
+def test_openai_pricing_override(monkeypatch):
+    _stub_openai(monkeypatch)
+    executor = OpenAIExecutor(
+        {
+            "api_key": "test",
+            "pricing": {"gpt-4": {"prompt": 0.05, "completion": 0.07}, "custom-model": {"prompt": 0.02, "completion": 0.04}},
+        }
+    )
+    assert executor.pricing["gpt-4"]["prompt"] == pytest.approx(0.05, rel=1e-6)
+    assert executor.pricing["gpt-4"]["completion"] == pytest.approx(0.07, rel=1e-6)
+    assert executor.pricing["custom-model"]["prompt"] == pytest.approx(0.02, rel=1e-6)
+    assert executor.pricing["custom-model"]["completion"] == pytest.approx(0.04, rel=1e-6)
+
+
+def test_anthropic_pricing_override(monkeypatch):
+    _stub_anthropic(monkeypatch)
+    executor = AnthropicExecutor(
+        {
+            "api_key": "test",
+            "pricing": {"claude-3-sonnet-20240229": {"prompt": 4.0, "completion": 16.0}},
+        }
+    )
+    assert executor.pricing["claude-3-sonnet-20240229"]["prompt"] == pytest.approx(4.0, rel=1e-6)
+    assert executor.pricing["claude-3-sonnet-20240229"]["completion"] == pytest.approx(16.0, rel=1e-6)
+

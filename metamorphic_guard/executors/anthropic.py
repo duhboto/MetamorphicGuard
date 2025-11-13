@@ -43,12 +43,27 @@ class AnthropicExecutor(LLMExecutor):
 
         self.client = anthropic.Anthropic(api_key=self.api_key)
         # Pricing per 1M tokens (approximate, as of 2024 - verify current rates)
-        self.pricing = {
+        default_pricing = {
             "claude-3-5-sonnet-20241022": {"prompt": 3.0, "completion": 15.0},
             "claude-3-opus-20240229": {"prompt": 15.0, "completion": 75.0},
             "claude-3-sonnet-20240229": {"prompt": 3.0, "completion": 15.0},
             "claude-3-haiku-20240307": {"prompt": 0.25, "completion": 1.25},
         }
+        cfg_pricing = (config or {}).get("pricing")
+        if isinstance(cfg_pricing, dict):
+            merged = {**default_pricing}
+            for model_name, model_prices in cfg_pricing.items():
+                if isinstance(model_prices, dict):
+                    base = merged.get(model_name, {})
+                    base_prompt = model_prices.get("prompt", base.get("prompt"))
+                    base_completion = model_prices.get("completion", base.get("completion"))
+                    merged[model_name] = {
+                        "prompt": float(base_prompt) if base_prompt is not None else base.get("prompt", 0.0),
+                        "completion": float(base_completion) if base_completion is not None else base.get("completion", 0.0),
+                    }
+            self.pricing = merged
+        else:
+            self.pricing = default_pricing
         self._redactor = get_redactor(config)
 
     def execute(
