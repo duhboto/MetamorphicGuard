@@ -67,7 +67,7 @@ def parse_policy_preset(value: str) -> Dict[str, Any]:
             f"Unknown policy preset '{name}'. Supported presets: noninferiority, superiority."
         )
 
-    params: Dict[str, str] = {}
+    params_raw: Dict[str, str] = {}
     if param_str:
         for token in param_str.split(","):
             token = token.strip()
@@ -78,13 +78,13 @@ def parse_policy_preset(value: str) -> Dict[str, Any]:
                 raise PolicyParseError(
                     f"Invalid policy preset parameter '{token}'. Expected key=value."
                 )
-            params[key.strip().lower()] = val.strip()
+            params_raw[key.strip().lower()] = val.strip()
 
     def _get_float(key: str, default: Optional[float] = None) -> Optional[float]:
-        if key not in params:
+        if key not in params_raw:
             return default
         try:
-            return float(params[key])
+            return float(params_raw[key])
         except ValueError:
             raise PolicyParseError(f"Policy preset parameter '{key}' must be numeric.")
 
@@ -94,9 +94,9 @@ def parse_policy_preset(value: str) -> Dict[str, Any]:
     power_override = _get_float("power")
 
     violation_cap: Optional[int] = None
-    if "violation_cap" in params:
+    if "violation_cap" in params_raw:
         try:
-            violation_cap = int(params["violation_cap"])
+            violation_cap = int(params_raw["violation_cap"])
         except ValueError:
             raise PolicyParseError("Policy preset parameter 'violation_cap' must be an integer.")
 
@@ -122,17 +122,34 @@ def parse_policy_preset(value: str) -> Dict[str, Any]:
         label_parts.append(f"pass_rate={pass_rate}")
     if violation_cap is not None:
         label_parts.append(f"violation_cap={violation_cap}")
+    parameters: Dict[str, Any] = {}
+    if "margin" in params_raw:
+        parameters["margin"] = margin
+    if pass_rate is not None and "pass_rate" in params_raw:
+        parameters["pass_rate"] = pass_rate
+    if alpha_override is not None and "alpha" in params_raw:
+        parameters["alpha"] = alpha_override
+    if power_override is not None and "power" in params_raw:
+        parameters["power"] = power_override
+    if violation_cap is not None and "violation_cap" in params_raw:
+        parameters["violation_cap"] = violation_cap
+
+    # Preserve any additional, unrecognized parameters as raw strings
+    for key, value in params_raw.items():
+        if key not in parameters:
+            parameters[key] = value
+
     descriptor = {
         "type": "preset",
         "name": name,
-        "parameters": params,
+        "parameters": parameters,
         "label": f"{name}({', '.join(label_parts)})" if label_parts else name,
     }
 
     return {
         "source": "preset",
         "name": name,
-        "parameters": params,
+        "parameters": parameters,
         "gating": gating,
         "policy": {"quality": quality_policy},
         "descriptor": descriptor,
