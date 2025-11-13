@@ -23,7 +23,7 @@ from .observability import configure_logging, configure_metrics, close_logging
 
 from .harness import run_eval
 from .dispatch import Dispatcher
-from .monitoring import Monitor
+from .monitoring import Monitor, resolve_monitors
 from .specs import MetamorphicRelation, Metric, Property, Spec, register_spec, unregister_spec
 
 logger = logging.getLogger(__name__)
@@ -240,14 +240,42 @@ class EvaluationConfig:
     extra_options: Dict[str, Any] = field(default_factory=dict)
 
     def to_kwargs(self) -> Dict[str, Any]:
-        """Render keyword arguments for the harness."""
-        payload = asdict(self)
-        # extra_options should not be forwarded as a nested dict
-        extra = payload.pop("extra_options", {}) or {}
-        # Remove None entries so we preserve harness defaults
-        filtered = {k: v for k, v in payload.items() if v is not None}
-        filtered.update(extra)
-        return filtered
+        """Render keyword arguments for the harness without deep-copying extras."""
+
+        payload: Dict[str, Any] = {
+            "n": self.n,
+            "seed": self.seed,
+            "timeout_s": self.timeout_s,
+            "mem_mb": self.mem_mb,
+            "alpha": self.alpha,
+            "violation_cap": self.violation_cap,
+            "parallel": None,
+            "improve_delta": self.improve_delta,
+            "bootstrap_samples": self.bootstrap_samples,
+            "ci_method": self.ci_method,
+            "rr_ci_method": self.rr_ci_method,
+            "executor": None,
+            "executor_config": None,
+            "dispatcher": None,
+            "queue_config": None,
+            "monitors": None,
+            "failed_artifact_limit": self.failed_artifact_limit,
+            "failed_artifact_ttl_days": self.failed_artifact_ttl_days,
+            "policy_version": self.policy_version,
+            "min_pass_rate": self.min_pass_rate,
+            "power_target": self.power_target,
+            "sequential_method": self.sequential_method,
+            "max_looks": self.max_looks,
+            "look_number": self.look_number,
+            "relation_correction": self.relation_correction,
+            "policy_config": self.policy_config,
+        }
+
+        extras = self.extra_options or {}
+        payload.update(extras)
+
+        # Remove any keys that remain None so run_eval uses its defaults.
+        return {k: v for k, v in payload.items() if v is not None}
 
 
 @dataclass
@@ -306,6 +334,26 @@ def _existing_specs() -> Sequence[str]:
     from .specs import list_tasks
 
     return list_tasks()
+
+
+def resolve_monitor_specs(
+    monitor_specs: Sequence[str],
+    *,
+    sandbox_plugins: Optional[bool] = None,
+) -> List[Monitor]:
+    """
+    Instantiate monitors using CLI-style specifications.
+
+    Args:
+        monitor_specs: Sequence such as ["latency:percentile=0.99"].
+        sandbox_plugins: When True (default), plugin monitors run in a sandbox.
+    """
+
+    if not monitor_specs:
+        return []
+
+    should_sandbox = True if sandbox_plugins is None else bool(sandbox_plugins)
+    return resolve_monitors(monitor_specs, sandbox_plugins=should_sandbox)
 
 
 @contextmanager
@@ -377,7 +425,39 @@ def _dispatch_alerts(
         logger.exception("Failed to dispatch alert webhooks")
 
 
-def _evaluation_config_from_evaluator(cfg: EvaluatorConfig) -> Tuple[EvaluationConfig, Dict[str, Any]]:
+def _compose_monitors(
+    *,
+    monitors: Optional[Sequence[Monitor]],
+    monitor_specs: Optional[Sequence[str]],
+    config_monitor_specs: Optional[Sequence[str]],
+    sandbox_plugins: Optional[bool],
+    config_sandbox_plugins: Optional[bool],
+) -> Optional[List[Monitor]]:
+    resolved: List[Monitor] = []
+
+    if monitors:
+        resolved.extend(monitors)
+
+    specs: List[str] = []
+    if config_monitor_specs:
+        specs.extend(config_monitor_specs)
+    if monitor_specs:
+        specs.extend(monitor_specs)
+
+    if specs:
+        effective_sandbox = (
+            sandbox_plugins
+            if sandbox_plugins is not None
+            else (config_sandbox_plugins if config_sandbox_plugins is not None else True)
+        )
+        resolved.extend(resolve_monitor_specs(specs, sandbox_plugins=effective_sandbox))
+
+    return resolved or None
+
+
+def _evaluation_config_from_evaluator(
+    cfg: EvaluatorConfig,
+) -> Tuple[EvaluationConfig, Dict[str, Any], List[str], Optional[bool]]:
     extra_options: Dict[str, Any] = {}
     improve_delta = cfg.min_delta
     alpha = cfg.alpha
@@ -390,8 +470,6 @@ def _evaluation_config_from_evaluator(cfg: EvaluatorConfig) -> Tuple[EvaluationC
         extra_options["parallel"] = cfg.parallel
     if cfg.relation_correction:
         extra_options["relation_correction"] = cfg.relation_correction
-    if cfg.monitors:
-        extra_options["monitors"] = cfg.monitors
     if cfg.dispatcher:
         extra_options["dispatcher"] = cfg.dispatcher
     if cfg.queue is not None:
@@ -409,6 +487,8 @@ def _evaluation_config_from_evaluator(cfg: EvaluatorConfig) -> Tuple[EvaluationC
         "metrics_port": cfg.metrics_port,
         "metrics_host": cfg.metrics_host,
     }
+
+    monitor_specs = list(cfg.monitors) if cfg.monitors else []
 
     if cfg.policy:
         try:
@@ -444,10 +524,10 @@ def _evaluation_config_from_evaluator(cfg: EvaluatorConfig) -> Tuple[EvaluationC
     if policy_version_value:
         extra_options["policy_version"] = policy_version_value
 
-    # Drop empty or None entries
+    # Drop empty entries from extras
     extra_options = {k: v for k, v in extra_options.items() if v not in (None, [], {})}
 
-    return EvaluationConfig(
+    evaluation_cfg = EvaluationConfig(
         n=cfg.n,
         seed=cfg.seed,
         timeout_s=cfg.timeout_s,
@@ -463,7 +543,9 @@ def _evaluation_config_from_evaluator(cfg: EvaluatorConfig) -> Tuple[EvaluationC
         failed_artifact_limit=cfg.failed_artifact_limit,
         failed_artifact_ttl_days=cfg.failed_artifact_ttl_days,
         extra_options=extra_options,
-    ), observability
+    )
+
+    return evaluation_cfg, observability, monitor_specs, cfg.sandbox_plugins
 
 
 def run(
@@ -477,6 +559,8 @@ def run(
     dispatcher: Optional[Union[str, Dispatcher]] = None,
     queue_config: Optional[Mapping[str, Any]] = None,
     monitors: Optional[Sequence[Monitor]] = None,
+    monitor_specs: Optional[Sequence[str]] = None,
+    sandbox_plugins: Optional[bool] = None,
     logging_enabled: Optional[bool] = None,
     log_path: Optional[str | Path] = None,
     log_context: Optional[Mapping[str, Any]] = None,
@@ -494,8 +578,19 @@ def run(
         extra_options["dispatcher"] = dispatcher
     if queue_config is not None:
         extra_options["queue_config"] = dict(queue_config)
-    if monitors is not None:
-        extra_options["monitors"] = list(monitors)
+
+    final_monitors = _compose_monitors(
+        monitors=monitors,
+        monitor_specs=monitor_specs,
+        config_monitor_specs=None,
+        sandbox_plugins=sandbox_plugins,
+        config_sandbox_plugins=None,
+    )
+    if final_monitors is not None:
+        extra_options["monitors"] = final_monitors
+    else:
+        extra_options.pop("monitors", None)
+
     cfg = replace(cfg, extra_options=extra_options)
 
     with _observability_context(
@@ -531,6 +626,8 @@ def run_with_config(
     dispatcher: Optional[Union[str, Dispatcher]] = None,
     queue_config: Optional[Mapping[str, Any]] = None,
     monitors: Optional[Sequence[Monitor]] = None,
+    monitor_specs: Optional[Sequence[str]] = None,
+    sandbox_plugins: Optional[bool] = None,
     logging_enabled: Optional[bool] = None,
     log_path: Optional[str | Path] = None,
     log_context: Optional[Mapping[str, Any]] = None,
@@ -561,7 +658,7 @@ def run_with_config(
 
     baseline_impl = Implementation.from_specifier(config.baseline)
     candidate_impl = Implementation.from_specifier(config.candidate)
-    eval_cfg, observability = _evaluation_config_from_evaluator(config)
+    eval_cfg, observability, config_monitor_specs, config_sandbox_plugins = _evaluation_config_from_evaluator(config)
 
     if logging_enabled is not None:
         observability["logging_enabled"] = logging_enabled
@@ -581,8 +678,19 @@ def run_with_config(
         extra_options["dispatcher"] = dispatcher
     if queue_config is not None:
         extra_options["queue_config"] = dict(queue_config)
-    if monitors is not None:
-        extra_options["monitors"] = list(monitors)
+
+    final_monitors = _compose_monitors(
+        monitors=monitors,
+        monitor_specs=monitor_specs,
+        config_monitor_specs=config_monitor_specs,
+        sandbox_plugins=sandbox_plugins,
+        config_sandbox_plugins=config_sandbox_plugins,
+    )
+    if final_monitors is not None:
+        extra_options["monitors"] = final_monitors
+    else:
+        extra_options.pop("monitors", None)
+
     eval_cfg = replace(eval_cfg, extra_options=extra_options)
 
     return run(
@@ -592,10 +700,14 @@ def run_with_config(
         config=eval_cfg,
         alert_webhooks=alert_webhooks,
         alert_metadata=alert_metadata,
-        **observability,
         dispatcher=dispatcher,
         queue_config=queue_config,
-        monitors=monitors,
+        monitors=final_monitors,
+        monitor_specs=None,
+        sandbox_plugins=sandbox_plugins
+        if sandbox_plugins is not None
+        else config_sandbox_plugins,
+        **observability,
     )
 
 
@@ -606,6 +718,7 @@ __all__ = [
     "EvaluationResult",
     "run",
     "run_with_config",
+    "resolve_monitor_specs",
     "Property",
     "MetamorphicRelation",
     "Metric",

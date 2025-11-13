@@ -138,6 +138,7 @@ HTML reports and JSON output now include monitor summaries.
    - `policy` accepts preset strings (`superiority:margin=0.02`) or policy file paths. Gating thresholds override the evaluation config (min_delta, alpha, min_pass_rate, power, violation_cap) and a descriptive `policy_version` is inferred when omitted.
    - The same helper accepts `guard.toml` files or `EvaluatorConfig` instances, letting you share configuration between CLI and code.
    - Provide `alert_webhooks=["https://hooks.example.dev/ci"]` (optionally with `alert_metadata={"env": "ci"}`) to reuse the built-in webhook dispatch that the CLI performs after each run.
+   - Resolve monitors in-process with `monitor_specs=["latency:percentile=0.99"]`; pass `sandbox_plugins=False` if you trust local plugins and want to mirror `--allow-unsafe-plugins`.
 
 4. **CI/CD snippet (GitHub Actions)**
    ```yaml
@@ -181,4 +182,5 @@ Slack, PagerDuty, or custom automation.
 
 ## CI/CD Integration (GitHub Actions)
 
+```
 ```
