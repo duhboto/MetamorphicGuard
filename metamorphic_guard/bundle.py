@@ -6,7 +6,7 @@ import json
 import tarfile
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Dict
 
 import click
 
