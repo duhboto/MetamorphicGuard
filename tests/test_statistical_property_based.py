@@ -42,30 +42,30 @@ if HYPOTHESIS_AVAILABLE:
         def test_wilson_interval_properties(self, successes: int, total: int, alpha: float) -> None:
             """Test that Wilson interval has correct properties."""
             if successes > total:
-            return
-        
+                return
+            
             lower, upper = wilson_interval(successes, total, alpha)
-        
+            
             # Property 1: Lower bound <= upper bound
             assert lower <= upper
-        
+            
             # Property 2: Both bounds are in [0, 1]
             assert 0.0 <= lower <= 1.0
             assert 0.0 <= upper <= 1.0
-        
+            
             # Property 3: Interval contains sample proportion (approximately)
             p_hat = successes / total if total > 0 else 0.0
             assert lower <= p_hat + 0.1  # Allow some margin
             assert upper >= p_hat - 0.1
-        
+            
             # Property 4: Interval width decreases with larger sample size
             # (tested by comparing with larger total)
             if total < 50:
-            lower2, upper2 = wilson_interval(successes, total * 2, alpha)
-            width1 = upper - lower
-            width2 = upper2 - lower2
-            # Width should generally decrease (allowing for randomness)
-            assert width2 <= width1 * 1.5  # Allow some variance
+                lower2, upper2 = wilson_interval(successes, total * 2, alpha)
+                width1 = upper - lower
+                width2 = upper2 - lower2
+                # Width should generally decrease (allowing for randomness)
+                assert width2 <= width1 * 1.5  # Allow some variance
 
         @given(
             baseline_passes=st.integers(min_value=0, max_value=100),
@@ -115,24 +115,24 @@ if HYPOTHESIS_AVAILABLE:
         def test_percentile_properties(self, values: List[float], q: float) -> None:
             """Test that percentile function has correct properties."""
             if not values:
-            return
-        
+                return
+            
             result = percentile(values, q)
-        
+            
             # Property 1: Result is in range of values
             assert min(values) <= result <= max(values)
-        
+            
             # Property 2: Percentile(0) == min, Percentile(1) == max
             if q == 0.0:
-            assert result == min(values)
+                assert result == min(values)
             elif q == 1.0:
-            assert result == max(values)
-        
+                assert result == max(values)
+            
             # Property 3: Monotonicity - larger q gives larger percentile
             if len(values) > 1:
-            p1 = percentile(values, 0.25)
-            p2 = percentile(values, 0.75)
-            assert p1 <= p2
+                p1 = percentile(values, 0.25)
+                p2 = percentile(values, 0.75)
+                assert p1 <= p2
 
         @given(
             baseline_indicators=st.lists(st.integers(min_value=0, max_value=1), min_size=10, max_size=100),
@@ -143,40 +143,40 @@ if HYPOTHESIS_AVAILABLE:
         @settings(max_examples=30, deadline=10000)
         def test_bootstrap_ci_properties(
             self,
-        baseline_indicators: List[int],
-        candidate_indicators: List[int],
-        alpha: float,
-        seed: int,
-    ) -> None:
+            baseline_indicators: List[int],
+            candidate_indicators: List[int],
+            alpha: float,
+            seed: int,
+        ) -> None:
             """Test that bootstrap CI has correct properties."""
             # Ensure same length
             n = min(len(baseline_indicators), len(candidate_indicators))
             if n < 10:
-            return
-        
+                return
+            
             baseline = baseline_indicators[:n]
             candidate = candidate_indicators[:n]
-        
+            
             ci = compute_bootstrap_ci(
-            baseline,
-            candidate,
-            alpha=alpha,
-            seed=seed,
-            samples=100,  # Reduced for faster tests
+                baseline,
+                candidate,
+                alpha=alpha,
+                seed=seed,
+                samples=100,  # Reduced for faster tests
             )
-        
+            
             # Property 1: Lower bound <= upper bound
             assert ci[0] <= ci[1]
-        
+            
             # Property 2: CI bounds are reasonable (within [-1, 1] for pass rate delta)
             assert -1.0 <= ci[0] <= 1.0
             assert -1.0 <= ci[1] <= 1.0
-        
+            
             # Property 3: CI contains observed delta (approximately)
             p_b = sum(baseline) / len(baseline) if baseline else 0.0
             p_c = sum(candidate) / len(candidate) if candidate else 0.0
             delta = p_c - p_b
-        
+            
             # Delta should be within CI (with margin for bootstrap variance)
             assert ci[0] <= delta + 0.3
             assert ci[1] >= delta - 0.3
@@ -188,38 +188,38 @@ if HYPOTHESIS_AVAILABLE:
         @settings(max_examples=30, deadline=5000)
         def test_paired_stats_properties(
             self,
-        baseline_indicators: List[int],
-        candidate_indicators: List[int],
-    ) -> None:
+            baseline_indicators: List[int],
+            candidate_indicators: List[int],
+        ) -> None:
             """Test that paired stats have correct properties."""
             n = min(len(baseline_indicators), len(candidate_indicators))
             if n < 10:
-            return
-        
+                return
+            
             baseline = baseline_indicators[:n]
             candidate = candidate_indicators[:n]
-        
+            
             stats = compute_paired_stats(baseline, candidate)
-        
+            
             if stats is None:
-            return
-        
+                return
+            
             # Property 1: Delta is in [-1, 1]
             assert -1.0 <= stats["delta"] <= 1.0
-        
+            
             # Property 2: Total matches input length
             assert stats["total"] == n
-        
+            
             # Property 3: Counts sum correctly
             total_counted = (
-            stats["both_pass"] + stats["both_fail"] + stats["baseline_only"] + stats["candidate_only"]
+                stats["both_pass"] + stats["both_fail"] + stats["baseline_only"] + stats["candidate_only"]
             )
             assert total_counted == n
-        
+            
             # Property 4: Discordant pairs are non-negative
             assert stats["discordant"] >= 0
             assert stats["discordant"] == stats["baseline_only"] + stats["candidate_only"]
-        
+            
             # Property 5: P-value is in [0, 1]
             assert 0.0 <= stats["mcnemar_p"] <= 1.0
 
@@ -234,43 +234,43 @@ if HYPOTHESIS_AVAILABLE:
         @settings(max_examples=30, deadline=5000)
         def test_power_estimation_properties(
             self,
-        p_baseline: float,
-        p_candidate: float,
-        sample_size: int,
-        alpha: float,
-        delta_value: float,
-        power_target: float,
-    ) -> None:
+            p_baseline: float,
+            p_candidate: float,
+            sample_size: int,
+            alpha: float,
+            delta_value: float,
+            power_target: float,
+        ) -> None:
             """Test that power estimation has correct properties."""
             power, recommended_n = estimate_power(
-            p_baseline,
-            p_candidate,
-            sample_size,
-            alpha,
-            delta_value,
-            power_target,
-            )
-        
-            # Property 1: Power is in [0, 1]
-            assert 0.0 <= power <= 1.0
-        
-            # Property 2: Recommended n is positive
-            if recommended_n is not None:
-            assert recommended_n > 0
-        
-            # Property 3: Larger sample size generally increases power
-            # (tested by comparing with larger sample)
-            if sample_size < 500:
-            power2, _ = estimate_power(
                 p_baseline,
                 p_candidate,
-                sample_size * 2,
+                sample_size,
                 alpha,
                 delta_value,
                 power_target,
             )
-            # Power should generally increase (allowing for edge cases)
-            assert power2 >= power - 0.1  # Allow some variance
+            
+            # Property 1: Power is in [0, 1]
+            assert 0.0 <= power <= 1.0
+            
+            # Property 2: Recommended n is positive
+            if recommended_n is not None:
+                assert recommended_n > 0
+            
+            # Property 3: Larger sample size generally increases power
+            # (tested by comparing with larger sample)
+            if sample_size < 500:
+                power2, _ = estimate_power(
+                    p_baseline,
+                    p_candidate,
+                    sample_size * 2,
+                    alpha,
+                    delta_value,
+                    power_target,
+                )
+                # Power should generally increase (allowing for edge cases)
+                assert power2 >= power - 0.1  # Allow some variance
 
         @given(
             successes=st.integers(min_value=0, max_value=100),
@@ -280,42 +280,42 @@ if HYPOTHESIS_AVAILABLE:
         @settings(max_examples=30, deadline=5000)
         def test_bayesian_ci_properties(
             self,
-        successes: int,
-        total: int,
-        alpha: float,
-    ) -> None:
+            successes: int,
+            total: int,
+            alpha: float,
+        ) -> None:
             """Test that Bayesian CI has correct properties."""
             if successes > total:
-            return
-        
+                return
+            
             # Test with uniform prior
             ci_uniform = compute_bayesian_ci(
-            successes,
-            total,
-            alpha=alpha,
-            prior="uniform",
+                successes,
+                total,
+                alpha=alpha,
+                prior="uniform",
             )
-        
+            
             # Property 1: Lower bound <= upper bound
             assert ci_uniform[0] <= ci_uniform[1]
-        
+            
             # Property 2: Both bounds are in [0, 1]
             assert 0.0 <= ci_uniform[0] <= 1.0
             assert 0.0 <= ci_uniform[1] <= 1.0
-        
+            
             # Property 3: CI contains sample proportion (approximately)
             p_hat = successes / total if total > 0 else 0.0
             assert ci_uniform[0] <= p_hat + 0.2
             assert ci_uniform[1] >= p_hat - 0.2
-        
+            
             # Test with Jeffreys prior
             ci_jeffreys = compute_bayesian_ci(
-            successes,
-            total,
-            alpha=alpha,
-            prior="jeffreys",
+                successes,
+                total,
+                alpha=alpha,
+                prior="jeffreys",
             )
-        
+            
             assert ci_jeffreys[0] <= ci_jeffreys[1]
             assert 0.0 <= ci_jeffreys[0] <= 1.0
             assert 0.0 <= ci_jeffreys[1] <= 1.0
