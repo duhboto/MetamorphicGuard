@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import textwrap
 from pathlib import Path
+from typing import Any, Dict
 
 import pytest
 
@@ -145,4 +146,43 @@ def test_run_with_config_policy_invalid(tmp_path, task_spec):
 
     with pytest.raises(ValueError):
         run_with_config(config_path, task=task_spec)
+
+
+def test_run_with_config_sends_alerts(monkeypatch, task_spec):
+    mapping = {
+        "metamorphic_guard": {
+            "task": "api_test_task",
+            "baseline": "tests.callable_fixtures:baseline_callable",
+            "candidate": "tests.callable_fixtures:baseline_callable",
+            "n": 1,
+            "seed": 7,
+            "min_delta": 0.0,
+        }
+    }
+
+    captured: Dict[str, Any] = {}
+
+    def fake_collect(_):
+        return [{"monitor": "latency", "severity": "high"}]
+
+    def fake_send(alerts, webhooks, metadata=None, opener=None):
+        captured["alerts"] = list(alerts)
+        captured["webhooks"] = list(webhooks)
+        captured["metadata"] = dict(metadata or {})
+
+    monkeypatch.setattr("metamorphic_guard.api.collect_alerts", fake_collect)
+    monkeypatch.setattr("metamorphic_guard.api.send_webhook_alerts", fake_send)
+
+    result = run_with_config(
+        mapping,
+        task=task_spec,
+        alert_webhooks=["https://example.com/hooks/alert"],
+        alert_metadata={"pipeline": "ci"},
+    )
+
+    assert result.adopt is True
+    assert captured["webhooks"] == ["https://example.com/hooks/alert"]
+    assert captured["alerts"][0]["monitor"] == "latency"
+    assert captured["metadata"]["task"] == "api_test_task"
+    assert captured["metadata"]["pipeline"] == "ci"
 

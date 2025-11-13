@@ -14,11 +14,15 @@ import uuid
 import importlib
 import inspect
 import tempfile
+import logging
 from .config import EvaluatorConfig, load_config
 from .policy import PolicyLoadError, PolicyParseError, resolve_policy_option
+from .notifications import collect_alerts, send_webhook_alerts
 
 from .harness import run_eval
 from .specs import MetamorphicRelation, Metric, Property, Spec, register_spec, unregister_spec
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # User-facing dataclasses
@@ -300,6 +304,38 @@ def _existing_specs() -> Sequence[str]:
     return list_tasks()
 
 
+def _dispatch_alerts(
+    result: Dict[str, Any],
+    alert_webhooks: Optional[Sequence[str]],
+    alert_metadata: Optional[Mapping[str, Any]] = None,
+) -> None:
+    if not alert_webhooks:
+        return
+
+    try:
+        alerts = collect_alerts(result.get("monitors", {}))
+    except Exception:  # pragma: no cover - defensive logging
+        logger.exception("Failed to collect monitor alerts")
+        return
+
+    if not alerts:
+        return
+
+    metadata: Dict[str, Any] = {
+        "task": result.get("task"),
+        "decision": result.get("decision"),
+        "run_id": (result.get("job_metadata") or {}).get("run_id"),
+        "policy_version": (result.get("config") or {}).get("policy_version"),
+    }
+    if alert_metadata:
+        metadata.update(alert_metadata)
+
+    try:
+        send_webhook_alerts(alerts, alert_webhooks, metadata=metadata)
+    except Exception:  # pragma: no cover - defensive logging
+        logger.exception("Failed to dispatch alert webhooks")
+
+
 def _evaluation_config_from_evaluator(cfg: EvaluatorConfig) -> EvaluationConfig:
     extra_options: Dict[str, Any] = {}
     improve_delta = cfg.min_delta
@@ -385,6 +421,9 @@ def run(
     baseline: Implementation,
     candidate: Implementation,
     config: Optional[EvaluationConfig] = None,
+    *,
+    alert_webhooks: Optional[Sequence[str]] = None,
+    alert_metadata: Optional[Mapping[str, Any]] = None,
 ) -> EvaluationResult:
     """
     Execute baseline vs candidate under the provided task.
@@ -403,6 +442,8 @@ def run(
             **kwargs,
         )
 
+    _dispatch_alerts(report, alert_webhooks, alert_metadata)
+
     return EvaluationResult(report=report)
 
 
@@ -410,6 +451,8 @@ def run_with_config(
     config: Union[EvaluatorConfig, str, Path, Mapping[str, Any]],
     *,
     task: TaskSpec,
+    alert_webhooks: Optional[Sequence[str]] = None,
+    alert_metadata: Optional[Mapping[str, Any]] = None,
 ) -> EvaluationResult:
     """
     Execute an evaluation described by a TOML configuration file.
@@ -441,6 +484,8 @@ def run_with_config(
         baseline=baseline_impl,
         candidate=candidate_impl,
         config=eval_cfg,
+        alert_webhooks=alert_webhooks,
+        alert_metadata=alert_metadata,
     )
 
 
