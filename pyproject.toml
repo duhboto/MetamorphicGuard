@@ -31,6 +31,7 @@ Documentation = "https://pypi.org/project/metamorphic-guard/"
 dev = [
     "pytest>=7.0.0",
     "pytest-timeout>=2.1.0",
+    "hypothesis>=6.0.0",
 ]
 llm = [
     "openai>=1.0.0",
