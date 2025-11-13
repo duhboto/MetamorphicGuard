@@ -41,25 +41,33 @@ class LLMHarness:
         max_tokens: int = 512,
         temperature: float = 0.0,
         seed: Optional[int] = None,
+        baseline_model: Optional[str] = None,
+        baseline_provider: Optional[str] = None,
+        baseline_executor_config: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Initialize LLM harness.
 
         Args:
             model: Model identifier (e.g., "gpt-3.5-turbo", "gpt-4")
-            provider: Provider name ("openai", "anthropic", "local")
-            executor_config: Executor-specific configuration
+            provider: Provider name ("openai", "anthropic", "vllm")
+            executor_config: Executor-specific configuration for candidate
             max_tokens: Maximum tokens in response
             temperature: Sampling temperature (0.0 for deterministic)
             seed: Random seed for reproducibility
+            baseline_model: Optional model identifier for baseline (defaults to candidate model)
+            baseline_provider: Optional provider for baseline (defaults to candidate provider)
+            baseline_executor_config: Optional executor config for baseline (defaults to candidate config)
         """
         self.model = model
         self.provider = provider
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.seed = seed
+        self.baseline_model = baseline_model
+        self.baseline_provider = baseline_provider
 
-        # Build executor config
+        # Build executor config for candidate
         self.executor_config = executor_config or {}
         self.executor_config.update(
             {
@@ -71,17 +79,52 @@ class LLMHarness:
             }
         )
 
+        # Build executor config for baseline
+        self.baseline_executor_config = baseline_executor_config or {}
+        if baseline_executor_config is None:
+            # Start with candidate config and override
+            self.baseline_executor_config = dict(self.executor_config)
+        else:
+            self.baseline_executor_config = dict(baseline_executor_config)
+        
+        baseline_prov = baseline_provider or provider
+        baseline_mod = baseline_model or model
+        self.baseline_executor_config.update(
+            {
+                "provider": baseline_prov,
+                "model": baseline_mod,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "seed": seed,
+            }
+        )
+
         # Determine executor name based on provider
         if provider == "openai":
             self.executor = "openai"
         elif provider == "anthropic":
             self.executor = "anthropic"
+        elif provider == "vllm":
+            self.executor = "vllm"
         elif provider.startswith("local:"):
-            self.executor = "local_llm"
+            self.executor = "vllm"
             self.executor_config["model_path"] = provider.split(":", 1)[1]
         else:
             # Try to use provider name directly as executor
             self.executor = provider
+
+        # Determine baseline executor name
+        if baseline_prov == "openai":
+            self.baseline_executor = "openai"
+        elif baseline_prov == "anthropic":
+            self.baseline_executor = "anthropic"
+        elif baseline_prov == "vllm":
+            self.baseline_executor = "vllm"
+        elif baseline_prov and baseline_prov.startswith("local:"):
+            self.baseline_executor = "vllm"
+            self.baseline_executor_config["model_path"] = baseline_prov.split(":", 1)[1]
+        else:
+            self.baseline_executor = baseline_prov or self.executor
 
     def run(
         self,
@@ -173,19 +216,20 @@ class LLMHarness:
                 candidate_file.write_text(candidate_system_prompt or "", encoding="utf-8")
 
                 # Create separate executor configs for baseline and candidate
-                baseline_config = dict(self.executor_config or {})
-                baseline_config["model"] = baseline_model
+                baseline_config = dict(self.baseline_executor_config)
+                if baseline_model:
+                    baseline_config["model"] = baseline_model
                 if baseline_system_prompt is not None:
                     baseline_config["system_prompt"] = baseline_system_prompt
 
-                candidate_config = dict(self.executor_config or {})
+                candidate_config = dict(self.executor_config)
                 candidate_config["model"] = self.model
                 if candidate_system_prompt is not None:
                     candidate_config["system_prompt"] = candidate_system_prompt
 
-                baseline_executor_name = baseline_config.get("provider", self.executor)
-                candidate_executor_name = candidate_config.get("provider", self.executor)
-                primary_executor_name = candidate_executor_name or baseline_executor_name or self.executor
+                baseline_executor_name = self.baseline_executor
+                candidate_executor_name = self.executor
+                primary_executor_name = candidate_executor_name or baseline_executor_name
 
                 # Run evaluation
                 result = run_eval(

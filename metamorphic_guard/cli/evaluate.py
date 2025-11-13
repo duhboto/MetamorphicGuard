@@ -304,6 +304,12 @@ EVALUATE_OPTIONS = [
         show_default=True,
         help="Shrink failing test cases to minimal counterexamples for easier debugging.",
     ),
+    click.option(
+        "--estimate-cost",
+        is_flag=True,
+        default=False,
+        help="Estimate cost before running evaluation (for LLM executors only).",
+    ),
 ]
 
 
@@ -364,6 +370,7 @@ def evaluate_command(
     power_target: float,
     stability: int,
     shrink_violations: bool,
+    estimate_cost: bool,
 ) -> None:
     """Compare baseline and candidate implementations using metamorphic testing."""
 
@@ -484,6 +491,63 @@ def evaluate_command(
                 derived_version = descriptor.get("name") or descriptor.get("label") or policy_payload.get("name")
                 if isinstance(derived_version, str):
                     policy_version = derived_version
+
+        # Cost estimation (if requested and executor is LLM)
+        if estimate_cost and executor:
+            try:
+                from ..cost_estimation import estimate_llm_cost
+                from ..specs import get_task
+                
+                spec = get_task(task)
+                # Try to extract prompt information from spec
+                # This is a simplified estimation - actual prompts may vary
+                system_prompt = None
+                user_prompts = ["Sample prompt"]  # Placeholder
+                
+                # Get executor config
+                executor_cfg = {}
+                if executor_config:
+                    try:
+                        executor_cfg = json.loads(executor_config) if isinstance(executor_config, str) else executor_config
+                    except (json.JSONDecodeError, TypeError):
+                        executor_cfg = {}
+                
+                estimate = estimate_llm_cost(
+                    executor_name=executor,
+                    executor_config=executor_cfg,
+                    n=effective_n,
+                    system_prompt=system_prompt,
+                    user_prompts=user_prompts,
+                    max_tokens=512,  # Default, could be from config
+                )
+                
+                click.echo("\n" + "=" * 60)
+                click.echo("COST ESTIMATION")
+                click.echo("=" * 60)
+                click.echo(f"Estimated total cost: ${estimate['total_cost_usd']:.4f}")
+                click.echo(f"  Baseline: ${estimate['baseline_cost_usd']:.4f}")
+                click.echo(f"  Candidate: ${estimate['candidate_cost_usd']:.4f}")
+                if estimate['judge_cost_usd'] > 0:
+                    click.echo(f"  Judge: ${estimate['judge_cost_usd']:.4f}")
+                click.echo(f"\nTest cases: {effective_n}")
+                click.echo(f"  Baseline calls: {estimate['breakdown']['baseline_calls']}")
+                click.echo(f"  Candidate calls: {estimate['breakdown']['candidate_calls']}")
+                if estimate['breakdown']['judge_calls'] > 0:
+                    click.echo(f"  Judge calls: {estimate['breakdown']['judge_calls']}")
+                click.echo(f"\nEstimated tokens:")
+                click.echo(f"  Baseline: {estimate['estimated_tokens']['baseline']['total']:,} tokens")
+                click.echo(f"  Candidate: {estimate['estimated_tokens']['candidate']['total']:,} tokens")
+                if estimate['estimated_tokens']['judge']['total'] > 0:
+                    click.echo(f"  Judge: {estimate['estimated_tokens']['judge']['total']:,} tokens")
+                click.echo("=" * 60 + "\n")
+                
+                # Ask for confirmation if cost is significant
+                if estimate['total_cost_usd'] > 1.0:
+                    if not click.confirm(f"Estimated cost is ${estimate['total_cost_usd']:.2f}. Continue?"):
+                        click.echo("Evaluation cancelled.")
+                        sys.exit(0)
+            except Exception as exc:
+                click.echo(f"Warning: Could not estimate cost: {exc}", err=True)
 
         click.echo(f"Running evaluation: {task}")
         click.echo(f"Baseline: {baseline}")
