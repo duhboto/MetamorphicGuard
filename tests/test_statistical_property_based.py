@@ -31,7 +31,7 @@ if HYPOTHESIS_AVAILABLE:
 
 if HYPOTHESIS_AVAILABLE:
     class TestStatisticalProperties:
-    """Property-based tests for statistical functions."""
+        """Property-based tests for statistical functions."""
 
     @given(
         successes=st.integers(min_value=0, max_value=100),
