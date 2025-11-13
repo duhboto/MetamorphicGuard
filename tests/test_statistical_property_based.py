@@ -40,27 +40,27 @@ if HYPOTHESIS_AVAILABLE:
         )
         @settings(max_examples=50, deadline=5000)
         def test_wilson_interval_properties(self, successes: int, total: int, alpha: float) -> None:
-        """Test that Wilson interval has correct properties."""
-        if successes > total:
+            """Test that Wilson interval has correct properties."""
+            if successes > total:
             return
         
-        lower, upper = wilson_interval(successes, total, alpha)
+            lower, upper = wilson_interval(successes, total, alpha)
         
-        # Property 1: Lower bound <= upper bound
-        assert lower <= upper
+            # Property 1: Lower bound <= upper bound
+            assert lower <= upper
         
-        # Property 2: Both bounds are in [0, 1]
-        assert 0.0 <= lower <= 1.0
-        assert 0.0 <= upper <= 1.0
+            # Property 2: Both bounds are in [0, 1]
+            assert 0.0 <= lower <= 1.0
+            assert 0.0 <= upper <= 1.0
         
-        # Property 3: Interval contains sample proportion (approximately)
-        p_hat = successes / total if total > 0 else 0.0
-        assert lower <= p_hat + 0.1  # Allow some margin
-        assert upper >= p_hat - 0.1
+            # Property 3: Interval contains sample proportion (approximately)
+            p_hat = successes / total if total > 0 else 0.0
+            assert lower <= p_hat + 0.1  # Allow some margin
+            assert upper >= p_hat - 0.1
         
-        # Property 4: Interval width decreases with larger sample size
-        # (tested by comparing with larger total)
-        if total < 50:
+            # Property 4: Interval width decreases with larger sample size
+            # (tested by comparing with larger total)
+            if total < 50:
             lower2, upper2 = wilson_interval(successes, total * 2, alpha)
             width1 = upper - lower
             width2 = upper2 - lower2
@@ -113,23 +113,23 @@ if HYPOTHESIS_AVAILABLE:
         )
         @settings(max_examples=50, deadline=5000)
         def test_percentile_properties(self, values: List[float], q: float) -> None:
-        """Test that percentile function has correct properties."""
-        if not values:
+            """Test that percentile function has correct properties."""
+            if not values:
             return
         
-        result = percentile(values, q)
+            result = percentile(values, q)
         
-        # Property 1: Result is in range of values
-        assert min(values) <= result <= max(values)
+            # Property 1: Result is in range of values
+            assert min(values) <= result <= max(values)
         
-        # Property 2: Percentile(0) == min, Percentile(1) == max
-        if q == 0.0:
+            # Property 2: Percentile(0) == min, Percentile(1) == max
+            if q == 0.0:
             assert result == min(values)
-        elif q == 1.0:
+            elif q == 1.0:
             assert result == max(values)
         
-        # Property 3: Monotonicity - larger q gives larger percentile
-        if len(values) > 1:
+            # Property 3: Monotonicity - larger q gives larger percentile
+            if len(values) > 1:
             p1 = percentile(values, 0.25)
             p2 = percentile(values, 0.75)
             assert p1 <= p2
