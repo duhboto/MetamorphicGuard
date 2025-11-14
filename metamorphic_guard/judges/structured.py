@@ -215,9 +215,13 @@ class CitationJudge(LLMJudge):
             density_pass = density >= self.min_density
         
         # Determine overall pass status
-        passes = has_citations
+        # If require_citations is False, always pass (just score lower)
+        # If require_citations is True, must meet all requirements
         if self.require_citations:
-            passes = passes and format_valid and (density_pass if self.check_density else True)
+            passes = has_citations and format_valid and (density_pass if self.check_density else True)
+        else:
+            # Not required - always pass, but score reflects quality
+            passes = True
         
         # Calculate score
         score = 0.0
