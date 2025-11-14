@@ -18,6 +18,7 @@ from .replay import replay_command
 from .report import report_command
 from .scaffold import scaffold_plugin
 from .stability import stability_audit_command
+from .trace import trace_group
 
 
 class DefaultCommandGroup(click.Group):
@@ -53,4 +54,5 @@ main.add_command(replay_command, "replay")
 main.add_command(report_command, "report")
 main.add_command(scaffold_plugin, "scaffold-plugin")
 main.add_command(stability_audit_command, "stability-audit")
+main.add_command(trace_group, "trace")
 

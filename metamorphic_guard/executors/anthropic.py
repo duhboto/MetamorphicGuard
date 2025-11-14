@@ -97,27 +97,54 @@ class AnthropicExecutor(LLMExecutor):
             }
             return self._attach_retry_metadata(payload, attempts=0)
 
-        # Validate inputs
-        user_prompt = args[0] if args else ""
+        # Validate inputs and extract conversation history, user prompt, and system prompt
+        # Support multiple formats:
+        # 1. (conversation_history, user_prompt) - multi-turn with history
+        # 2. (user_prompt,) - single turn
+        # 3. (user_prompt, system_prompt) - single turn with explicit system prompt
+        
+        conversation_history: Optional[List[Dict[str, str]]] = None
+        user_prompt: str = ""
+        system_prompt: Optional[str] = None
+        
+        if not args:
+            return _validation_error("Empty or invalid arguments", "invalid_input")
+        
+        # Check if first arg is conversation history (list of message dicts)
+        if len(args) >= 2 and isinstance(args[0], list):
+            # Format: (conversation_history, user_prompt)
+            conversation_history = args[0]
+            user_prompt = args[1] if len(args) > 1 else ""
+            # System prompt from history or config
+            if conversation_history and isinstance(conversation_history[0], dict):
+                first_msg = conversation_history[0]
+                if first_msg.get("role") == "system":
+                    system_prompt = first_msg.get("content", "")
+        else:
+            # Single turn: (user_prompt,) or (user_prompt, system_prompt)
+            user_prompt = args[0] if args else ""
+            if len(args) > 1 and isinstance(args[1], str) and args[1].strip():
+                system_prompt = args[1]
+        
+        # Validate user prompt
         if not isinstance(user_prompt, str) or not user_prompt.strip():
             return _validation_error("Empty or invalid user prompt", "invalid_input")
-
-        system_prompt = None
-        if len(args) > 1 and isinstance(args[1], str) and args[1].strip():
-            system_prompt = args[1]
-        elif isinstance(self.system_prompt, str) and self.system_prompt.strip():
-            system_prompt = self.system_prompt
-        elif isinstance(self.config.get("system_prompt"), str) and self.config["system_prompt"].strip():
-            system_prompt = self.config["system_prompt"]
-        elif file_path:
-            try:
-                path_obj = Path(file_path)
-                if path_obj.exists():
-                    system_prompt = path_obj.read_text(encoding="utf-8")
-                else:
+        
+        # Get system prompt from config if not provided
+        if not system_prompt:
+            if isinstance(self.system_prompt, str) and self.system_prompt.strip():
+                system_prompt = self.system_prompt
+            elif isinstance(self.config.get("system_prompt"), str) and self.config["system_prompt"].strip():
+                system_prompt = self.config["system_prompt"]
+            elif file_path:
+                try:
+                    path_obj = Path(file_path)
+                    if path_obj.exists():
+                        system_prompt = path_obj.read_text(encoding="utf-8")
+                    else:
+                        system_prompt = file_path
+                except Exception:
                     system_prompt = file_path
-            except Exception:
-                system_prompt = file_path
 
         # Validate model name
         if not model or not isinstance(model, str):
@@ -142,6 +169,7 @@ class AnthropicExecutor(LLMExecutor):
                 result = self._call_llm(
                     prompt=user_prompt,
                     system_prompt=system_prompt,
+                    conversation_history=conversation_history,
                     model=model,
                     max_tokens=self.max_tokens,
                     temperature=self.temperature,
@@ -208,24 +236,48 @@ class AnthropicExecutor(LLMExecutor):
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
         model: Optional[str] = None,
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
         timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
-        """Make an Anthropic API call."""
+        """Make an Anthropic API call with optional conversation history."""
         model = model or self.model
         max_tokens = max_tokens or self.max_tokens
         temperature = temperature if temperature is not None else self.temperature
+
+        # Build messages list from conversation history + new user message
+        messages: List[Dict[str, str]] = []
+        
+        # Add conversation history
+        if conversation_history:
+            for msg in conversation_history:
+                if isinstance(msg, dict) and msg.get("role") in ("user", "assistant"):
+                    # Anthropic uses "user" and "assistant" roles
+                    messages.append(msg)
+        
+        # Add new user message
+        messages.append({"role": "user", "content": prompt})
 
         kwargs: Dict[str, Any] = {
             "model": model,
             "max_tokens": max_tokens,
             "temperature": temperature,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
         }
-        if system_prompt:
-            kwargs["system"] = system_prompt
+        
+        # System prompt (Anthropic supports separate system parameter)
+        final_system_prompt = system_prompt
+        if not final_system_prompt and conversation_history:
+            # Extract system prompt from history if present
+            for msg in conversation_history:
+                if isinstance(msg, dict) and msg.get("role") == "system":
+                    final_system_prompt = msg.get("content", "")
+                    break
+        
+        if final_system_prompt:
+            kwargs["system"] = final_system_prompt
 
         # Anthropic doesn't support seed, but we can set temperature to 0 for determinism
         if self.seed is not None and temperature == 0.0:

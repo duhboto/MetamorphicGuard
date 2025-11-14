@@ -96,27 +96,54 @@ class OpenAIExecutor(LLMExecutor):
             }
             return self._attach_retry_metadata(payload, attempts=0)
 
-        # Validate inputs
-        user_prompt = args[0] if args else ""
+        # Validate inputs and extract conversation history, user prompt, and system prompt
+        # Support multiple formats:
+        # 1. (conversation_history, user_prompt) - multi-turn with history
+        # 2. (user_prompt,) - single turn
+        # 3. (user_prompt, system_prompt) - single turn with explicit system prompt
+        
+        conversation_history: Optional[List[Dict[str, str]]] = None
+        user_prompt: str = ""
+        system_prompt: Optional[str] = None
+        
+        if not args:
+            return _validation_error("Empty or invalid arguments", "invalid_input")
+        
+        # Check if first arg is conversation history (list of message dicts)
+        if len(args) >= 2 and isinstance(args[0], list):
+            # Format: (conversation_history, user_prompt)
+            conversation_history = args[0]
+            user_prompt = args[1] if len(args) > 1 else ""
+            # System prompt from history or config
+            if conversation_history and isinstance(conversation_history[0], dict):
+                first_msg = conversation_history[0]
+                if first_msg.get("role") == "system":
+                    system_prompt = first_msg.get("content", "")
+        else:
+            # Single turn: (user_prompt,) or (user_prompt, system_prompt)
+            user_prompt = args[0] if args else ""
+            if len(args) > 1 and isinstance(args[1], str) and args[1].strip():
+                system_prompt = args[1]
+        
+        # Validate user prompt
         if not isinstance(user_prompt, str) or not user_prompt.strip():
             return _validation_error("Empty or invalid user prompt", "invalid_input")
-
-        system_prompt = None
-        if len(args) > 1 and isinstance(args[1], str) and args[1].strip():
-            system_prompt = args[1]
-        elif isinstance(self.system_prompt, str) and self.system_prompt.strip():
-            system_prompt = self.system_prompt
-        elif isinstance(self.config.get("system_prompt"), str) and self.config["system_prompt"].strip():
-            system_prompt = self.config["system_prompt"]
-        elif file_path:
-            try:
-                path_obj = Path(file_path)
-                if path_obj.exists():
-                    system_prompt = path_obj.read_text(encoding="utf-8")
-                else:
+        
+        # Get system prompt from config if not provided
+        if not system_prompt:
+            if isinstance(self.system_prompt, str) and self.system_prompt.strip():
+                system_prompt = self.system_prompt
+            elif isinstance(self.config.get("system_prompt"), str) and self.config["system_prompt"].strip():
+                system_prompt = self.config["system_prompt"]
+            elif file_path:
+                try:
+                    path_obj = Path(file_path)
+                    if path_obj.exists():
+                        system_prompt = path_obj.read_text(encoding="utf-8")
+                    else:
+                        system_prompt = file_path
+                except Exception:
                     system_prompt = file_path
-            except Exception:
-                system_prompt = file_path
 
         # Validate model name (basic check)
         if not model or not isinstance(model, str):
@@ -144,6 +171,7 @@ class OpenAIExecutor(LLMExecutor):
                 result = self._call_llm(
                     prompt=user_prompt,
                     system_prompt=system_prompt,
+                    conversation_history=conversation_history,
                     model=model,
                     max_tokens=self.max_tokens,
                     temperature=self.temperature,
@@ -151,6 +179,16 @@ class OpenAIExecutor(LLMExecutor):
                     timeout=timeout_s,
                 )
                 duration_ms = (time.time() - start_time) * 1000
+                # Build full messages list for trace recording
+                full_messages = []
+                if system_prompt:
+                    full_messages.append({"role": "system", "content": system_prompt})
+                if conversation_history:
+                    for msg in conversation_history:
+                        if isinstance(msg, dict) and msg.get("role") in ("user", "assistant"):
+                            full_messages.append(msg)
+                full_messages.append({"role": "user", "content": user_prompt})
+                
                 payload = {
                     "success": True,
                     "duration_ms": duration_ms,
@@ -162,6 +200,7 @@ class OpenAIExecutor(LLMExecutor):
                     "tokens_total": result.get("tokens_total", 0),
                     "cost_usd": result.get("cost_usd", 0.0),
                     "finish_reason": result.get("finish_reason", "stop"),
+                    "conversation_history": full_messages,  # Include for trace recording
                 }
                 return self._attach_retry_metadata(payload, attempts=attempt)
             except Exception as exc:
@@ -213,20 +252,40 @@ class OpenAIExecutor(LLMExecutor):
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
         model: Optional[str] = None,
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
         seed: Optional[int] = None,
         timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
-        """Make an OpenAI API call."""
+        """Make an OpenAI API call with optional conversation history."""
         model = model or self.model
         max_tokens = max_tokens or self.max_tokens
         temperature = temperature if temperature is not None else self.temperature
 
         messages = []
+        
+        # Add system prompt (only if not already in history)
         if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
+            # Check if history already has a system message
+            has_system = False
+            if conversation_history:
+                has_system = any(msg.get("role") == "system" for msg in conversation_history if isinstance(msg, dict))
+            if not has_system:
+                messages.append({"role": "system", "content": system_prompt})
+        
+        # Add conversation history (excluding system message if we already added it)
+        if conversation_history:
+            for msg in conversation_history:
+                if isinstance(msg, dict) and msg.get("role") == "system":
+                    # Skip system messages from history if we have a separate system_prompt
+                    if not system_prompt:
+                        messages.append(msg)
+                elif isinstance(msg, dict) and msg.get("role") in ("user", "assistant"):
+                    messages.append(msg)
+        
+        # Add new user message
         messages.append({"role": "user", "content": prompt})
 
         kwargs: Dict[str, Any] = {

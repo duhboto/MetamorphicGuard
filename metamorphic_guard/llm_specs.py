@@ -2,7 +2,7 @@
 Helper functions for creating LLM task specifications.
 """
 
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from .judges import Judge, LLMJudge
 from .mutants import Mutant, PromptMutant
@@ -148,5 +148,66 @@ def simple_llm_inputs(
                 inputs.append((prompt,))
         return inputs
 
+    return gen_inputs
+
+
+def multi_turn_llm_inputs(
+    conversation_history: List[Dict[str, str]],
+    user_prompts: Optional[List[str]] = None,
+    system_prompt: Optional[str] = None,
+) -> Callable[[int, int], List[Tuple[Any, ...]]]:
+    """
+    Create an input generator for multi-turn conversations.
+    
+    Args:
+        conversation_history: List of message dicts with "role" and "content" keys.
+            Messages should alternate between "user" and "assistant" roles.
+            Optional "system" role message at the start.
+        user_prompts: Optional list of new user prompts to append in each turn.
+            If None, uses the last user message from history.
+        system_prompt: Optional system prompt (if not in conversation_history)
+        
+    Returns:
+        Input generator function that returns (conversation_history, user_prompt) tuples
+    """
+    import random
+    
+    # Ensure conversation_history has at least one message
+    if not conversation_history:
+        if user_prompts:
+            conversation_history = [{"role": "user", "content": user_prompts[0]}]
+        else:
+            conversation_history = [{"role": "user", "content": ""}]
+    
+    # Add system prompt to history if provided and not already present
+    if system_prompt:
+        has_system = any(msg.get("role") == "system" for msg in conversation_history)
+        if not has_system:
+            conversation_history = [{"role": "system", "content": system_prompt}] + conversation_history
+    
+    def gen_inputs(n: int, seed: int) -> List[Tuple[Any, ...]]:
+        rng = random.Random(seed)
+        inputs: List[Tuple[Any, ...]] = []
+        
+        for _ in range(n):
+            # Copy conversation history
+            history = [dict(msg) for msg in conversation_history]
+            
+            # Determine new user prompt
+            if user_prompts:
+                new_user_prompt = rng.choice(user_prompts)
+            else:
+                # Extract last user message from history
+                user_messages = [msg for msg in history if msg.get("role") == "user"]
+                if user_messages:
+                    new_user_prompt = user_messages[-1].get("content", "")
+                else:
+                    new_user_prompt = ""
+            
+            # Return (conversation_history, user_prompt) tuple
+            inputs.append((history, new_user_prompt))
+        
+        return inputs
+    
     return gen_inputs
 

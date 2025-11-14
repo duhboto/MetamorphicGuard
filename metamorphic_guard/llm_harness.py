@@ -143,9 +143,12 @@ class LLMHarness:
 
         Args:
             case: Can be:
-                - Dict with "system" and "user" keys
-                - List of user prompts (strings)
-                - Single user prompt (string)
+                - Dict with:
+                  - "system" and "user" keys (single turn)
+                  - "conversation" key (list of message dicts for multi-turn)
+                  - "conversation" and "user" keys (multi-turn with new user message)
+                - List of user prompts (strings) - single turn
+                - Single user prompt (string) - single turn
             props: List of judges to evaluate outputs
             mrs: List of mutants to apply to inputs
             n: Number of test cases
@@ -158,19 +161,43 @@ class LLMHarness:
         Returns:
             Evaluation report dictionary
         """
-        from .llm_specs import create_llm_spec, simple_llm_inputs
+        from .llm_specs import create_llm_spec, simple_llm_inputs, multi_turn_llm_inputs
         from .specs import Spec
 
-        # Parse case input
+        # Parse case input - support multi-turn conversations
+        is_multi_turn = False
+        conversation_history: Optional[List[Dict[str, str]]] = None
+        
         if isinstance(case, str):
             prompts = [case]
             candidate_system = None
         elif isinstance(case, list):
-            prompts = case
-            candidate_system = None
+            # Could be list of prompts or list of message dicts
+            if case and isinstance(case[0], dict) and "role" in case[0]:
+                # Multi-turn: list of message dicts
+                is_multi_turn = True
+                conversation_history = case
+                prompts = None  # Will extract user prompts from history
+            else:
+                # Single turn: list of user prompts
+                prompts = case
+                candidate_system = None
         elif isinstance(case, dict):
-            prompts = [case.get("user", "")]
-            candidate_system = case.get("system")
+            # Check for multi-turn format
+            if "conversation" in case:
+                is_multi_turn = True
+                conversation_history = case.get("conversation", [])
+                if "user" in case:
+                    # New user message to append
+                    prompts = [case.get("user", "")]
+                else:
+                    # Use last user message from history
+                    prompts = None
+                candidate_system = case.get("system")
+            else:
+                # Single turn: system + user
+                prompts = [case.get("user", "")]
+                candidate_system = case.get("system")
         else:
             raise ValueError(f"Invalid case type: {type(case)}")
 
@@ -178,8 +205,11 @@ class LLMHarness:
         baseline_model = baseline_model or self.model
         baseline_system_prompt = baseline_system if baseline_system is not None else candidate_system_prompt
 
-        # Create input generator (system prompts are supplied via executor configs)
-        gen_inputs_fn = simple_llm_inputs(prompts)
+        # Create input generator (support multi-turn if conversation history provided)
+        if is_multi_turn and conversation_history:
+            gen_inputs_fn = multi_turn_llm_inputs(conversation_history, prompts, candidate_system_prompt)
+        else:
+            gen_inputs_fn = simple_llm_inputs(prompts or [""], candidate_system_prompt)
 
         # Create task spec
         spec = create_llm_spec(
