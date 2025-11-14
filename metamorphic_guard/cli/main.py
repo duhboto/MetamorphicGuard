@@ -20,6 +20,7 @@ from .scaffold import scaffold_plugin
 from .stability import stability_audit_command
 from .trace import trace_group
 from .policy import policy_group
+from .audit import audit_group
 from .mr import mr_group
 
 
@@ -59,4 +60,5 @@ main.add_command(stability_audit_command, "stability-audit")
 main.add_command(trace_group, "trace")
 main.add_command(policy_group, "policy")
 main.add_command(mr_group, "mr")
+main.add_command(audit_group, "audit")
 

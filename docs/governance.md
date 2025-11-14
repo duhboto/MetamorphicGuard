@@ -96,6 +96,36 @@ openssl ts -query -data report.json -cert | \
   --data-binary @- https://freetsa.org/tsr > report.json.tsr
 ```
 
+### Built-in Policy Signing
+
+Use the CLI for lightweight signing/hashing without external tooling:
+
+```bash
+# Create SHA256 + optional HMAC signature (reads METAMORPHIC_GUARD_AUDIT_KEY)
+metamorphic-guard policy sign policies/prod.toml
+
+# Verify file against signature metadata
+metamorphic-guard policy verify policies/prod.toml
+```
+
+The signature file (`prod.toml.sig` by default) records the SHA256 digest and, when a signing key
+is present, the HMAC-SHA256 value. Pass `--signature-path` to customize destinations, or `--require-hmac`
+to enforce keyed verification.
+
+### Audit Log Inspection
+
+Audit logs are emitted to `reports/audit.log` (configurable via `METAMORPHIC_GUARD_AUDIT_LOG`). Use the dedicated CLI:
+
+```bash
+# Show latest entries
+metamorphic-guard audit tail --count 10
+
+# Verify HMAC signatures (requires METAMORPHIC_GUARD_AUDIT_KEY)
+metamorphic-guard audit verify
+```
+
+The verification command re-computes canonical HMAC signatures for each entry and surfaces any tampering.
+
 ## Reproducible Bundles
 
 The `bundle` command creates self-contained, reproducible evaluation packages:
