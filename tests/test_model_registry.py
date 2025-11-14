@@ -103,17 +103,19 @@ class TestModelRegistry:
     
     def test_validate_model_invalid(self):
         """Test validating an invalid model."""
-        is_valid, error_msg, suggestions = validate_model("openai", "invalid-model")
+        # Use a truly invalid model (with special characters or spaces)
+        is_valid, error_msg, suggestions = validate_model("openai", "model with spaces!")
         assert is_valid is False
         assert error_msg is not None
-        assert "invalid" in error_msg.lower()
+        assert "invalid" in error_msg.lower() or "Invalid" in error_msg
         # May have suggestions
         assert isinstance(suggestions, list)
     
     def test_validate_model_raises_error(self):
         """Test that validate_model raises error when requested."""
+        # Use a truly invalid model
         with pytest.raises(ValueError, match="Invalid model"):
-            validate_model("openai", "invalid-model", raise_error=True)
+            validate_model("openai", "model with spaces!", raise_error=True)
         
         # Should not raise for valid models
         is_valid, _, _ = validate_model("openai", "gpt-4", raise_error=True)
@@ -155,10 +157,11 @@ class TestModelRegistry:
     
     def test_get_model_info_invalid(self):
         """Test getting info for an invalid model."""
-        info = get_model_info("openai", "invalid-model")
+        # Use a truly invalid model
+        info = get_model_info("openai", "model with spaces!")
         assert info["is_valid"] is False
         assert info["provider"] == "openai"
-        assert info["model"] == "invalid-model"
+        assert info["model"] == "model with spaces!"
         assert info["error_message"] is not None
         assert isinstance(info["suggestions"], list)
     

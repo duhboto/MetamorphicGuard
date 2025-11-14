@@ -200,7 +200,9 @@ class AnthropicExecutor(LLMExecutor):
                 return self._attach_retry_metadata(payload, attempts=attempt)
             except Exception as exc:
                 if self._should_retry(exc, attempt):
-                    self._sleep_with_backoff(attempt)
+                    # Extract Retry-After header if available (for rate limits)
+                    retry_after = self._extract_retry_after(exc)
+                    self._sleep_with_backoff(attempt, retry_after=retry_after)
                     continue
 
                 duration_ms = (time.time() - start_time) * 1000

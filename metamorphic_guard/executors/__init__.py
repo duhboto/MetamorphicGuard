@@ -135,15 +135,68 @@ class LLMExecutor(Executor):
 
         return False
 
-    def _sleep_with_backoff(self, attempt: int) -> None:
-        if self.retry_backoff_base <= 0:
+    def _sleep_with_backoff(self, attempt: int, retry_after: Optional[float] = None) -> None:
+        """
+        Sleep with exponential backoff, optionally respecting Retry-After header.
+        
+        Args:
+            attempt: Current retry attempt number (0-indexed)
+            retry_after: Optional seconds to wait from Retry-After header
+        """
+        if retry_after is not None and retry_after > 0:
+            # Respect Retry-After header if provided (common in rate limit responses)
+            delay = retry_after
+            # Add small jitter to avoid thundering herd
+            if self.retry_jitter > 0:
+                delay += random.uniform(0, min(self.retry_jitter, delay * 0.1))
+        elif self.retry_backoff_base <= 0:
             return
-        delay = self.retry_backoff_base * (2 ** attempt)
-        if self.retry_backoff_cap > 0:
-            delay = min(delay, self.retry_backoff_cap)
-        if self.retry_jitter > 0:
-            delay += random.uniform(0, self.retry_jitter)
+        else:
+            # Exponential backoff: base * 2^attempt
+            delay = self.retry_backoff_base * (2 ** attempt)
+            if self.retry_backoff_cap > 0:
+                delay = min(delay, self.retry_backoff_cap)
+            if self.retry_jitter > 0:
+                delay += random.uniform(0, self.retry_jitter)
+        
         time.sleep(max(delay, 0.0))
+    
+    def _extract_retry_after(self, exc: Exception) -> Optional[float]:
+        """
+        Extract Retry-After value from exception (if available).
+        
+        Many API clients include Retry-After in response headers for rate limits.
+        This method attempts to extract it from the exception or response object.
+        
+        Args:
+            exc: The exception that occurred
+            
+        Returns:
+            Seconds to wait, or None if not available
+        """
+        # Check if exception has response attribute (common in HTTP clients)
+        response = getattr(exc, "response", None)
+        if response is not None:
+            # Try to get Retry-After header
+            headers = getattr(response, "headers", None)
+            if headers is not None:
+                retry_after = headers.get("Retry-After") or headers.get("retry-after")
+                if retry_after:
+                    try:
+                        # Retry-After can be seconds (int) or HTTP date
+                        return float(retry_after)
+                    except (ValueError, TypeError):
+                        pass
+        
+        # Check if exception has retry_after attribute directly
+        retry_after = getattr(exc, "retry_after", None)
+        if retry_after is not None:
+            try:
+                return float(retry_after)
+            except (ValueError, TypeError):
+                pass
+        
+        return None
 
     def _attach_retry_metadata(self, payload: Dict[str, Any], attempts: int) -> Dict[str, Any]:
         payload["retries"] = max(0, attempts)
