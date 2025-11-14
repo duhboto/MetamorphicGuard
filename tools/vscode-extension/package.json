@@ -1,0 +1,19 @@
+{
+  "name": "metamorphic-guard-snippets",
+  "displayName": "Metamorphic Guard Snippets",
+  "description": "Developer snippets for writing specs, properties, and relations.",
+  "version": "0.1.0",
+  "publisher": "metamorphicguard",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "contributes": {
+    "snippets": [
+      {
+        "language": "python",
+        "path": "./snippets/code-snippets.json"
+      }
+    ]
+  }
+}
+

@@ -1,0 +1,24 @@
+image:
+  repository: ghcr.io/duhboto/metamorphic-guard
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+resources:
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+  requests:
+    cpu: "200m"
+    memory: "256Mi"
+
+queue:
+  backend: memory
+  leaseSeconds: 45
+  heartbeatTimeout: 45
+
+service:
+  type: ClusterIP
+  port: 8080
+

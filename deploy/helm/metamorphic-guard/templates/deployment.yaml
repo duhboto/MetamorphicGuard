@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "metamorphic-guard.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "metamorphic-guard.name" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "metamorphic-guard.name" . }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "metamorphic-guard.name" . }}
+    spec:
+      containers:
+        - name: queue-worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: METAMORPHIC_GUARD_QUEUE_BACKEND
+              value: {{ .Values.queue.backend | quote }}
+            - name: METAMORPHIC_GUARD_LEASE_SECONDS
+              value: "{{ .Values.queue.leaseSeconds }}"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+

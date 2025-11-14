@@ -2,33 +2,22 @@
 Sandbox execution with resource limits and isolation.
 """
 
-import ast
 import hashlib
 import importlib
 import json
 import os
-import shutil
 import sys
 import tempfile
-import threading
 import time
 import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
-try:
-    import resource  # type: ignore
-except ImportError:  # pragma: no cover - resource is POSIX-only
-    resource = None  # type: ignore[assignment]
-
-
-_CACHE_ROOT = Path(tempfile.gettempdir()) / "metamorphic_guard_cache"
-_CACHE_ROOT.mkdir(parents=True, exist_ok=True)
-_SNAPSHOT_CACHE: Dict[str, tuple[Path, bool]] = {}
-_SNAPSHOT_LOCK = threading.Lock()
 
 from .redaction import get_redactor
 from .plugins import executor_plugins
+from .sandbox_workspace import parse_success, prepare_workspace, write_bootstrap
+from .sandbox_limits import make_preexec_fn
 
 def run_in_sandbox(
     file_path: str,
@@ -139,8 +128,8 @@ def _run_local_sandbox(
         workspace_dir = temp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
 
-        sandbox_target = _prepare_workspace(Path(file_path), workspace_dir)
-        bootstrap_path = _write_bootstrap(
+        sandbox_target = prepare_workspace(Path(file_path), workspace_dir)
+        bootstrap_path = write_bootstrap(
             temp_path,
             workspace_dir,
             sandbox_target,
@@ -157,7 +146,7 @@ def _run_local_sandbox(
         try:
             import subprocess  # Local import keeps sandbox namespace tighter
 
-            preexec_fn = _make_preexec_fn(timeout_s, mem_mb)
+            preexec_fn = make_preexec_fn(timeout_s, mem_mb)
 
             process = subprocess.Popen(
                 [sys.executable, "-I", str(bootstrap_path)],
@@ -202,7 +191,7 @@ def _run_local_sandbox(
                     sandbox_metadata=_metadata_with_state("process_exit"),
                 )
 
-            parsed = _parse_success(stdout)
+            parsed = parse_success(stdout)
             if parsed is None:
                 return _result(
                     success=False,
@@ -279,8 +268,8 @@ def _run_docker_sandbox(
         workspace_dir = temp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
 
-        sandbox_target = _prepare_workspace(Path(file_path), workspace_dir)
-        bootstrap_path = _write_bootstrap(
+        sandbox_target = prepare_workspace(Path(file_path), workspace_dir)
+        bootstrap_path = write_bootstrap(
             temp_path,
             workspace_dir,
             sandbox_target,
@@ -417,7 +406,7 @@ def _run_docker_sandbox(
                 sandbox_metadata=_metadata_with_state("process_exit"),
             )
 
-        parsed = _parse_success(completed.stdout)
+        parsed = parse_success(completed.stdout)
         if parsed is None:
             return _result(
                 success=False,
@@ -507,71 +496,6 @@ def _force_remove_container(name: str) -> None:
         return
 
 
-def _snapshot_source(source: Path) -> tuple[Path, bool]:
-    """Return a cached snapshot path and whether it represents a directory."""
-    resolved = source.resolve()
-    try:
-        mtime = resolved.stat().st_mtime_ns
-    except FileNotFoundError as exc:  # pragma: no cover - source removed mid-run
-        raise FileNotFoundError(f"Source path not found: {resolved}") from exc
-
-    key_material = f"{resolved}:{mtime}".encode("utf-8")
-    digest = hashlib.sha256(key_material).hexdigest()
-
-    with _SNAPSHOT_LOCK:
-        cached = _SNAPSHOT_CACHE.get(digest)
-        if cached and cached[0].exists():
-            return cached
-
-        snapshot_base = _CACHE_ROOT / digest
-        if snapshot_base.exists():
-            shutil.rmtree(snapshot_base)
-        snapshot_base.mkdir(parents=True, exist_ok=True)
-
-        if resolved.is_dir():
-            target = snapshot_base / resolved.name
-            shutil.copytree(resolved, target, dirs_exist_ok=True)
-            result = (target, True)
-        else:
-            target = snapshot_base / resolved.name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(resolved, target)
-            result = (target, False)
-
-        _SNAPSHOT_CACHE[digest] = result
-        return result
-
-
-def _clone_snapshot_dir(snapshot: Path, destination: Path) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.exists():
-        shutil.rmtree(destination)
-    shutil.copytree(snapshot, destination, copy_function=_link_or_copy)
-
-
-def _clone_snapshot_file(snapshot: Path, destination: Path) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.exists():
-        destination.unlink()
-    _link_or_copy(snapshot, destination)
-
-
-def _link_or_copy(src: str | Path, dst: str | Path) -> None:
-    src_path = os.fspath(src)
-    dst_path = os.fspath(dst)
-    try:
-        os.link(src_path, dst_path)
-    except OSError:
-        shutil.copy2(src_path, dst_path)
-
-
-def _write_bootstrap(
-    temp_path: Path,
-    workspace_dir: Path,
-    sandbox_target: Path,
-    func_name: str,
-    args: tuple,
-) -> Path:
     """Emit the bootstrap script used to execute the target safely."""
     from textwrap import dedent
 
@@ -755,121 +679,6 @@ def _write_bootstrap(
     return bootstrap_file
 
 
-def _prepare_workspace(source_path: Path, workspace_dir: Path) -> Path:
-    """Copy the relevant source tree into the sandbox and return the module path."""
-
-    if source_path.is_dir():
-        snapshot, is_dir = _snapshot_source(source_path)
-        if not is_dir:
-            raise FileNotFoundError(f"Expected directory for {source_path}")
-        dest_dir = workspace_dir / source_path.name
-        _clone_snapshot_dir(snapshot, dest_dir)
-        candidate = dest_dir / "__init__.py"
-        if candidate.exists():
-            return candidate
-        raise FileNotFoundError(f"No __init__.py found in package directory {source_path}")
-
-    package_root = _determine_package_root(source_path)
-    if package_root is None:
-        parent = source_path.parent
-        if parent == Path(".") or parent == parent.parent:
-            snapshot, is_dir = _snapshot_source(source_path)
-            if is_dir:
-                raise FileNotFoundError(f"Unexpected package directory at {source_path}")
-            dest = workspace_dir / source_path.name
-            _clone_snapshot_file(snapshot, dest)
-            return dest
-
-        try:
-            tmp_root = Path(tempfile.gettempdir()).resolve()
-        except FileNotFoundError:  # pragma: no cover - extremely unlikely
-            tmp_root = None
-
-        if tmp_root is not None and parent.resolve() == tmp_root:
-            snapshot, is_dir = _snapshot_source(source_path)
-            if is_dir:
-                raise FileNotFoundError(f"Unexpected package directory at {source_path}")
-            dest = workspace_dir / source_path.name
-            _clone_snapshot_file(snapshot, dest)
-            return dest
-
-        dest_parent = workspace_dir / parent.name
-        snapshot_parent, is_dir = _snapshot_source(parent)
-        if not is_dir:
-            raise FileNotFoundError(f"Expected directory for {parent}")
-        _clone_snapshot_dir(snapshot_parent, dest_parent)
-        return dest_parent / source_path.name
-
-    dest_root = workspace_dir / package_root.name
-    snapshot_root, is_dir = _snapshot_source(package_root)
-    if not is_dir:
-        raise FileNotFoundError(f"Expected package directory for {package_root}")
-    _clone_snapshot_dir(snapshot_root, dest_root)
-    return dest_root / source_path.relative_to(package_root)
-
-
-def _determine_package_root(source_path: Path) -> Optional[Path]:
-    """Return the highest package directory containing the source file, if any."""
-    current = source_path.parent
-    package_root: Optional[Path] = None
-
-    while current != current.parent and (current / "__init__.py").exists():
-        package_root = current
-        current = current.parent
-        if not (current / "__init__.py").exists():
-            break
-
-    if package_root is None and (source_path.parent / "__init__.py").exists():
-        package_root = source_path.parent
-
-    return package_root
-
-
-def _parse_success(stdout: str) -> Optional[Any]:
-    """Extract the literal value from the sandbox stdout, if present."""
-    lines = [line.strip() for line in stdout.splitlines() if line.strip()]
-    if not lines or not lines[-1].startswith("SUCCESS:"):
-        return None
-
-    payload = lines[-1].split("SUCCESS:", 1)[1].strip()
-    try:
-        return ast.literal_eval(payload)
-    except (SyntaxError, ValueError) as exc:
-        raise ValueError(f"Failed to parse sandbox output: {exc}") from exc
-
-
-def _set_resource_limits(timeout_s: float, mem_mb: int) -> None:
-    """Apply CPU, memory, and file descriptor limits to the sandbox process."""
-    if resource is None:
-        return
-
-    try:
-        cpu_limit = max(1, int(timeout_s * 2))
-        resource.setrlimit(resource.RLIMIT_CPU, (cpu_limit, cpu_limit))
-
-        mem_limit = max(mem_mb, 32) * 1024 * 1024
-        resource.setrlimit(resource.RLIMIT_AS, (mem_limit, mem_limit))
-
-        resource.setrlimit(resource.RLIMIT_NPROC, (32, 32))
-        resource.setrlimit(resource.RLIMIT_NOFILE, (16, 16))
-    except (OSError, ValueError):
-        pass
-
-
-def _make_preexec_fn(timeout_s: float, mem_mb: int):
-    """
-    Build a POSIX-only pre-exec function for applying resource limits.
-
-    Windows does not allow preexec_fn, so we return None in that case and
-    rely on communicate() timeouts plus process groups for cleanup.
-    """
-    if resource is None or os.name == "nt":
-        return None
-
-    def _apply_limits() -> None:
-        _set_resource_limits(timeout_s, mem_mb)
-
-    return _apply_limits
 
 
 def _result(

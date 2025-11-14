@@ -215,7 +215,7 @@ class VLLMExecutor(LLMExecutor):
                 "finish_reason": result.get("finish_reason", "stop"),
             }
             return self._attach_retry_metadata(payload, attempts=0)
-        except Exception as exc:
+        except (RuntimeError, ValueError, OSError) as exc:
             duration_ms = (time.time() - start_time) * 1000
             error_msg = str(exc)
             error_code = "vllm_error"

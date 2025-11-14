@@ -16,6 +16,32 @@ try:
 except ImportError:
     openai = None  # type: ignore
 
+if openai is not None:
+    APIError = getattr(openai, "APIError", Exception)
+    APITimeoutError = getattr(openai, "APITimeoutError", APIError)
+    APIConnectionError = getattr(openai, "APIConnectionError", APIError)
+    RateLimitError = getattr(openai, "RateLimitError", APIError)
+    AuthenticationError = getattr(openai, "AuthenticationError", APIError)
+    BadRequestError = getattr(openai, "BadRequestError", APIError)
+else:  # pragma: no cover - fallback when openai unavailable
+    class APIError(Exception):
+        """Fallback base error."""
+
+    class APITimeoutError(APIError):
+        pass
+
+    class APIConnectionError(APIError):
+        pass
+
+    class RateLimitError(APIError):
+        pass
+
+    class AuthenticationError(APIError):
+        pass
+
+    class BadRequestError(APIError):
+        pass
+
 
 class OpenAIExecutor(LLMExecutor):
     """Executor that calls OpenAI API."""
@@ -142,7 +168,7 @@ class OpenAIExecutor(LLMExecutor):
                         system_prompt = path_obj.read_text(encoding="utf-8")
                     else:
                         system_prompt = file_path
-                except Exception:
+                except (OSError, UnicodeDecodeError):
                     system_prompt = file_path
 
         # Validate model name using registry
@@ -212,35 +238,57 @@ class OpenAIExecutor(LLMExecutor):
                     "conversation_history": full_messages,  # Include for trace recording
                 }
                 return self._attach_retry_metadata(payload, attempts=attempt)
-            except Exception as exc:
+            except (RateLimitError, APITimeoutError, APIConnectionError) as exc:
                 last_error = exc
+                retry_after = self._extract_retry_after(exc)
                 if self._should_retry(exc, attempt):
-                    # Extract Retry-After header if available (for rate limits)
-                    retry_after = self._extract_retry_after(exc)
                     self._sleep_with_backoff(attempt, retry_after=retry_after)
                     continue
-
+                # fallthrough to final payload outside loop
+                break
+            except (AuthenticationError, BadRequestError, ValueError) as exc:
                 duration_ms = (time.time() - start_time) * 1000
                 error_msg = self._redactor.redact(str(exc))
-                error_code = "llm_api_error"
-                error_type = type(exc).__name__
-                if hasattr(exc, "status_code"):
-                    if exc.status_code == 401:
-                        error_code = "authentication_error"
-                    elif exc.status_code == 429:
-                        error_code = "rate_limit_error"
-                    elif exc.status_code == 400:
-                        error_code = "invalid_request"
-                    elif exc.status_code == 500:
-                        error_code = "api_server_error"
-
+                error_code = "authentication_error" if isinstance(exc, AuthenticationError) else "invalid_request"
                 payload = {
                     "success": False,
                     "duration_ms": duration_ms,
                     "stdout": "",
                     "stderr": error_msg,
                     "error": error_msg,
-                    "error_type": error_type,
+                    "error_type": type(exc).__name__,
+                    "error_code": error_code,
+                }
+                return self._attach_retry_metadata(payload, attempts=attempt)
+            except OSError as exc:
+                last_error = exc
+                if self._should_retry(exc, attempt):
+                    self._sleep_with_backoff(attempt)
+                    continue
+                break
+            except Exception as exc:  # Fallback for unexpected client errors
+                last_error = exc
+                if self._should_retry(exc, attempt):
+                    retry_after = self._extract_retry_after(exc)
+                    self._sleep_with_backoff(attempt, retry_after=retry_after)
+                    continue
+                duration_ms = (time.time() - start_time) * 1000
+                error_msg = self._redactor.redact(str(exc))
+                error_code = "llm_api_error"
+                status = getattr(exc, "status_code", None)
+                if status == 401:
+                    error_code = "authentication_error"
+                elif status == 429:
+                    error_code = "rate_limit_error"
+                elif status == 400:
+                    error_code = "invalid_request"
+                payload = {
+                    "success": False,
+                    "duration_ms": duration_ms,
+                    "stdout": "",
+                    "stderr": error_msg,
+                    "error": error_msg,
+                    "error_type": type(exc).__name__,
                     "error_code": error_code,
                 }
                 return self._attach_retry_metadata(payload, attempts=attempt)

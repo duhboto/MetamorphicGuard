@@ -143,3 +143,37 @@ See the templates directory for complete examples:
 - `.gitlab-ci/templates/` - GitLab CI
 - `jenkins/templates/` - Jenkins
 
+## Notifications
+
+Use webhook alerts to push failures to ChatOps:
+
+```bash
+metamorphic-guard evaluate \
+  --task top_k \
+  --baseline baseline.py \
+  --candidate candidate.py \
+  --alert-webhook https://hooks.slack.com/services/... \
+  --html-report reports/latest.html
+```
+
+For richer messages use the Slack helper in `metamorphic_guard.notifications.send_slack_message`.
+
+## Kubernetes / Helm
+
+The Helm chart under `deploy/helm/metamorphic-guard` deploys queue workers:
+
+```
+helm install guard deploy/helm/metamorphic-guard \
+  --set image.tag=2.2.0 \
+  --set queue.backend=redis
+```
+
+## Policy Snapshots
+
+Version policies before deployment:
+
+```
+metamorphic-guard policy snapshot policies/policy-v1.toml --label release-2025-11
+metamorphic-guard policy rollback policies/history/policy-v1-release-2025-11-20251113-120000.toml policies/policy-v1.toml
+```
+

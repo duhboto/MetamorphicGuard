@@ -16,6 +16,24 @@ try:
 except ImportError:
     anthropic = None  # type: ignore
 
+if anthropic is not None:
+    AnthropicError = getattr(anthropic, "APIError", Exception)
+    RateLimitError = getattr(anthropic, "RateLimitError", AnthropicError)
+    APITimeoutError = getattr(anthropic, "APITimeoutError", AnthropicError)
+    APIConnectionError = getattr(anthropic, "APIConnectionError", AnthropicError)
+else:  # pragma: no cover - fallback when anthropic missing
+    class AnthropicError(Exception):
+        """Fallback base Anthropic error."""
+
+    class RateLimitError(AnthropicError):
+        pass
+
+    class APITimeoutError(AnthropicError):
+        pass
+
+    class APIConnectionError(AnthropicError):
+        pass
+
 
 class AnthropicExecutor(LLMExecutor):
     """Executor that calls Anthropic API."""
@@ -143,7 +161,7 @@ class AnthropicExecutor(LLMExecutor):
                         system_prompt = path_obj.read_text(encoding="utf-8")
                     else:
                         system_prompt = file_path
-                except Exception:
+                except (OSError, UnicodeDecodeError):
                     system_prompt = file_path
 
         # Validate model name using registry
@@ -173,6 +191,8 @@ class AnthropicExecutor(LLMExecutor):
                 "invalid_parameter",
             )
 
+        last_error: Optional[Exception] = None
+
         for attempt in range(self.max_retries + 1):
             try:
                 result = self._call_llm(
@@ -198,47 +218,69 @@ class AnthropicExecutor(LLMExecutor):
                     "finish_reason": result.get("finish_reason", "end_turn"),
                 }
                 return self._attach_retry_metadata(payload, attempts=attempt)
-            except Exception as exc:
+            except (RateLimitError, APITimeoutError, APIConnectionError) as exc:
+                last_error = exc
+                retry_after = self._extract_retry_after(exc)
                 if self._should_retry(exc, attempt):
-                    # Extract Retry-After header if available (for rate limits)
-                    retry_after = self._extract_retry_after(exc)
                     self._sleep_with_backoff(attempt, retry_after=retry_after)
                     continue
-
+                break
+            except AnthropicError as exc:
                 duration_ms = (time.time() - start_time) * 1000
                 error_msg = self._redactor.redact(str(exc))
-                error_code = "llm_api_error"
-                error_type = type(exc).__name__
-                if hasattr(exc, "status_code"):
-                    if exc.status_code == 401:
-                        error_code = "authentication_error"
-                    elif exc.status_code == 429:
-                        error_code = "rate_limit_error"
-                    elif exc.status_code == 400:
-                        error_code = "invalid_request"
-                    elif exc.status_code == 500:
-                        error_code = "api_server_error"
-
+                error_code = "rate_limit_error" if isinstance(exc, RateLimitError) else "llm_api_error"
                 payload = {
                     "success": False,
                     "duration_ms": duration_ms,
                     "stdout": "",
                     "stderr": error_msg,
                     "error": error_msg,
-                    "error_type": error_type,
+                    "error_type": type(exc).__name__,
+                    "error_code": error_code,
+                }
+                return self._attach_retry_metadata(payload, attempts=attempt)
+            except OSError as exc:
+                last_error = exc
+                if self._should_retry(exc, attempt):
+                    self._sleep_with_backoff(attempt)
+                    continue
+                break
+            except Exception as exc:
+                last_error = exc
+                if self._should_retry(exc, attempt):
+                    retry_after = self._extract_retry_after(exc)
+                    self._sleep_with_backoff(attempt, retry_after=retry_after)
+                    continue
+                duration_ms = (time.time() - start_time) * 1000
+                error_msg = self._redactor.redact(str(exc))
+                error_code = "llm_api_error"
+                status = getattr(exc, "status_code", None)
+                if status == 401:
+                    error_code = "authentication_error"
+                elif status == 429:
+                    error_code = "rate_limit_error"
+                elif status == 400:
+                    error_code = "invalid_request"
+                payload = {
+                    "success": False,
+                    "duration_ms": duration_ms,
+                    "stdout": "",
+                    "stderr": error_msg,
+                    "error": error_msg,
+                    "error_type": type(exc).__name__,
                     "error_code": error_code,
                 }
                 return self._attach_retry_metadata(payload, attempts=attempt)
 
         duration_ms = (time.time() - start_time) * 1000
-        fallback = "Unknown error"
+        fallback = self._redactor.redact(str(last_error)) if last_error else "Unknown error"
         payload = {
             "success": False,
             "duration_ms": duration_ms,
             "stdout": "",
             "stderr": fallback,
             "error": fallback,
-            "error_type": "RuntimeError",
+            "error_type": type(last_error).__name__ if last_error else "RuntimeError",
             "error_code": "llm_api_error",
         }
         return self._attach_retry_metadata(payload, attempts=self.max_retries)

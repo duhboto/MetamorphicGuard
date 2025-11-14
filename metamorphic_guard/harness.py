@@ -44,6 +44,8 @@ from .dispatch import Dispatcher
 from .monitoring import Monitor
 from .observability import increment_llm_retries, log_event
 from .gate import decide_adopt
+from .audit import write_audit_entry
+from .sequential_testing import should_continue_sprt, sprt_boundary
 
 # Import from refactored modules
 from .harness.statistics import (
@@ -51,6 +53,7 @@ from .harness.statistics import (
     compute_paired_stats as _compute_paired_stats_new,
     compute_relative_risk as _compute_relative_risk_new,
     estimate_power as _estimate_power_new,
+    compute_bayesian_posterior_predictive as _compute_bayesian_posterior_predictive,
 )
 from .harness.execution import (
     ExecutionPlan,
@@ -311,6 +314,9 @@ def run_eval(
     bootstrap_samples: int = 1000,
     ci_method: str = "bootstrap",
     rr_ci_method: str = "log",
+    bayesian_hierarchical: bool = False,
+    bayesian_posterior_predictive: bool = False,
+    bayesian_samples: int = 5000,
     executor: str | None = None,
     executor_config: Dict[str, Any] | None = None,
     baseline_executor: str | None = None,
@@ -519,6 +525,8 @@ def run_eval(
         seed=seed,
         samples=bootstrap_samples,
         method=ci_method,
+        hierarchical=bayesian_hierarchical,
+        bayesian_samples=bayesian_samples,
     )
 
     def _recompute_delta_ci(new_alpha: float) -> List[float]:
@@ -529,6 +537,8 @@ def run_eval(
             seed=seed,
             samples=bootstrap_samples,
             method=ci_method,
+            hierarchical=bayesian_hierarchical,
+            bayesian_samples=bayesian_samples,
         )
 
     # Apply sequential testing correction if enabled
@@ -578,6 +588,9 @@ def run_eval(
             "bootstrap_samples": bootstrap_samples,
             "ci_method": ci_method,
             "rr_ci_method": rr_ci_method,
+            "bayesian_hierarchical": bayesian_hierarchical,
+            "bayesian_posterior_predictive": bayesian_posterior_predictive,
+            "bayesian_samples": bayesian_samples,
             "executor": executor or candidate_exec or baseline_exec,
             "executor_config": _serialize_for_report(
                 executor_config if executor_config is not None else candidate_exec_config
@@ -616,6 +629,21 @@ def run_eval(
         "environment": get_environment_fingerprint(),
         "job_metadata": collect_job_metadata(),
     }
+
+    if bayesian_posterior_predictive:
+        bayesian_stats = _compute_bayesian_posterior_predictive(
+            baseline_metrics,
+            candidate_metrics,
+            samples=bayesian_samples,
+            hierarchical=bayesian_hierarchical,
+            seed=seed,
+        )
+        result["bayesian"] = {
+            "posterior_predictive": bayesian_stats,
+            "hierarchical": bayesian_hierarchical,
+            "samples": bayesian_samples,
+        }
+
     result["job_metadata"]["run_id"] = run_id
 
     if policy_config:
@@ -713,6 +741,29 @@ def run_eval(
     )
     if metrics_payload:
         result["metrics"] = metrics_payload
+
+    if sequential_method == "sprt":
+        lower_bound, upper_bound = sprt_boundary(
+            alpha=alpha,
+            beta=1 - power_target,
+            effect_size=min_delta,
+            baseline_rate=baseline_metrics["pass_rate"],
+            sample_size=n,
+        )
+        continue_sampling, sprt_reason = should_continue_sprt(
+            observed_rate=candidate_metrics["pass_rate"],
+            baseline_rate=baseline_metrics["pass_rate"],
+            effect_size=min_delta,
+            alpha=alpha,
+            beta=1 - power_target,
+            sample_size=n,
+        )
+        result.setdefault("sequential", {})["sprt"] = {
+            "continue_sampling": continue_sampling,
+            "reason": sprt_reason,
+            "lower_bound": lower_bound,
+            "upper_bound": upper_bound,
+        }
 
     if policy_config:
         result["policy"] = _serialize_for_report(policy_config)
@@ -871,6 +922,11 @@ def run_eval(
             ttl_days=failed_artifact_ttl_days,
             run_id=run_id,
         )
+
+    try:
+        write_audit_entry(result)
+    except Exception as audit_exc:  # pragma: no cover - best-effort logging
+        log_event("audit_log_failed", error=str(audit_exc))
 
     return result
 

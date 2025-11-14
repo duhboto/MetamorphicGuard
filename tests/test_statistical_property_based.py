@@ -26,6 +26,7 @@ if HYPOTHESIS_AVAILABLE:
         wilson_interval,
         compute_newcombe_ci,
         compute_bayesian_ci,
+        compute_bayesian_posterior_predictive,
     )
 
 
@@ -302,6 +303,8 @@ if HYPOTHESIS_AVAILABLE:
                     candidate_total,
                     alpha=alpha,
                     prior_type="uniform",
+                    samples=500,
+                    seed=42,
                 )
                 
                 # Property 1: Lower bound <= upper bound
@@ -323,6 +326,8 @@ if HYPOTHESIS_AVAILABLE:
                     candidate_total,
                     alpha=alpha,
                     prior_type="jeffreys",
+                    samples=500,
+                    seed=84,
                 )
                 
                 assert ci_jeffreys[0] <= ci_jeffreys[1]
@@ -331,6 +336,21 @@ if HYPOTHESIS_AVAILABLE:
             except Exception:
                 # Skip if function not available or fails
                 pass
+
+        def test_bayesian_posterior_predictive_outputs(self) -> None:
+            baseline = {"passes": 8, "total": 10}
+            candidate = {"passes": 9, "total": 10}
+            stats = compute_bayesian_posterior_predictive(
+                baseline,
+                candidate,
+                samples=2000,
+                hierarchical=True,
+                seed=123,
+            )
+            assert "posterior_predictive" not in stats  # ensure structure isn't nested
+            assert "delta_ci" in stats
+            assert "prob_candidate_beats_baseline" in stats
+            assert 0.0 <= stats["prob_candidate_beats_baseline"] <= 1.0
 else:
     # Dummy class to avoid import errors when Hypothesis is not available
     class TestStatisticalProperties:

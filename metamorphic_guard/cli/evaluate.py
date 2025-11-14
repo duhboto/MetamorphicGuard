@@ -171,6 +171,23 @@ EVALUATE_OPTIONS = [
         help="Bootstrap resamples for confidence interval estimation",
     ),
     click.option(
+        "--bayesian-samples",
+        type=int,
+        default=5000,
+        show_default=True,
+        help="Monte Carlo samples when using Bayesian confidence intervals.",
+    ),
+    click.option(
+        "--bayesian-hierarchical/--no-bayesian-hierarchical",
+        default=False,
+        help="Use a hierarchical Beta-Binomial prior when --ci-method=bayesian.",
+    ),
+    click.option(
+        "--bayesian-posterior-predictive/--no-bayesian-posterior-predictive",
+        default=False,
+        help="Emit Bayesian posterior predictive diagnostics alongside the CI.",
+    ),
+    click.option(
         "--ci-method",
         type=click.Choice(
             [
@@ -401,6 +418,9 @@ def evaluate_command(
     violation_cap: int,
     parallel: int,
     bootstrap_samples: int,
+    bayesian_samples: int,
+    bayesian_hierarchical: bool,
+    bayesian_posterior_predictive: bool,
     ci_method: str,
     rr_ci_method: str,
     report_dir: Path | None,
@@ -712,6 +732,9 @@ def evaluate_command(
                 parallel=parallel,
                 min_delta=min_delta,
                 bootstrap_samples=bootstrap_samples,
+                bayesian_samples=bayesian_samples,
+                bayesian_hierarchical=bayesian_hierarchical,
+                bayesian_posterior_predictive=bayesian_posterior_predictive,
                 ci_method=ci_method,
                 rr_ci_method=rr_ci_method,
                 executor=executor,

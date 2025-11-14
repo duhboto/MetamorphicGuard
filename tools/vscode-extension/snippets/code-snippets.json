@@ -1,0 +1,18 @@
+{
+  "Register Task": {
+    "prefix": "mg-task",
+    "body": [
+      "@task(\"${1:task_name}\")",
+      "def build_${1:task_name}():",
+      "    from metamorphic_guard import Spec, Property, MetamorphicRelation",
+      "    return Spec(",
+      "        gen_inputs=${2:generator},",
+      "        properties=[Property(check=${3:predicate}, description=\"${4:Property description}\")],",
+      "        relations=[${5:MetamorphicRelation(name=\"mr\", transform=lambda *args: args)}],",
+      "        equivalence=${6:lambda a, b: a == b},",
+      "    )"
+    ],
+    "description": "Register a Metamorphic Guard task."
+  }
+}
+

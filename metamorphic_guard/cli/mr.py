@@ -1,0 +1,73 @@
+"""
+CLI helpers for working with metamorphic relation tooling.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import click
+
+from ..mr import discover_relations, library_metadata, load_library, validate_relations
+from ..specs import get_task, register_spec
+
+
+@click.group("mr")
+def mr_group() -> None:
+    """Metamorphic relation utilities."""
+
+
+@mr_group.command("library")
+def mr_library() -> None:
+    """List built-in metamorphic relations."""
+    entries = library_metadata()
+    click.echo(f"Metamorphic relation library ({len(entries)} entries):")
+    for entry in entries:
+        click.echo(f"- {entry['name']} [{entry['category']}] {entry['description']}")
+
+
+@mr_group.command("discover")
+@click.argument("task")
+def mr_discover(task: str) -> None:
+    """Suggest relations for a registered task."""
+    spec = get_task(task)
+    suggestions = discover_relations(spec)
+    click.echo(json.dumps(suggestions, indent=2))
+
+
+@mr_group.command("validate")
+@click.argument("task_or_file")
+def mr_validate(task_or_file: str) -> None:
+    """Validate relations for a task name or spec file."""
+    if Path(task_or_file).exists():
+        from importlib import import_module
+
+        module_path = Path(task_or_file).resolve()
+        spec_name = module_path.stem
+        module_dir = str(module_path.parent)
+        if module_dir not in ("", "."):
+            import sys
+
+            if module_dir not in sys.path:
+                sys.path.insert(0, module_dir)
+        module = import_module(spec_name)
+        spec = module.build_spec() if hasattr(module, "build_spec") else module.spec  # type: ignore[attr-defined]
+        if not hasattr(module, "build_spec") and not hasattr(module, "spec"):
+            raise click.ClickException(
+                f"{task_or_file} must expose build_spec() or spec (Spec instance)"
+            )
+        if isinstance(spec, str):
+            spec = get_task(spec)
+        register_spec(f"_tmp_{spec_name}", spec, overwrite=True)
+    else:
+        spec = get_task(task_or_file)
+
+    issues = validate_relations(spec)
+    if not issues:
+        click.echo("✓ All relations look good.")
+        return
+    click.echo("Warnings:")
+    for issue in issues:
+        click.echo(f" - {issue}")
+

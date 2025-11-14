@@ -18,6 +18,10 @@ The dispatcher manages test execution:
 - **LocalDispatcher**: Thread/process pool for local execution
 - **QueueDispatcher**: Queue-based for distributed execution
 
+**Implementation notes**
+- `sandbox.py` now delegates to `sandbox_workspace.py` and `sandbox_limits.py` for workspace management and resource capping.
+- Queue serialization utilities live in `queue_serialization.py`; adapters in `queue_adapter.py`.
+
 ### Statistical Engine
 
 Computes:

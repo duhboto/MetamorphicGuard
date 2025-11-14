@@ -67,6 +67,7 @@ nav:
   - User Guide:
     - Basic Usage: user-guide/basic-usage.md
     - LLM Evaluation: user-guide/llm-evaluation.md
+    - MR Tooling: user-guide/mr-tooling.md
     - Advanced Features: user-guide/advanced-features.md
     - Configuration: user-guide/configuration.md
     - Policies: user-guide/policies.md
@@ -86,6 +87,7 @@ nav:
     - Security Hardening: cookbook/security-hardening.md
   - Development:
     - Architecture: development/architecture.md
+    - Coding Standards: development/coding-standards.md
     - Contributing: development/contributing.md
     - Plugin Development: development/plugin-development.md
   - Roadmap: roadmap.md

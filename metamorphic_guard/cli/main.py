@@ -19,6 +19,8 @@ from .report import report_command
 from .scaffold import scaffold_plugin
 from .stability import stability_audit_command
 from .trace import trace_group
+from .policy import policy_group
+from .mr import mr_group
 
 
 class DefaultCommandGroup(click.Group):
@@ -55,4 +57,6 @@ main.add_command(report_command, "report")
 main.add_command(scaffold_plugin, "scaffold-plugin")
 main.add_command(stability_audit_command, "stability-audit")
 main.add_command(trace_group, "trace")
+main.add_command(policy_group, "policy")
+main.add_command(mr_group, "mr")
 

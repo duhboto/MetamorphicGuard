@@ -9,13 +9,57 @@ import random
 from statistics import NormalDist
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-try:
-    from scipy import stats
-    _SCIPY_AVAILABLE = True
-except ImportError:
-    _SCIPY_AVAILABLE = False
-
 from ..power import calculate_power, calculate_sample_size
+
+
+def _resolve_beta_prior(prior_type: str) -> Tuple[float, float]:
+    """Return (alpha, beta) parameters for the requested prior."""
+    if prior_type == "uniform":
+        return (1.0, 1.0)
+    if prior_type == "jeffreys":
+        return (0.5, 0.5)
+    if prior_type.startswith("beta:"):
+        parts = prior_type.split(":", 1)
+        if len(parts) != 2:
+            raise ValueError(f"Invalid prior_type format: {prior_type}")
+        params = parts[1].split(",")
+        if len(params) != 2:
+            raise ValueError(f"Invalid prior_type format: {prior_type}")
+        try:
+            alpha_val = float(params[0])
+            beta_val = float(params[1])
+        except ValueError as exc:  # pragma: no cover - guarded by validation
+            raise ValueError(f"Invalid prior_type format: {prior_type}") from exc
+        return (alpha_val, beta_val)
+    raise ValueError(
+        f"Unknown prior_type: {prior_type}. Use 'uniform', 'jeffreys', or 'beta:alpha,beta'"
+    )
+
+
+def _apply_hierarchical_prior(
+    alpha_prior: float,
+    beta_prior: float,
+    *,
+    baseline_passes: int,
+    baseline_total: int,
+    candidate_passes: int,
+    candidate_total: int,
+    hierarchical: bool,
+) -> Tuple[float, float]:
+    """Adjust prior parameters using a simple hierarchical shrinkage scheme."""
+    if not hierarchical:
+        return alpha_prior, beta_prior
+
+    total = baseline_total + candidate_total
+    if total <= 0:
+        return alpha_prior, beta_prior
+
+    global_rate = (baseline_passes + candidate_passes) / total
+    strength = max(1.0, 0.05 * total)
+    return (
+        alpha_prior + global_rate * strength,
+        beta_prior + (1.0 - global_rate) * strength,
+    )
 
 
 def estimate_power(
@@ -70,6 +114,8 @@ def compute_delta_ci(
     seed: int,
     samples: int,
     method: str,
+    hierarchical: bool = False,
+    bayesian_samples: int = 5000,
 ) -> List[float]:
     """Compute the pass-rate delta confidence interval using the requested method."""
     method = method.lower().replace("-", "_")
@@ -113,6 +159,13 @@ def compute_delta_ci(
             candidate_metrics["total"],
             alpha=alpha,
             prior_type=prior_type,
+            hierarchical=hierarchical,
+            samples=bayesian_samples,
+            seed=seed,
+            paired_passes=(
+                baseline_metrics["passes"],
+                candidate_metrics["passes"],
+            ),
         )
     raise ValueError(f"Unsupported CI method: {method}")
 
@@ -432,7 +485,8 @@ def percentile(values: Sequence[float], q: float) -> float:
     lower_idx = int(math.floor(index))
     upper_idx = min(lower_idx + 1, n - 1)
     weight = index - lower_idx
-    return float(sorted_vals[lower_idx] * (1 - weight) + sorted_vals[upper_idx] * weight)
+    interpolated = sorted_vals[lower_idx] * (1 - weight) + sorted_vals[upper_idx] * weight
+    return float(min(max(interpolated, sorted_vals[0]), sorted_vals[-1]))
 
 
 def compute_paired_stats(
@@ -508,6 +562,9 @@ def compute_bayesian_ci(
     *,
     alpha: float,
     prior_type: str = "jeffreys",
+    hierarchical: bool = False,
+    samples: int = 5000,
+    seed: int = 0,
 ) -> List[float]:
     """
     Compute Bayesian credible interval for pass-rate delta using Beta-Binomial model.
@@ -527,55 +584,38 @@ def compute_bayesian_ci(
     Returns:
         [lower_bound, upper_bound] credible interval for the delta
     """
-    if not _SCIPY_AVAILABLE:
-        raise ValueError(
-            "Bayesian CI requires scipy. Install with: pip install scipy"
-        )
-    
-    # Set prior parameters
-    if prior_type == "uniform":
-        alpha_prior = beta_prior = 1.0
-    elif prior_type == "jeffreys":
-        alpha_prior = beta_prior = 0.5
-    elif prior_type.startswith("beta:"):
-        # Custom prior: "beta:alpha,beta"
-        parts = prior_type.split(":")
-        if len(parts) != 2:
-            raise ValueError(f"Invalid prior_type format: {prior_type}")
-        params = parts[1].split(",")
-        if len(params) != 2:
-            raise ValueError(f"Invalid prior_type format: {prior_type}")
-        try:
-            alpha_prior = float(params[0])
-            beta_prior = float(params[1])
-        except ValueError as e:
-            raise ValueError(f"Invalid prior_type format: {prior_type}") from e
-    else:
-        raise ValueError(f"Unknown prior_type: {prior_type}. Use 'uniform', 'jeffreys', or 'beta:alpha,beta'")
-    
-    # Compute posterior parameters for baseline and candidate
+    alpha_prior, beta_prior = _resolve_beta_prior(prior_type)
+    alpha_prior, beta_prior = _apply_hierarchical_prior(
+        alpha_prior,
+        beta_prior,
+        baseline_passes=baseline_passes,
+        baseline_total=baseline_total,
+        candidate_passes=candidate_passes,
+        candidate_total=candidate_total,
+        hierarchical=hierarchical,
+    )
+
     baseline_alpha_post = alpha_prior + baseline_passes
-    baseline_beta_post = beta_prior + (baseline_total - baseline_passes)
-    
+    baseline_beta_post = beta_prior + max(0, baseline_total - baseline_passes)
+
     candidate_alpha_post = alpha_prior + candidate_passes
-    candidate_beta_post = beta_prior + (candidate_total - candidate_passes)
+    candidate_beta_post = beta_prior + max(0, candidate_total - candidate_passes)
     
     # For small samples, use analytical approximation
     # For larger samples, use Monte Carlo sampling
     if baseline_total < 50 or candidate_total < 50:
         # Use analytical method for small samples
         # Sample from posterior distributions and compute difference
-        n_samples = 10000
-        baseline_samples = stats.beta.rvs(
-            baseline_alpha_post, 
-            baseline_beta_post, 
-            size=n_samples
-        )
-        candidate_samples = stats.beta.rvs(
-            candidate_alpha_post, 
-            candidate_beta_post, 
-            size=n_samples
-        )
+        n_samples = max(1000, samples)
+        rng = random.Random(seed)
+        baseline_samples = [
+            rng.betavariate(baseline_alpha_post, baseline_beta_post)
+            for _ in range(n_samples)
+        ]
+        candidate_samples = [
+            rng.betavariate(candidate_alpha_post, candidate_beta_post)
+            for _ in range(n_samples)
+        ]
         delta_samples = candidate_samples - baseline_samples
         delta_samples.sort()
         
@@ -609,6 +649,66 @@ def compute_bayesian_ci(
         ci_upper = delta_mean + z_score * delta_std
     
     return [ci_lower, ci_upper]
+
+
+def compute_bayesian_posterior_predictive(
+    baseline_metrics: Dict[str, Any],
+    candidate_metrics: Dict[str, Any],
+    *,
+    samples: int,
+    hierarchical: bool,
+    seed: int,
+    prior_type: str = "jeffreys",
+) -> Dict[str, float]:
+    """
+    Compute Bayesian posterior predictive statistics for pass rates.
+
+    Returns posterior means, credible interval for delta, and probability that
+    the candidate outperforms the baseline.
+    """
+    alpha_prior, beta_prior = _resolve_beta_prior(prior_type)
+    alpha_prior, beta_prior = _apply_hierarchical_prior(
+        alpha_prior,
+        beta_prior,
+        baseline_passes=baseline_metrics["passes"],
+        baseline_total=baseline_metrics["total"],
+        candidate_passes=candidate_metrics["passes"],
+        candidate_total=candidate_metrics["total"],
+        hierarchical=hierarchical,
+    )
+
+    baseline_alpha_post = alpha_prior + baseline_metrics["passes"]
+    baseline_beta_post = beta_prior + max(0, baseline_metrics["total"] - baseline_metrics["passes"])
+    candidate_alpha_post = alpha_prior + candidate_metrics["passes"]
+    candidate_beta_post = beta_prior + max(0, candidate_metrics["total"] - candidate_metrics["passes"])
+
+    n_samples = max(1000, samples)
+    rng = random.Random(seed)
+
+    baseline_draws = [
+        rng.betavariate(baseline_alpha_post, baseline_beta_post)
+        for _ in range(n_samples)
+    ]
+    candidate_draws = [
+        rng.betavariate(candidate_alpha_post, candidate_beta_post)
+        for _ in range(n_samples)
+    ]
+    delta_draws = sorted(c - b for b, c in zip(baseline_draws, candidate_draws))
+
+    lower_idx = int(n_samples * 0.025)
+    upper_idx = int(n_samples * 0.975)
+    prob_candidate = sum(1 for delta in delta_draws if delta > 0) / n_samples
+
+    return {
+        "baseline_mean": float(sum(baseline_draws) / n_samples),
+        "candidate_mean": float(sum(candidate_draws) / n_samples),
+        "delta_mean": float(sum(delta_draws) / n_samples),
+        "delta_ci": [
+            float(delta_draws[lower_idx]),
+            float(delta_draws[upper_idx]),
+        ],
+        "prob_candidate_beats_baseline": float(prob_candidate),
+    }
 
 
 def compute_cohens_d(
@@ -649,46 +749,46 @@ def compute_cohens_d(
     baseline_vals = [b for b, c in valid_pairs]
     candidate_vals = [c for b, c in valid_pairs]
     
-    # Compute means
     baseline_mean = sum(baseline_vals) / len(baseline_vals)
     candidate_mean = sum(candidate_vals) / len(candidate_vals)
-    
-    # Compute variances and standard deviations
+
     n_baseline = len(baseline_vals)
     n_candidate = len(candidate_vals)
-    
+
     if n_baseline > 1:
         baseline_var = sum((x - baseline_mean) ** 2 for x in baseline_vals) / (n_baseline - 1)
         baseline_std = math.sqrt(baseline_var)
     else:
         baseline_var = 0.0
         baseline_std = 0.0
-    
+
     if n_candidate > 1:
         candidate_var = sum((x - candidate_mean) ** 2 for x in candidate_vals) / (n_candidate - 1)
         candidate_std = math.sqrt(candidate_var)
     else:
         candidate_var = 0.0
         candidate_std = 0.0
-    
-    # Pooled standard deviation
-    if n_baseline + n_candidate - 2 == 0:
+
+    denominator = n_baseline + n_candidate - 2
+    if denominator <= 0:
         return None
-    
+
     pooled_var = (
-        ((n_baseline - 1) * baseline_var + (n_candidate - 1) * candidate_var) /
-        (n_baseline + n_candidate - 2)
+        ((n_baseline - 1) * baseline_var + (n_candidate - 1) * candidate_var)
+        / denominator
     )
     pooled_std = math.sqrt(pooled_var)
-    
+
     if pooled_std == 0:
-        # If both groups have zero variance, effect size is undefined
         return None
-    
-    # Cohen's d
-    d = (candidate_mean - baseline_mean) / pooled_std
-    
-    # Interpretation
+
+    delta = candidate_mean - baseline_mean
+    d = delta / pooled_std
+    df = denominator
+    hedges_correction = 1 - (3 / (4 * df - 1)) if df > 0 else 1.0
+    hedges_g = d * hedges_correction
+    glass_delta = (delta / baseline_std) if baseline_std not in (None, 0.0) else None
+
     abs_d = abs(d)
     if abs_d < 0.2:
         interpretation = "negligible"
@@ -698,12 +798,16 @@ def compute_cohens_d(
         interpretation = "medium"
     else:
         interpretation = "large"
-    
+
     return {
-        "d": float(d),
+        "cohens_d": float(d),
+        "hedges_g": float(hedges_g),
+        "glass_delta": float(glass_delta) if glass_delta is not None else None,
         "pooled_std": float(pooled_std),
-        "interpretation": interpretation,
+        "baseline_std": float(baseline_std) if baseline_std else None,
+        "candidate_std": float(candidate_std) if candidate_std else None,
         "baseline_mean": float(baseline_mean),
         "candidate_mean": float(candidate_mean),
+        "interpretation": interpretation,
     }
 

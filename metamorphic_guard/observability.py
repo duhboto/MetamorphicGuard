@@ -29,7 +29,7 @@ try:  # pragma: no cover - optional dependency import
     from prometheus_client import CollectorRegistry, Counter, Gauge, start_http_server  # type: ignore
 
     _PROMETHEUS_IMPORTED = True
-except Exception as exc:  # pragma: no cover - optional dependency
+except ImportError as exc:  # pragma: no cover - optional dependency
     CollectorRegistry = None  # type: ignore
     Counter = None  # type: ignore
     start_http_server = None  # type: ignore
@@ -154,7 +154,8 @@ def log_event(event: str, **payload: Any) -> None:
 
     try:
         _LOG_STREAM.write(json.dumps(record, default=_serialize) + "\n")
-    except Exception:  # pragma: no cover - best-effort logging
+    except (OSError, ValueError, TypeError) as exc:  # pragma: no cover - best-effort logging
+        sys.stderr.write(f"[metamorphic-guard] Failed to emit log event '{event}': {exc}\n")
         return
     _LOG_STREAM.flush()
 

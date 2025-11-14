@@ -145,3 +145,28 @@ def register_spec(name: str, spec: Spec, *, overwrite: bool = False) -> None:
 def unregister_spec(name: str) -> None:
     """Remove a registered Spec. No error if the name is absent."""
     _TASK_REGISTRY.pop(name, None)
+
+
+def chain_relations(name: str, *relations: MetamorphicRelation, description: str | None = None) -> MetamorphicRelation:
+    """
+    Compose multiple relations into a single chained relation.
+
+    Each relation runs sequentially, passing transformed arguments to the next.
+    """
+
+    def _transform(*args, rng=None):
+        current_args = args
+        for relation in relations:
+            if relation.accepts_rng:
+                current_args = relation.transform(*current_args, rng=rng)
+            else:
+                current_args = relation.transform(*current_args)
+        return current_args
+
+    return MetamorphicRelation(
+        name=name,
+        transform=_transform,
+        accepts_rng=any(rel.accepts_rng for rel in relations),
+        description=description or "Composed relation",
+        category="composed",
+    )

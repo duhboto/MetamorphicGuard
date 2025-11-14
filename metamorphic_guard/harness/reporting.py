@@ -420,6 +420,7 @@ def summarize_relations(
 
     baseline_relation_stats = baseline_metrics.get("relation_stats", {})
     candidate_relation_stats = candidate_metrics.get("relation_stats", {})
+    candidate_total_cases = candidate_metrics.get("total", 0) or 0
 
     for relation in spec.relations:
         name = relation.name
@@ -453,6 +454,15 @@ def summarize_relations(
         )
         relation_p_values.append(p_value)
 
+        baseline_pass_rate = _pass_rate(base_total, base_fail)
+        candidate_pass_rate = _pass_rate(cand_total, cand_fail)
+        impact = None
+        if baseline_pass_rate is not None and candidate_pass_rate is not None:
+            impact = candidate_pass_rate - baseline_pass_rate
+        coverage = (
+            cand_total / candidate_total_cases if candidate_total_cases > 0 else None
+        )
+
         relation_summary.append(
             {
                 "name": name,
@@ -461,14 +471,16 @@ def summarize_relations(
                 "baseline": {
                     "total": base_total,
                     "failures": base_fail,
-                    "pass_rate": _pass_rate(base_total, base_fail),
+                    "pass_rate": baseline_pass_rate,
                 },
                 "candidate": {
                     "total": cand_total,
                     "failures": cand_fail,
-                    "pass_rate": _pass_rate(cand_total, cand_fail),
+                    "pass_rate": candidate_pass_rate,
                 },
                 "p_value": p_value,
+                "impact_score": impact,
+                "coverage": coverage,
             }
         )
 
@@ -764,12 +776,12 @@ def collect_metrics(
                 if ci_result:
                     delta_payload["ci"] = ci_result
         
-        # Compute Cohen's d for continuous metrics
+        # Compute effect sizes for continuous metrics
         if metric.kind == "continuous":
             from .statistics import compute_cohens_d
-            cohens_d_result = compute_cohens_d(baseline_values, candidate_values)
-            if cohens_d_result:
-                delta_payload["cohens_d"] = cohens_d_result
+            effect_sizes = compute_cohens_d(baseline_values, candidate_values)
+            if effect_sizes:
+                delta_payload["effect_sizes"] = effect_sizes
 
         metric_entry: Dict[str, Any] = {
             "kind": metric.kind,

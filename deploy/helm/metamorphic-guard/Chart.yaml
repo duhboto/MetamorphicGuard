@@ -1,0 +1,7 @@
+apiVersion: v2
+name: metamorphic-guard
+version: 0.1.0
+description: Helm chart for deploying Metamorphic Guard queue workers.
+type: application
+appVersion: "2.0.0"
+

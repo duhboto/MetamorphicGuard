@@ -113,3 +113,17 @@ h = LLMHarness(
 )
 ```
 
+## Bayesian Diagnostics
+
+When `--ci-method bayesian` is selected, additional toggles are available:
+
+```
+metamorphic-guard evaluate \
+  --ci-method bayesian \
+  --bayesian-hierarchical \
+  --bayesian-posterior-predictive \
+  --bayesian-samples 8000
+```
+
+The JSON report exposes a `bayesian` section containing posterior predictive deltas and the probability that the candidate exceeds the baseline.
+
