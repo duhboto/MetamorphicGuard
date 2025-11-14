@@ -4,16 +4,23 @@ Heuristic metamorphic relation discovery helpers.
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Dict, List
 
 from ..specs import Spec
 
-_KEYWORDS = {
+KEYWORD_CATEGORY_MAP = {
     "monotonic": "monotonicity",
     "order": "stability",
     "robust": "robustness",
     "noise": "robustness",
     "idempotent": "idempotence",
+    "deduplicate": "idempotence",
+    "fair": "fairness",
+    "parity": "fairness",
+    "jitter": "robustness",
+    "scale": "monotonicity",
+    "rank": "stability",
 }
 
 
@@ -27,9 +34,10 @@ def discover_relations(spec: Spec) -> List[Dict[str, str]]:
     suggestions: List[Dict[str, str]] = []
     seen_categories: set[str] = set()
 
+    category_counts = infer_property_categories(spec)
     for prop in spec.properties:
         description = prop.description.lower()
-        for keyword, category in _KEYWORDS.items():
+        for keyword, category in KEYWORD_CATEGORY_MAP.items():
             if keyword in description and category not in seen_categories:
                 seen_categories.add(category)
                 suggestions.append(
@@ -62,4 +70,19 @@ def _suggestion_for(category: str) -> str:
     if category == "idempotence":
         return "Re-apply the same transformation and ensure outputs are unchanged."
     return "Compose existing relations to probe additional invariants."
+
+
+def infer_property_categories(spec: Spec) -> Dict[str, int]:
+    """Return keyword-inferred category counts for the given Spec."""
+    counts: Counter[str] = Counter()
+    for prop in spec.properties:
+        description = prop.description.lower()
+        matched = False
+        for keyword, category in KEYWORD_CATEGORY_MAP.items():
+            if keyword in description:
+                counts[category] += 1
+                matched = True
+        if not matched:
+            counts["general"] += 1
+    return dict(counts)
 

@@ -9,7 +9,13 @@ from pathlib import Path
 
 import click
 
-from ..mr import discover_relations, library_metadata, load_library, validate_relations
+from ..mr import (
+    discover_relations,
+    library_metadata,
+    load_library,
+    prioritize_relations,
+    validate_relations,
+)
 from ..specs import get_task, register_spec
 
 
@@ -70,4 +76,45 @@ def mr_validate(task_or_file: str) -> None:
     click.echo("Warnings:")
     for issue in issues:
         click.echo(f" - {issue}")
+
+
+@mr_group.command("prioritize")
+@click.argument("task")
+@click.option("--limit", default=5, show_default=True, help="Limit number of MR suggestions.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+    help="Output format.",
+)
+def mr_prioritize(task: str, limit: int, output_format: str) -> None:
+    """Report MR coverage and prioritized suggestions for a task."""
+    spec = get_task(task)
+    suggestions, coverage = prioritize_relations(spec, max_items=limit)
+
+    payload = {"coverage": coverage, "suggestions": suggestions}
+    if output_format == "json":
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    click.echo(f"MR coverage density: {coverage['density']}")
+    click.echo("Category coverage:")
+    for category, stats in coverage["categories"].items():
+        click.echo(
+            f" - {category}: {stats['relations']} relations / {stats['properties']} props (ratio {stats['coverage_ratio']})"
+        )
+    if coverage["missing_categories"]:
+        click.echo(f"Missing categories: {', '.join(coverage['missing_categories'])}")
+
+    click.echo("")
+    click.echo("Suggested additions:")
+    if not suggestions:
+        click.echo(" - No additional relations recommended.")
+        return
+    for entry in suggestions:
+        click.echo(
+            f" - {entry['name']} [{entry['category']}] score {entry['score']}: {entry['reason']} (effort {entry.get('effort')})"
+        )
 

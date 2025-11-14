@@ -458,8 +458,8 @@ Distributed:         ⭐⭐⭐ (Moderate - integration tests exist)
 - [ ] MR library with common patterns
 
 #### 3.2 MR Prioritization
-- [ ] Coverage-based prioritization
-- [ ] Impact-based prioritization
+- [x] Coverage-based prioritization
+- [x] Impact-based prioritization
 - [ ] Cost-based prioritization
 - [ ] Adaptive MR selection
 
