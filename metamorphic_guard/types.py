@@ -11,8 +11,8 @@ JSONValue = Union["JSONPrimitive", "JSONDict", "JSONList"]
 JSONList = List[JSONValue]
 JSONDict = Dict[str, JSONValue]
 
-StrMapping = Mapping[str, JSONPrimitive | JSONList | JSONDict]
-MutableStrMapping = MutableMapping[str, JSONPrimitive | JSONList | JSONDict]
+StrMapping = Mapping[str, JSONValue]
+MutableStrMapping = MutableMapping[str, JSONValue]
 
 StrSequence = Sequence[str]
 StrTuple = Tuple[str, ...]

@@ -12,6 +12,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence
 
+from .types import JSONDict
+
 
 @dataclass
 class QueueTask:
@@ -20,7 +22,7 @@ class QueueTask:
     case_indices: List[int]
     role: str
     payload: bytes
-    call_spec: Optional[Dict[str, Any]] = None
+    call_spec: Optional[JSONDict] = None
     compressed: bool = True
     use_msgpack: bool = False
 
@@ -31,7 +33,7 @@ class QueueResult:
     task_id: str
     case_index: int
     role: str
-    result: Dict[str, Any]
+    result: JSONDict
 
 
 class QueueAdapter:

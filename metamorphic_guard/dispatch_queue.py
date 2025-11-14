@@ -7,6 +7,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
+from .errors import QueueSerializationError
 from .monitoring import Monitor, MonitorRecord
 from .dispatch import Dispatcher, RunCase
 from .observability import (
@@ -25,6 +26,7 @@ from .queue_adapter import (
     RedisQueueAdapter,
 )
 from .queue_serialization import decode_args, prepare_payload
+from .types import JSONDict
 
 # Backwards compatibility for tests importing private classes
 _Task = QueueTask
@@ -79,8 +81,8 @@ class QueueDispatcher(Dispatcher):
         run_case: RunCase,
         role: str,
         monitors: Sequence[Monitor] | None = None,
-        call_spec: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
+        call_spec: Optional[JSONDict] = None,
+    ) -> List[JSONDict]:
         monitors = list(monitors or [])
         job_id = str(uuid.uuid4())
 
@@ -149,13 +151,22 @@ class QueueDispatcher(Dispatcher):
                 if not indices:
                     return
                 args_chunk = [test_inputs[i] for i in indices]
-                payload, compressed_flag, _, _ = prepare_payload(
-                    args_chunk,
-                    compress_default=compress_payloads,
-                    adaptive=adaptive_compress,
-                    threshold_bytes=compression_threshold,
-                    use_msgpack=use_msgpack,
-                )
+                try:
+                    payload, compressed_flag, _, _ = prepare_payload(
+                        args_chunk,
+                        compress_default=compress_payloads,
+                        adaptive=adaptive_compress,
+                        threshold_bytes=compression_threshold,
+                        use_msgpack=use_msgpack,
+                    )
+                except QueueSerializationError as exc:
+                    details = dict(exc.details)
+                    details["case_indices"] = indices
+                    raise QueueSerializationError(
+                        exc.args[0],
+                        details=details,
+                        original=exc.original or exc,
+                    ) from exc
                 task_id = str(uuid.uuid4())
                 task = QueueTask(
                     job_id=job_id,
@@ -188,7 +199,7 @@ class QueueDispatcher(Dispatcher):
 
             _maybe_publish_batches()
 
-            results: List[Dict[str, Any]] = [{} for _ in range(len(test_inputs))]
+            results: List[JSONDict] = [{} for _ in range(len(test_inputs))]
             received = 0
             poll_timeout = float(self.config.get("result_poll_timeout", 1.0))
 
@@ -347,11 +358,16 @@ class _LocalWorker(threading.Thread):
             if task.job_id == "__shutdown__":
                 break
 
-            args_list = decode_args(
-                task.payload,
-                compress=task.compressed,
-                use_msgpack=task.use_msgpack,
-            )
+            try:
+                args_list = decode_args(
+                    task.payload,
+                    compress=task.compressed,
+                    use_msgpack=task.use_msgpack,
+                )
+            except QueueSerializationError as exc:
+                self._emit_serialization_error(task, exc)
+                continue
+
             for idx, args in zip(task.case_indices, args_list):
                 result = self.run_case(idx, args)
                 self.adapter.publish_result(
@@ -363,6 +379,19 @@ class _LocalWorker(threading.Thread):
                         result=result,
                     )
                 )
+
+    def _emit_serialization_error(self, task: QueueTask, error: QueueSerializationError) -> None:
+        context = error.to_context().as_dict()
+        for idx in task.case_indices:
+            self.adapter.publish_result(
+                QueueResult(
+                    job_id=task.job_id,
+                    task_id=task.task_id,
+                    case_index=idx,
+                    role=task.role,
+                    result={"success": False, "error": context},
+                )
+            )
 
 
 

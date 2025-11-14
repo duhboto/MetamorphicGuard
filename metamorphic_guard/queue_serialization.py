@@ -5,12 +5,15 @@ Serialization helpers for queue payloads.
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 import warnings
 import zlib
-from typing import Any, List, Tuple
+from typing import Any, List, Sequence, Tuple
 
-try:
+from .errors import QueueSerializationError
+
+try:  # pragma: no cover - optional dependency
     import msgpack  # type: ignore
 
     MSGPACK_AVAILABLE = True
@@ -18,8 +21,12 @@ except ImportError:  # pragma: no cover - optional dependency
     MSGPACK_AVAILABLE = False
 
 
+ArgsTuple = Tuple[Any, ...]
+ArgsList = List[ArgsTuple]
+
+
 def prepare_payload(
-    args_list: List[Tuple[Any, ...]],
+    args_list: Sequence[ArgsTuple],
     *,
     compress_default: bool,
     adaptive: bool,
@@ -31,17 +38,24 @@ def prepare_payload(
 
     Returns encoded bytes, compression flag, raw length, encoded length.
     """
-    if use_msgpack and MSGPACK_AVAILABLE:
-        raw = msgpack.packb(args_list, use_bin_type=True)
-    else:
-        if use_msgpack and not MSGPACK_AVAILABLE:
-            warnings.warn(
-                "MessagePack requested but not available. Install with: pip install msgpack. "
-                "Falling back to JSON.",
-                UserWarning,
-                stacklevel=2,
-            )
-        raw = json.dumps(args_list).encode("utf-8")
+    try:
+        if use_msgpack and MSGPACK_AVAILABLE:
+            raw = msgpack.packb(list(args_list), use_bin_type=True)
+        else:
+            if use_msgpack and not MSGPACK_AVAILABLE:
+                warnings.warn(
+                    "MessagePack requested but not available. Install with: pip install msgpack. "
+                    "Falling back to JSON.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            raw = json.dumps(list(args_list)).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise QueueSerializationError(
+            "Unable to serialize queue arguments.",
+            details={"use_msgpack": use_msgpack, "args_preview": _preview_args(args_list)},
+            original=exc,
+        ) from exc
 
     raw_len = len(raw)
 
@@ -56,17 +70,35 @@ def prepare_payload(
     )
 
     data = compressed if use_compression else raw
-    encoded = base64.b64encode(data)
+    try:
+        encoded = base64.b64encode(data)
+    except (TypeError, ValueError) as exc:
+        raise QueueSerializationError(
+            "Unable to base64-encode queue payload.",
+            details={"use_compression": use_compression, "raw_length": raw_len},
+            original=exc,
+        ) from exc
     return encoded, use_compression, raw_len, len(encoded)
 
 
 def decode_payload(payload: bytes, compress: bool | None = None) -> bytes:
-    decoded = base64.b64decode(payload)
+    try:
+        decoded = base64.b64decode(payload)
+    except (ValueError, binascii.Error) as exc:
+        raise QueueSerializationError(
+            "Malformed base64 payload.",
+            details={"compress": bool(compress)},
+            original=exc,
+        ) from exc
     if compress:
         try:
             return zlib.decompress(decoded)
-        except zlib.error:
-            return decoded
+        except zlib.error as exc:
+            raise QueueSerializationError(
+                "Compressed payload cannot be decompressed.",
+                details={"compress": True},
+                original=exc,
+            ) from exc
     return decoded
 
 
@@ -75,12 +107,27 @@ def decode_args(
     *,
     compress: bool,
     use_msgpack: bool = False,
-) -> List[Tuple[Any, ...]]:
+) -> ArgsList:
     decoded = decode_payload(payload, compress=compress)
-    if use_msgpack and MSGPACK_AVAILABLE:
-        return msgpack.unpackb(decoded, raw=False, strict_map_key=False)
-    return json.loads(decoded)
+    try:
+        if use_msgpack and MSGPACK_AVAILABLE:
+            return msgpack.unpackb(decoded, raw=False, strict_map_key=False)
+        return json.loads(decoded)
+    except (TypeError, ValueError) as exc:
+        raise QueueSerializationError(
+            "Unable to decode queue payload.",
+            details={"use_msgpack": use_msgpack},
+            original=exc,
+        ) from exc
 
 
-__all__ = ["prepare_payload", "decode_args", "MSGPACK_AVAILABLE"]
+def _preview_args(args_list: Sequence[ArgsTuple], limit: int = 2) -> Any:
+    materialized = list(args_list)
+    preview = materialized[:limit]
+    if len(materialized) > limit:
+        preview.append(f"...(+{len(materialized) - limit} more)")
+    return preview
+
+
+__all__ = ["prepare_payload", "decode_args", "decode_payload", "MSGPACK_AVAILABLE"]
 
