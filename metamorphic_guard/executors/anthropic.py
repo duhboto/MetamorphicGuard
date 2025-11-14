@@ -146,9 +146,18 @@ class AnthropicExecutor(LLMExecutor):
                 except Exception:
                     system_prompt = file_path
 
-        # Validate model name
-        if not model or not isinstance(model, str):
-            return _validation_error(f"Invalid model name: {model}", "invalid_model")
+        # Validate model name using registry
+        from ..model_registry import is_valid_model, get_valid_models
+        
+        valid_models = get_valid_models("anthropic")
+        if model not in valid_models:
+            # Check if it looks like a valid model name (custom/private model)
+            looks_valid = "/" in model or model.replace("-", "").replace("_", "").replace(".", "").isalnum()
+            if not looks_valid:
+                from ..model_registry import validate_model
+                _, error_msg, suggestions = validate_model("anthropic", model, raise_error=False)
+                full_error = error_msg or f"Invalid model name: {model}"
+                return _validation_error(full_error, "invalid_model")
 
         # Validate temperature range (Anthropic: 0-1)
         if self.temperature < 0 or self.temperature > 1:
