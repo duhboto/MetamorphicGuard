@@ -269,7 +269,8 @@ class TestCitationJudge:
 
         assert result["pass"] is False
         assert result["score"] == 0.0
-        assert "no citations" in result["reason"].lower()
+        # Updated reason message format
+        assert "insufficient" in result["reason"].lower() or "no citations" in result["reason"].lower()
 
     def test_citation_judge_min_citations(self):
         """Test CitationJudge enforces minimum citation count."""

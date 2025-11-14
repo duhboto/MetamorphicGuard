@@ -1,9 +1,14 @@
 """
 Structured judges for evaluating LLM outputs with rubrics and citations.
+
+Includes specialized judges for RAG (Retrieval-Augmented Generation) applications:
+- CitationJudge: Checks for citations and citation formats
+- AttributionJudge: Verifies attribution overlap and content matching
 """
 
 import json
-from typing import Any, Dict, Optional
+import re
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .__init__ import LLMJudge
 
@@ -102,27 +107,47 @@ class RubricJudge(LLMJudge):
 
 
 class CitationJudge(LLMJudge):
-    """Judge that checks for citations and attribution in outputs."""
+    """
+    Judge that checks for citations and attribution in outputs.
+    
+    Enhanced for RAG applications with:
+    - Multiple citation format detection (numbered, author-date, URLs)
+    - Citation format validation
+    - Minimum citation requirements
+    - Citation density analysis
+    """
 
     PLUGIN_METADATA = {
         "name": "Citation Judge",
-        "description": "Check for citations and attribution",
-        "version": "1.0.0",
+        "description": "Check for citations and attribution with format validation",
+        "version": "2.0.0",
     }
 
     def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
         super().__init__(config)
-        self.require_citations = bool(config.get("require_citations", False)) if config else False
-        self.min_citations = int(config.get("min_citations", 1)) if config else 1
-        import re
-
-        # Patterns for citations
+        cfg = config or {}
+        self.require_citations = bool(cfg.get("require_citations", False))
+        self.min_citations = int(cfg.get("min_citations", 1))
+        self.validate_format = bool(cfg.get("validate_format", True))
+        self.check_density = bool(cfg.get("check_density", False))
+        self.min_density = float(cfg.get("min_density", 0.1))  # Citations per 100 words
+        
+        # Enhanced patterns for citations
         self.citation_patterns = [
-            re.compile(r"\[(\d+)\]"),  # [1], [2], etc.
-            re.compile(r"\([A-Za-z]+\s+et\s+al\.\s+\d{4}\)"),  # (Author et al. 2024)
-            re.compile(r"[A-Za-z]+\s*\(\d{4}\)"),  # Author (2024) or Author(2024)
-            re.compile(r"\([A-Za-z]+\s+\d{4}\)"),  # (Author 2024) - alternative format
-            re.compile(r"https?://[^\s]+"),  # URLs
+            # Numbered citations: [1], [2-5], [1,2,3]
+            re.compile(r"\[(\d+(?:[-,]\d+)*(?:,\s*\d+)*)\]"),
+            # Author-date: (Author et al. 2024), (Author 2024)
+            re.compile(r"\(([A-Z][A-Za-z]+(?:\s+et\s+al\.)?\s+\d{4})\)"),
+            # Inline author-date: Author (2024), Author(2024)
+            re.compile(r"([A-Z][A-Za-z]+)\s*\((\d{4})\)"),
+            # URLs: http://..., https://...
+            re.compile(r"(https?://[^\s\)]+)"),
+            # DOI: doi:10.1234/...
+            re.compile(r"(doi:10\.\d+/[^\s\)]+)", re.IGNORECASE),
+            # arXiv: arXiv:1234.5678
+            re.compile(r"(arxiv:\d+\.\d+)", re.IGNORECASE),
+            # ISBN: ISBN 978-...
+            re.compile(r"(ISBN[- ]?(?:\d[- ]?){10,13})", re.IGNORECASE),
         ]
 
     def evaluate(
@@ -131,43 +156,152 @@ class CitationJudge(LLMJudge):
         input_data: Any,
         **kwargs: Any,
     ) -> Dict[str, Any]:
-        """Check for citations in output."""
-        citations_found = []
+        """
+        Check for citations in output with enhanced validation.
+        
+        Args:
+            output: The text output to check
+            input_data: Optional input data (not used)
+            **kwargs: Additional arguments
+            
+        Returns:
+            Dictionary with pass, score, reason, and details
+        """
+        citations_found: List[str] = []
+        citation_types: Dict[str, int] = {}
+        
         for pattern in self.citation_patterns:
-            # Use finditer to get full matches, not just captured groups
             matches = list(pattern.finditer(output))
             if matches:
-                # If pattern has capturing groups, use findall; otherwise use full match
-                if pattern.groups > 0:
-                    citations_found.extend(pattern.findall(output))
-                else:
-                    citations_found.extend([m.group() for m in matches])
-
-        citation_count = len(citations_found)
+                for match in matches:
+                    # Get full match or captured groups
+                    if pattern.groups > 0:
+                        # Use captured groups if available
+                        groups = match.groups()
+                        citation_text = groups[0] if groups else match.group()
+                    else:
+                        citation_text = match.group()
+                    
+                    if citation_text:
+                        citations_found.append(citation_text)
+                        # Track citation type
+                        pattern_name = self._get_pattern_name(pattern)
+                        citation_types[pattern_name] = citation_types.get(pattern_name, 0) + 1
+        
+        # Remove duplicates while preserving order
+        unique_citations = []
+        seen = set()
+        for citation in citations_found:
+            if citation not in seen:
+                unique_citations.append(citation)
+                seen.add(citation)
+        
+        citation_count = len(unique_citations)
         has_citations = citation_count >= self.min_citations
-
-        if self.require_citations and not has_citations:
-            return {
-                "pass": False,
-                "score": 0.0,
-                "reason": f"No citations found (required: {self.min_citations}, found: {citation_count})",
-                "details": {
-                    "citation_count": citation_count,
-                    "min_required": self.min_citations,
-                    "citations": citations_found[:10],  # Limit to first 10
-                },
-            }
-
-        # Score based on citation count
-        score = min(1.0, citation_count / max(1, self.min_citations))
-
+        
+        # Calculate citation density (citations per 100 words)
+        word_count = len(output.split())
+        density = (citation_count / word_count * 100) if word_count > 0 else 0.0
+        
+        # Validate citation formats if requested
+        format_valid = True
+        format_issues: List[str] = []
+        if self.validate_format and citations_found:
+            format_valid, format_issues = self._validate_citation_formats(unique_citations)
+        
+        # Check citation density if requested
+        density_pass = True
+        if self.check_density:
+            density_pass = density >= self.min_density
+        
+        # Determine overall pass status
+        passes = has_citations
+        if self.require_citations:
+            passes = passes and format_valid and (density_pass if self.check_density else True)
+        
+        # Calculate score
+        score = 0.0
+        if citation_count > 0:
+            score = min(1.0, citation_count / max(1, self.min_citations))
+            if format_valid:
+                score *= 1.0
+            else:
+                score *= 0.8  # Penalize for format issues
+            if self.check_density and density_pass:
+                score *= 1.0
+            elif self.check_density:
+                score *= 0.9  # Slight penalty for low density
+        else:
+            score = 0.0
+        
+        reason = f"Found {citation_count} unique citation(s)"
+        if not has_citations and self.require_citations:
+            reason = f"Insufficient citations (required: {self.min_citations}, found: {citation_count})"
+        elif not format_valid:
+            reason = f"Citation format issues: {', '.join(format_issues[:2])}"
+        elif self.check_density and not density_pass:
+            reason = f"Low citation density ({density:.2f} per 100 words, required: {self.min_density})"
+        
         return {
-            "pass": True,
+            "pass": passes,
             "score": score,
-            "reason": f"Found {citation_count} citation(s)",
+            "reason": reason,
             "details": {
                 "citation_count": citation_count,
-                "citations": citations_found[:10],
+                "unique_citations": len(unique_citations),
+                "min_required": self.min_citations,
+                "require_citations": self.require_citations,
+                "citations": unique_citations[:10],  # Limit to first 10
+                "citation_types": citation_types,
+                "format_valid": format_valid,
+                "format_issues": format_issues,
+                "density": density,
+                "density_pass": density_pass if self.check_density else None,
+                "word_count": word_count,
             },
         }
+    
+    def _get_pattern_name(self, pattern: re.Pattern) -> str:
+        """Get a human-readable name for a citation pattern."""
+        pattern_str = pattern.pattern
+        if r"\[(\d+" in pattern_str:
+            return "numbered"
+        elif r"\([A-Z]" in pattern_str or r"[A-Z][A-Za-z]+\s*\(" in pattern_str:
+            return "author_date"
+        elif "http" in pattern_str:
+            return "url"
+        elif "doi" in pattern_str.lower():
+            return "doi"
+        elif "arxiv" in pattern_str.lower():
+            return "arxiv"
+        elif "isbn" in pattern_str.lower():
+            return "isbn"
+        else:
+            return "other"
+    
+    def _validate_citation_formats(self, citations: List[str]) -> Tuple[bool, List[str]]:
+        """
+        Validate citation formats and return issues.
+        
+        Args:
+            citations: List of citation strings
+            
+        Returns:
+            Tuple of (is_valid, list_of_issues)
+        """
+        issues: List[str] = []
+        
+        for citation in citations:
+            # Check for common format issues
+            if citation.startswith("[") and not citation.endswith("]"):
+                issues.append(f"Unclosed bracket: {citation[:20]}...")
+            elif citation.startswith("(") and not citation.endswith(")"):
+                issues.append(f"Unclosed parenthesis: {citation[:20]}...")
+            elif "http" in citation.lower() and not citation.startswith(("http://", "https://")):
+                issues.append(f"Malformed URL: {citation[:30]}...")
+            # Check for empty or whitespace-only citations
+            if not citation.strip():
+                issues.append("Empty citation found")
+        
+        return len(issues) == 0, issues
 
