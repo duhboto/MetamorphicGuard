@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.0.1] - 2025-01-15
+
+### Bug Fixes
+- Fixed test failures in LLM harness integration tests by properly mocking `openai` module and `OpenAIExecutor.__init__`
+- Fixed `test_queue_requeues_stalled_worker` by correcting monkeypatch target to patch where function is actually used
+- All tests now properly handle executor instantiation in `run_in_sandbox` with mocked dependencies
+
+### Maintenance
+- Removed temporary markdown files (completion summaries, old roadmaps) from repository
+
 ## [3.0.0] - 2025-01-13
 
 ### Major Release: Complete Product with All Roadmap Features
