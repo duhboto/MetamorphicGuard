@@ -25,14 +25,15 @@ def simple_task_spec() -> Spec:
         gen_inputs=gen_inputs,
         properties=[
             Property(
-                check=lambda output, *args: isinstance(output, int) and output > 0,
-                description="Output is a positive integer",
+                check=lambda output, *args: isinstance(output, int) and output == args[0] * 2,
+                description="Output equals input * 2",
             ),
         ],
         relations=[],
         equivalence=lambda a, b: a == b,
         metrics=[
             Metric(name="value", extract=lambda output, *args: float(output), kind="mean"),
+            Metric(name="squared", extract=lambda output, *args: float(output * output), kind="mean"),
         ],
     )
 
