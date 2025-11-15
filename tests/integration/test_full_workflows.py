@@ -13,10 +13,28 @@ from metamorphic_guard.harness import run_eval
 from metamorphic_guard.specs import Metric, Property, Spec, task
 
 
-@task
-def simple_task(x: int) -> int:
+@task("simple_task")
+def simple_task_spec() -> Spec:
     """Simple task that doubles the input."""
-    return x * 2
+    def gen_inputs(n: int, seed: int):
+        import random
+        rng = random.Random(seed)
+        return [(rng.randint(1, 100),) for _ in range(n)]
+    
+    return Spec(
+        gen_inputs=gen_inputs,
+        properties=[
+            Property(
+                check=lambda output, *args: isinstance(output, int) and output > 0,
+                description="Output is a positive integer",
+            ),
+        ],
+        relations=[],
+        equivalence=lambda a, b: a == b,
+        metrics=[
+            Metric(name="value", extract=lambda output, *args: float(output), kind="mean"),
+        ],
+    )
 
 
 def test_basic_evaluation_workflow(tmp_path: Path):
@@ -38,21 +56,7 @@ def solve(x):
 """
     )
     
-    # Create a simple spec
-    spec = Spec(
-        task=simple_task,
-        properties=[
-            Property(
-                name="doubles",
-                check=lambda baseline, candidate, args: candidate == baseline,
-            ),
-        ],
-        metrics=[
-            Metric(name="value", extract=lambda result: result),
-        ],
-    )
-    
-    # Run evaluation
+    # Run evaluation (spec is registered via @task decorator)
     result = run_eval(
         task_name="simple_task",
         baseline_path=str(baseline_path),
@@ -90,17 +94,7 @@ def solve(x):
 """
     )
     
-    spec = Spec(
-        task=simple_task,
-        properties=[
-            Property(
-                name="doubles",
-                check=lambda baseline, candidate, args: candidate == baseline,
-            ),
-        ],
-    )
-    
-    # Run with adaptive testing
+    # Run with adaptive testing (spec is registered via @task decorator)
     result = run_eval(
         task_name="simple_task",
         baseline_path=str(baseline_path),
@@ -140,17 +134,7 @@ def solve(x):
 """
     )
     
-    spec = Spec(
-        task=simple_task,
-        properties=[
-            Property(
-                name="doubles",
-                check=lambda baseline, candidate, args: candidate == baseline,
-            ),
-        ],
-    )
-    
-    # Run with sequential testing
+    # Run with sequential testing (spec is registered via @task decorator)
     result = run_eval(
         task_name="simple_task",
         baseline_path=str(baseline_path),
@@ -190,19 +174,6 @@ def solve(x):
     report_dir = tmp_path / "reports"
     report_dir.mkdir()
     
-    spec = Spec(
-        task=simple_task,
-        properties=[
-            Property(
-                name="doubles",
-                check=lambda baseline, candidate, args: candidate == baseline,
-            ),
-        ],
-        metrics=[
-            Metric(name="value", extract=lambda result: result),
-        ],
-    )
-    
     result = run_eval(
         task_name="simple_task",
         baseline_path=str(baseline_path),
@@ -238,16 +209,6 @@ def solve(x):
 """
     )
     
-    spec = Spec(
-        task=simple_task,
-        properties=[
-            Property(
-                name="doubles",
-                check=lambda baseline, candidate, args: candidate == baseline,
-            ),
-        ],
-    )
-    
     result = run_eval(
         task_name="simple_task",
         baseline_path=str(baseline_path),
@@ -259,7 +220,7 @@ def solve(x):
         alpha=0.05,
     )
     
-    # Candidate should have lower pass rate
+    # Candidate should have lower pass rate (candidate adds 1, so it's different)
     assert result["candidate"]["pass_rate"] < result["baseline"]["pass_rate"]
 
 
@@ -279,20 +240,6 @@ def solve(x):
 def solve(x):
     return x * 2
 """
-    )
-    
-    spec = Spec(
-        task=simple_task,
-        properties=[
-            Property(
-                name="doubles",
-                check=lambda baseline, candidate, args: candidate == baseline,
-            ),
-        ],
-        metrics=[
-            Metric(name="value", extract=lambda result: result),
-            Metric(name="squared", extract=lambda result: result * result),
-        ],
     )
     
     result = run_eval(
