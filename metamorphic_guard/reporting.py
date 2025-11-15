@@ -7,8 +7,29 @@ from typing import Any, Dict, Sequence
 import xml.etree.ElementTree as ET
 
 
-def render_html_report(payload: Dict[str, Any], destination: Path) -> Path:
-    """Render a simple HTML report summarizing the evaluation."""
+def render_html_report(
+    payload: Dict[str, Any],
+    destination: Path,
+    *,
+    theme: str = "default",
+    title: str | None = None,
+    show_config: bool = True,
+    show_metadata: bool = True,
+) -> Path:
+    """
+    Render an HTML report summarizing the evaluation.
+    
+    Args:
+        payload: Evaluation result payload
+        destination: Output file path
+        theme: Report theme ('default', 'dark', 'minimal')
+        title: Custom report title (defaults to task name)
+        show_config: Whether to show configuration section
+        show_metadata: Whether to show job metadata section
+    
+    Returns:
+        Path to generated HTML file
+    """
     baseline = payload.get("baseline", {}) or {}
     candidate = payload.get("candidate", {}) or {}
     config = payload.get("config", {}) or {}
@@ -109,90 +130,105 @@ def render_html_report(payload: Dict[str, Any], destination: Path) -> Path:
     )
 
     chart_script = _build_chart_script(pass_chart_config, fairness_chart, resource_chart, coverage_chart, performance_chart)
+    
+    # Theme-specific CSS
+    theme_css = _get_theme_css(theme)
+    
+    # Report title
+    report_title = title or f"Metamorphic Guard Report - {html.escape(str(payload.get('task', '')))}"
+    page_title = title or f"Metamorphic Guard Report - {html.escape(str(payload.get('task', '')))}"
+    
+    # Configuration and metadata blocks (conditional)
+    config_block = f"""
+  <h2>Configuration</h2>
+  <pre>{html.escape(str(config))}</pre>
+""" if show_config else ""
+    
+    metadata_block = f"""
+  <h2>Job Metadata</h2>
+  <pre>{html.escape(str(job))}</pre>
+""" if show_metadata else ""
 
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Metamorphic Guard Report - {html.escape(payload.get("task", ""))}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{html.escape(page_title)}</title>
   <style>
-    body {{ font-family: system-ui, sans-serif; margin: 2rem; }}
-    h1, h2, h3, h4 {{ color: #333; }}
-    table {{ border-collapse: collapse; width: 100%; margin-bottom: 1.5rem; }}
-    th, td {{ border: 1px solid #ddd; padding: 0.75rem; text-align: left; }}
-    th {{ background: #f5f5f5; }}
-    code, pre {{ background: #f0f0f0; padding: 0.2rem 0.4rem; border-radius: 4px; overflow-x: auto; }}
-    .monitor-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }}
-    .monitor-card {{ border: 1px solid #ddd; border-radius: 6px; padding: 1rem; background: #fafafa; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }}
-    .monitor-card h3 {{ margin-top: 0; font-size: 1.1rem; }}
-    .monitor-summary {{ width: 100%; font-size: 0.9rem; border-collapse: collapse; margin-top: 0.5rem; }}
-    .monitor-summary td {{ border: none; padding: 0.2rem 0.1rem; }}
-    .monitor-alerts {{ margin-top: 0.5rem; padding-left: 1.2rem; color: #8b0000; }}
-    .monitor-alerts li {{ margin-bottom: 0.25rem; }}
-    .chart-container {{ margin: 2rem 0; }}
-    .chart-container canvas {{ max-width: 720px; width: 100%; height: 320px; }}
-    .policy-banner {{ 
-      padding: 1rem; 
-      margin: 1.5rem 0; 
-      border-radius: 6px; 
-      border-left: 4px solid;
-      background: #f9f9f9;
-    }}
-    .policy-banner.adopt {{ border-color: #4caf50; background: #e8f5e9; }}
-    .policy-banner.reject {{ border-color: #f44336; background: #ffebee; }}
-    .policy-banner h2 {{ margin-top: 0; }}
+    {theme_css}
   </style>
 </head>
 <body>
-  <h1>Metamorphic Guard Report</h1>
+  <header class="report-header">
+    <h1>{html.escape(report_title)}</h1>
+    <div class="report-meta">
+      <span class="meta-item"><strong>Task:</strong> {html.escape(str(payload.get("task", "")))}</span>
+      <span class="meta-item"><strong>Decision:</strong> {html.escape(str(decision.get("reason", "unknown")))}</span>
+      <span class="meta-item decision-badge {'adopt' if decision.get('adopt', False) else 'reject'}">
+        {html.escape(str(decision.get("adopt", False)))}
+      </span>
+    </div>
+  </header>
+  
   {policy_block}
-  <p><strong>Task:</strong> {html.escape(str(payload.get("task", "")))}</p>
-  <p><strong>Decision:</strong> {html.escape(str(decision.get("reason", "unknown")))}</p>
-  <p><strong>Adopt:</strong> {html.escape(str(decision.get("adopt", False)))}</p>
-
-  <h2>Summary Metrics</h2>
-  <table>
-    <tr><th>Metric</th><th>Value</th></tr>
-    <tr><td>Baseline Pass Rate</td><td>{baseline.get("pass_rate", 0):.3f}</td></tr>
-    <tr><td>Candidate Pass Rate</td><td>{candidate.get("pass_rate", 0):.3f}</td></tr>
-    <tr><td>Δ Pass Rate</td><td>{payload.get("delta_pass_rate", 0):.3f}</td></tr>
-    <tr><td>Δ 95% CI</td><td>{payload.get("delta_ci")}</td></tr>
-    <tr><td>Relative Risk</td><td>{payload.get("relative_risk", 0):.3f}</td></tr>
-    <tr><td>RR 95% CI</td><td>{payload.get("relative_risk_ci")}</td></tr>
-  </table>
+  
+  <section class="summary-section">
+    <h2>Summary Metrics</h2>
+    <table class="metrics-table">
+      <thead>
+        <tr><th>Metric</th><th>Value</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Baseline Pass Rate</td><td class="metric-value">{baseline.get("pass_rate", 0):.3f}</td></tr>
+        <tr><td>Candidate Pass Rate</td><td class="metric-value">{candidate.get("pass_rate", 0):.3f}</td></tr>
+        <tr><td>Δ Pass Rate</td><td class="metric-value">{payload.get("delta_pass_rate", 0):.3f}</td></tr>
+        <tr><td>Δ 95% CI</td><td class="metric-value">{payload.get("delta_ci")}</td></tr>
+        <tr><td>Relative Risk</td><td class="metric-value">{payload.get("relative_risk", 0):.3f}</td></tr>
+        <tr><td>RR 95% CI</td><td class="metric-value">{payload.get("relative_risk_ci")}</td></tr>
+      </tbody>
+    </table>
+  </section>
+  
   {llm_metrics_block}
 
-  <div class="chart-container">
-    <canvas id="pass-rate-chart"></canvas>
-  </div>
-  {fairness_block}
-  {resource_block}
+  <section class="charts-section">
+    <div class="chart-container">
+      <h2>Pass Rate Comparison</h2>
+      <canvas id="pass-rate-chart"></canvas>
+    </div>
+    {fairness_block}
+    {resource_block}
+    {performance_block}
+    {('<div class="chart-container"><h2>MR Coverage by Category</h2><canvas id="coverage-chart"></canvas></div>' if coverage_chart else '')}
+  </section>
 
-  <h2>Configuration</h2>
-  <pre>{html.escape(str(config))}</pre>
-
-  <h2>Job Metadata</h2>
-  <pre>{html.escape(str(job))}</pre>
-
+  {config_block}
+  {metadata_block}
   {replay_block}
-
-  {fairness_block}
-  {resource_block}
-  {performance_block}
   {relation_block}
+
+  <section class="violations-section">
+    <h2>Baseline Violations</h2>
+    <div class="violations-content">
+      {_format_violations(baseline)}
+    </div>
+  </section>
+
+  <section class="violations-section">
+    <h2>Candidate Violations</h2>
+    <div class="violations-content">
+      {_format_violations(candidate)}
+    </div>
+  </section>
+
+  <section class="monitors-section">
+    <h2>Monitors</h2>
+    <div class="monitor-grid">
+      {_format_monitors(monitors)}
+    </div>
+  </section>
   
-  {('<div class="chart-container"><h2>MR Coverage by Category</h2><canvas id="coverage-chart"></canvas></div>' if coverage_chart else '')}
-
-  <h2>Baseline Violations</h2>
-  {_format_violations(baseline)}
-
-  <h2>Candidate Violations</h2>
-  {_format_violations(candidate)}
-
-  <h2>Monitors</h2>
-  <div class="monitor-grid">
-  {_format_monitors(monitors)}
-  </div>
   {chart_script}
 </body>
 </html>
@@ -837,6 +873,285 @@ def _render_policy_block(policy: Dict[str, Any] | None, decision: Dict[str, Any]
     {policy_info}
   </div>
 """
+
+
+def _get_theme_css(theme: str) -> str:
+    """Get CSS for the specified theme."""
+    base_css = """
+    * { box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      margin: 0;
+      padding: 0;
+      color: #333;
+      background: #ffffff;
+    }
+    .report-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 2rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .report-header h1 {
+      margin: 0 0 1rem 0;
+      font-size: 2rem;
+      font-weight: 600;
+    }
+    .report-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      font-size: 0.95rem;
+    }
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .decision-badge {
+      padding: 0.25rem 0.75rem;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+    }
+    .decision-badge.adopt {
+      background: rgba(76, 175, 80, 0.2);
+      border: 1px solid rgba(76, 175, 80, 0.5);
+    }
+    .decision-badge.reject {
+      background: rgba(244, 67, 54, 0.2);
+      border: 1px solid rgba(244, 67, 54, 0.5);
+    }
+    section {
+      margin: 2rem 0;
+      padding: 0 2rem;
+    }
+    h2 {
+      color: #333;
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin: 1.5rem 0 1rem 0;
+      border-bottom: 2px solid #e0e0e0;
+      padding-bottom: 0.5rem;
+    }
+    h3 {
+      color: #555;
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin: 1rem 0 0.5rem 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+      background: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    thead {
+      background: #f5f5f5;
+    }
+    th, td {
+      padding: 0.875rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    th {
+      font-weight: 600;
+      color: #555;
+      text-transform: uppercase;
+      font-size: 0.85rem;
+      letter-spacing: 0.5px;
+    }
+    tbody tr:hover {
+      background: #f9f9f9;
+    }
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+    .metric-value {
+      font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+      font-weight: 600;
+      color: #667eea;
+    }
+    code, pre {
+      background: #f5f5f5;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+      font-size: 0.9rem;
+      overflow-x: auto;
+    }
+    pre {
+      padding: 1rem;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      background: #fafafa;
+    }
+    .monitor-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin: 1.5rem 0;
+    }
+    .monitor-card {
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 1.25rem;
+      background: white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .monitor-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.12);
+    }
+    .monitor-card h3 {
+      margin: 0 0 0.75rem 0;
+      font-size: 1.1rem;
+      color: #333;
+    }
+    .monitor-card small {
+      color: #888;
+      font-weight: normal;
+      font-size: 0.85rem;
+    }
+    .monitor-summary {
+      width: 100%;
+      font-size: 0.9rem;
+      border-collapse: collapse;
+      margin-top: 0.75rem;
+    }
+    .monitor-summary td {
+      border: none;
+      padding: 0.25rem 0.5rem;
+    }
+    .monitor-summary td:first-child {
+      font-weight: 600;
+      color: #666;
+    }
+    .monitor-alerts {
+      margin-top: 0.75rem;
+      padding-left: 1.5rem;
+      color: #d32f2f;
+    }
+    .monitor-alerts li {
+      margin-bottom: 0.5rem;
+    }
+    .chart-container {
+      margin: 2rem 0;
+      padding: 1.5rem;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .chart-container h2 {
+      margin-top: 0;
+      border-bottom: none;
+    }
+    .chart-container canvas {
+      max-width: 100%;
+      height: 320px;
+    }
+    .policy-banner {
+      padding: 1.5rem;
+      margin: 2rem;
+      border-radius: 8px;
+      border-left: 5px solid;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .policy-banner.adopt {
+      border-color: #4caf50;
+      background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+    }
+    .policy-banner.reject {
+      border-color: #f44336;
+      background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+    }
+    .policy-banner h2 {
+      margin: 0 0 0.75rem 0;
+      border-bottom: none;
+      font-size: 1.5rem;
+    }
+    .policy-banner ul {
+      margin: 0.75rem 0 0 0;
+      padding-left: 1.5rem;
+    }
+    .policy-banner li {
+      margin-bottom: 0.5rem;
+    }
+    .violations-content {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .violations-content ul {
+      margin: 1rem 0;
+      padding-left: 1.5rem;
+    }
+    .violations-content ul ul {
+      margin: 0.5rem 0;
+      background: #f9f9f9;
+      padding: 0.75rem;
+      border-radius: 4px;
+      border-left: 3px solid #e0e0e0;
+    }
+    @media (max-width: 768px) {
+      body { padding: 0; }
+      section { padding: 0 1rem; }
+      .report-header { padding: 1.5rem; }
+      .report-header h1 { font-size: 1.5rem; }
+      .report-meta { flex-direction: column; gap: 0.75rem; }
+      .monitor-grid { grid-template-columns: 1fr; }
+      .chart-container canvas { height: 240px; }
+    }
+"""
+    
+    if theme == "dark":
+        return base_css + """
+    body { background: #1e1e1e; color: #e0e0e0; }
+    .report-header { background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%); }
+    section { background: #2d2d2d; }
+    table { background: #2d2d2d; }
+    thead { background: #3a3a3a; }
+    th, td { border-bottom: 1px solid #404040; }
+    tbody tr:hover { background: #353535; }
+    .monitor-card { background: #2d2d2d; border-color: #404040; }
+    .chart-container { background: #2d2d2d; }
+    .violations-content { background: #2d2d2d; }
+    code, pre { background: #1a1a1a; color: #e0e0e0; }
+    h2 { color: #e0e0e0; border-bottom-color: #404040; }
+    h3 { color: #d0d0d0; }
+"""
+    elif theme == "minimal":
+        return """
+    * { box-sizing: border-box; }
+    body { 
+      font-family: system-ui, sans-serif;
+      line-height: 1.6;
+      margin: 2rem;
+      color: #333;
+      background: #ffffff;
+    }
+    h1, h2, h3 { color: #333; margin: 1.5rem 0 1rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #ddd; padding: 0.75rem; text-align: left; }
+    th { background: #f5f5f5; }
+    .monitor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+    .monitor-card { border: 1px solid #ddd; padding: 1rem; }
+    .chart-container { margin: 2rem 0; }
+    .chart-container canvas { max-width: 100%; height: 320px; }
+    .policy-banner { padding: 1rem; margin: 1.5rem 0; border-left: 4px solid; }
+    .policy-banner.adopt { border-color: #4caf50; background: #e8f5e9; }
+    .policy-banner.reject { border-color: #f44336; background: #ffebee; }
+"""
+    else:  # default
+        return base_css
 
 
 def _build_coverage_chart(coverage: Dict[str, Any] | None) -> Dict[str, Any] | None:

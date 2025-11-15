@@ -1128,7 +1128,20 @@ def evaluate_command(
             write_violation_report(export_violations, result)
 
         if html_report is not None:
-            render_html_report(result, html_report)
+            # Get report customization options from config if available
+            report_theme = config.get("report_theme", "default") if isinstance(config, dict) else "default"
+            report_title = config.get("report_title") if isinstance(config, dict) else None
+            show_config = config.get("report_show_config", True) if isinstance(config, dict) else True
+            show_metadata = config.get("report_show_metadata", True) if isinstance(config, dict) else True
+            
+            render_html_report(
+                result,
+                html_report,
+                theme=report_theme,
+                title=report_title,
+                show_config=show_config,
+                show_metadata=show_metadata,
+            )
 
         replay_info = result.get("replay") or {}
         cases_path = None
