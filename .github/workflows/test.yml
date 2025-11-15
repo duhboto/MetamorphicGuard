@@ -19,10 +19,23 @@ jobs:
         run: |
           pip install --upgrade pip setuptools wheel
           pip install -e ".[dev]"
+          pip install pytest-cov coverage[toml]
       - name: Type check with mypy
         run: |
           pip install mypy
           mypy metamorphic_guard --strict --no-error-summary || true  # Allow failures for now
-      - name: Run tests
+      - name: Run all tests with coverage
         run: |
-          pytest --maxfail=1 --disable-warnings -q --timeout=300
+          pytest --maxfail=1 --disable-warnings -v --timeout=300 \
+            --cov=metamorphic_guard \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            --cov-report=html \
+            tests/
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false

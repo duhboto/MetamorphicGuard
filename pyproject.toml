@@ -31,6 +31,8 @@ Documentation = "https://pypi.org/project/metamorphic-guard/"
 dev = [
     "pytest>=7.0.0",
     "pytest-timeout>=2.1.0",
+    "pytest-cov>=4.0.0",
+    "coverage[toml]>=7.0.0",
     "hypothesis>=6.0.0",
     "mypy>=1.10.0",
 ]
