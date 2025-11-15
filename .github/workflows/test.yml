@@ -39,3 +39,28 @@ jobs:
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false
+
+  validate-optional-deps:
+    name: Validate Optional Dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        profile: [base, llm, otel, queue, docs]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install base package
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install -e .
+      - name: Install optional dependencies
+        run: |
+          if [ "${{ matrix.profile }}" != "base" ]; then
+            pip install -e ".[${{ matrix.profile }}]"
+          fi
+      - name: Validate dependencies
+        run: |
+          python scripts/validate_optional_deps.py ${{ matrix.profile }}
