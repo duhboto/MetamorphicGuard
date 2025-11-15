@@ -348,6 +348,53 @@ if fairness_data["summary"]["max_gap"] > 0.05:
 - Category-based analysis reveals group-level differences
 - Distributed execution enables large-scale fairness audits
 
+## Reference Projects
+
+This repository includes two complete reference projects that demonstrate real-world Metamorphic Guard workflows:
+
+### Ranking Guard Project
+
+The **Ranking Guard Project** (`ranking_guard_project/`) provides a production-ready workflow for qualifying new ranking algorithms before rolling them into production. It demonstrates:
+
+- Property-based checks for ranking correctness
+- Metamorphic relations for input permutation and noise tolerance
+- Statistical analysis with bootstrap confidence intervals
+- CI/CD integration with GitHub Actions
+- Adoption gating based on pass-rate deltas
+
+**Key Features:**
+- CLI tool (`ranking-guard`) for easy evaluation
+- Multiple candidate implementations (heap-based, buggy examples)
+- Comprehensive documentation and best practices
+- Sample reports and CI pipeline examples
+
+**See**: [Ranking Guard Project README](../../ranking_guard_project/README.md)
+
+### Fairness Guard Project
+
+The **Fairness Guard Project** (`fairness_guard_project/`) demonstrates how to enforce social-impact requirements on machine learning systems. It shows:
+
+- Fairness-aware evaluation with demographic parity constraints
+- Functional guarantees (output shape, minimum approval rates)
+- Metamorphic relations for deployment reality testing
+- Group-level fairness metrics and reporting
+- Regulatory compliance considerations
+
+**Key Features:**
+- CLI tool (`fairness-guard`) for fairness evaluation
+- Fairness metrics (overall approval rates, group-level rates, fairness gaps)
+- Compliance-ready reporting for governance dashboards
+- CI/CD integration with fairness checks
+
+**See**: [Fairness Guard Project README](../../fairness_guard_project/README.md)
+
+Both projects include:
+- Complete implementations (baseline and candidate examples)
+- Comprehensive documentation
+- CI/CD pipeline examples (GitHub Actions)
+- Programmatic usage examples
+- Best practices and troubleshooting guides
+
 ## Common Patterns Across Case Studies
 
 1. **Policy-as-Code**: All cases used TOML policies for consistent gating
