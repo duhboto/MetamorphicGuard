@@ -221,7 +221,7 @@ class RedisQueueAdapter(QueueAdapter):
 
     def __init__(self, config: Dict[str, Any]) -> None:
         try:
-            import redis  # type: ignore
+            import redis
         except ImportError as exc:  # pragma: no cover - optional dependency
             raise RuntimeError(
                 "Redis queue backend requires the 'redis' package."
@@ -344,7 +344,7 @@ class RedisQueueAdapter(QueueAdapter):
                     pipe.hdel(self.assignment_key, task_id)
                     pipe.execute()
                     return worker.decode("utf-8") if worker else None
-                except self.redis.WatchError:  # type: ignore[attr-defined]
+                except self.redis.WatchError:
                     continue
 
     def pending_count(self) -> int:

@@ -9,6 +9,8 @@ from typing import Any, Dict, Optional
 from pathlib import Path
 
 from .__init__ import LLMExecutor
+from .circuit_breaker import CircuitBreakerOpenError
+from ..errors import ExecutorError
 from ..redaction import get_redactor
 
 try:
@@ -174,6 +176,9 @@ class OpenAIExecutor(LLMExecutor):
         # Validate model name using registry
         from ..model_registry import is_valid_model, get_valid_models
         
+        if model is None or not isinstance(model, str) or not model.strip():
+            return _validation_error("Model name cannot be None or empty", "invalid_model")
+        
         valid_models = get_valid_models("openai")
         if model not in valid_models:
             # Check if it looks like a valid model name (custom/private model)
@@ -201,8 +206,42 @@ class OpenAIExecutor(LLMExecutor):
 
         last_error: Optional[Exception] = None
 
+        # Check circuit breaker before attempting calls
+        if self.circuit_breaker is not None and not self.circuit_breaker.allow_request():
+            duration_ms = (time.time() - start_time) * 1000
+            stats = self.circuit_breaker.get_stats()
+            payload = {
+                "success": False,
+                "duration_ms": duration_ms,
+                "stdout": "",
+                "stderr": f"Circuit breaker is {stats['state']}. Service appears unavailable.",
+                "error": f"Circuit breaker is {stats['state']}",
+                "error_type": "CircuitBreakerOpenError",
+                "error_code": "circuit_breaker_open",
+                "circuit_breaker_state": stats["state"],
+                "next_attempt_time": stats["next_attempt_time"],
+            }
+            return self._attach_retry_metadata(payload, attempts=0)
+
         for attempt in range(self.max_retries + 1):
             try:
+                # Check circuit breaker before each attempt
+                if self.circuit_breaker is not None and not self.circuit_breaker.allow_request():
+                    duration_ms = (time.time() - start_time) * 1000
+                    stats = self.circuit_breaker.get_stats()
+                    payload = {
+                        "success": False,
+                        "duration_ms": duration_ms,
+                        "stdout": "",
+                        "stderr": f"Circuit breaker is {stats['state']}. Service appears unavailable.",
+                        "error": f"Circuit breaker is {stats['state']}",
+                        "error_type": "CircuitBreakerOpenError",
+                        "error_code": "circuit_breaker_open",
+                        "circuit_breaker_state": stats["state"],
+                        "next_attempt_time": stats["next_attempt_time"],
+                    }
+                    return self._attach_retry_metadata(payload, attempts=attempt)
+
                 result = self._call_llm(
                     prompt=user_prompt,
                     system_prompt=system_prompt,
@@ -237,19 +276,29 @@ class OpenAIExecutor(LLMExecutor):
                     "finish_reason": result.get("finish_reason", "stop"),
                     "conversation_history": full_messages,  # Include for trace recording
                 }
+                # Record success in circuit breaker
+                if self.circuit_breaker is not None:
+                    self.circuit_breaker.record_success()
                 return self._attach_retry_metadata(payload, attempts=attempt)
             except (RateLimitError, APITimeoutError, APIConnectionError) as exc:
                 last_error = exc
                 retry_after = self._extract_retry_after(exc)
                 if self._should_retry(exc, attempt):
+                    # Don't record failure yet - we'll retry
                     self._sleep_with_backoff(attempt, retry_after=retry_after)
                     continue
+                # Retries exhausted - record final failure
+                if self.circuit_breaker is not None:
+                    self.circuit_breaker.record_failure()
                 # fallthrough to final payload outside loop
                 break
             except (AuthenticationError, BadRequestError, ValueError) as exc:
                 duration_ms = (time.time() - start_time) * 1000
                 error_msg = self._redactor.redact(str(exc))
                 error_code = "authentication_error" if isinstance(exc, AuthenticationError) else "invalid_request"
+                # Non-retryable error - record failure immediately
+                if self.circuit_breaker is not None:
+                    self.circuit_breaker.record_failure()
                 payload = {
                     "success": False,
                     "duration_ms": duration_ms,
@@ -263,25 +312,53 @@ class OpenAIExecutor(LLMExecutor):
             except OSError as exc:
                 last_error = exc
                 if self._should_retry(exc, attempt):
+                    # Don't record failure yet - we'll retry
                     self._sleep_with_backoff(attempt)
                     continue
+                # Retries exhausted - record final failure
+                if self.circuit_breaker is not None:
+                    self.circuit_breaker.record_failure()
                 break
-            except Exception as exc:  # Fallback for unexpected client errors
+            except Exception as exc:  # Catch-all for other exceptions (including APIError and test mocks)
+                # Check if this looks like an API error with status_code
+                status_code = getattr(exc, "status_code", None)
+                if status_code is not None:
+                    # Treat as API error - check if retryable
+                    last_error = exc
+                    if self._should_retry(exc, attempt):
+                        # Don't record failure yet - we'll retry
+                        retry_after = self._extract_retry_after(exc)
+                        self._sleep_with_backoff(attempt, retry_after=retry_after)
+                        continue
+                    # Retries exhausted or non-retryable - record failure
+                    if self.circuit_breaker is not None:
+                        self.circuit_breaker.record_failure()
+                    duration_ms = (time.time() - start_time) * 1000
+                    error_msg = self._redactor.redact(str(exc))
+                    error_code = "llm_api_error"
+                    if status_code == 401:
+                        error_code = "authentication_error"
+                    elif status_code == 429:
+                        error_code = "rate_limit_error"
+                    elif status_code == 400:
+                        error_code = "invalid_request"
+                    payload = {
+                        "success": False,
+                        "duration_ms": duration_ms,
+                        "stdout": "",
+                        "stderr": error_msg,
+                        "error": error_msg,
+                        "error_type": type(exc).__name__,
+                        "error_code": error_code,
+                    }
+                    return self._attach_retry_metadata(payload, attempts=attempt)
+                # Not an API error - treat as non-retryable error
                 last_error = exc
-                if self._should_retry(exc, attempt):
-                    retry_after = self._extract_retry_after(exc)
-                    self._sleep_with_backoff(attempt, retry_after=retry_after)
-                    continue
                 duration_ms = (time.time() - start_time) * 1000
                 error_msg = self._redactor.redact(str(exc))
-                error_code = "llm_api_error"
-                status = getattr(exc, "status_code", None)
-                if status == 401:
-                    error_code = "authentication_error"
-                elif status == 429:
-                    error_code = "rate_limit_error"
-                elif status == 400:
-                    error_code = "invalid_request"
+                # Record failure immediately for non-API errors
+                if self.circuit_breaker is not None:
+                    self.circuit_breaker.record_failure()
                 payload = {
                     "success": False,
                     "duration_ms": duration_ms,
@@ -289,13 +366,22 @@ class OpenAIExecutor(LLMExecutor):
                     "stderr": error_msg,
                     "error": error_msg,
                     "error_type": type(exc).__name__,
-                    "error_code": error_code,
+                    "error_code": "llm_api_error",
                 }
                 return self._attach_retry_metadata(payload, attempts=attempt)
 
-        # Should never reach here, but keep defensive fallback
+        # All retries exhausted - record final failure and return error
+        if self.circuit_breaker is not None:
+            self.circuit_breaker.record_failure()
         duration_ms = (time.time() - start_time) * 1000
         description = self._redactor.redact(str(last_error)) if last_error else "Unknown error"
+        error_code = "llm_api_error"
+        if last_error:
+            status = getattr(last_error, "status_code", None)
+            if status == 429:
+                error_code = "rate_limit_error"
+            elif status == 500:
+                error_code = "server_error"
         payload = {
             "success": False,
             "duration_ms": duration_ms,
@@ -303,7 +389,7 @@ class OpenAIExecutor(LLMExecutor):
             "stderr": description,
             "error": description,
             "error_type": type(last_error).__name__ if last_error else "RuntimeError",
-            "error_code": "llm_api_error",
+            "error_code": error_code,
         }
         return self._attach_retry_metadata(payload, attempts=self.max_retries)
 

@@ -9,6 +9,8 @@ from typing import Any, Dict, Optional
 from pathlib import Path
 
 from .__init__ import LLMExecutor
+from .circuit_breaker import CircuitBreakerOpenError
+from ..errors import ExecutorError
 from ..redaction import get_redactor
 
 try:
@@ -193,8 +195,42 @@ class AnthropicExecutor(LLMExecutor):
 
         last_error: Optional[Exception] = None
 
+        # Check circuit breaker before attempting calls
+        if self.circuit_breaker is not None and not self.circuit_breaker.allow_request():
+            duration_ms = (time.time() - start_time) * 1000
+            stats = self.circuit_breaker.get_stats()
+            payload = {
+                "success": False,
+                "duration_ms": duration_ms,
+                "stdout": "",
+                "stderr": f"Circuit breaker is {stats['state']}. Service appears unavailable.",
+                "error": f"Circuit breaker is {stats['state']}",
+                "error_type": "CircuitBreakerOpenError",
+                "error_code": "circuit_breaker_open",
+                "circuit_breaker_state": stats["state"],
+                "next_attempt_time": stats["next_attempt_time"],
+            }
+            return self._attach_retry_metadata(payload, attempts=0)
+
         for attempt in range(self.max_retries + 1):
             try:
+                # Check circuit breaker before each attempt
+                if self.circuit_breaker is not None and not self.circuit_breaker.allow_request():
+                    duration_ms = (time.time() - start_time) * 1000
+                    stats = self.circuit_breaker.get_stats()
+                    payload = {
+                        "success": False,
+                        "duration_ms": duration_ms,
+                        "stdout": "",
+                        "stderr": f"Circuit breaker is {stats['state']}. Service appears unavailable.",
+                        "error": f"Circuit breaker is {stats['state']}",
+                        "error_type": "CircuitBreakerOpenError",
+                        "error_code": "circuit_breaker_open",
+                        "circuit_breaker_state": stats["state"],
+                        "next_attempt_time": stats["next_attempt_time"],
+                    }
+                    return self._attach_retry_metadata(payload, attempts=attempt)
+
                 result = self._call_llm(
                     prompt=user_prompt,
                     system_prompt=system_prompt,
@@ -217,18 +253,28 @@ class AnthropicExecutor(LLMExecutor):
                     "cost_usd": result.get("cost_usd", 0.0),
                     "finish_reason": result.get("finish_reason", "end_turn"),
                 }
+                # Record success in circuit breaker
+                if self.circuit_breaker is not None:
+                    self.circuit_breaker.record_success()
                 return self._attach_retry_metadata(payload, attempts=attempt)
             except (RateLimitError, APITimeoutError, APIConnectionError) as exc:
                 last_error = exc
                 retry_after = self._extract_retry_after(exc)
                 if self._should_retry(exc, attempt):
+                    # Don't record failure yet - we'll retry
                     self._sleep_with_backoff(attempt, retry_after=retry_after)
                     continue
+                # Retries exhausted - record final failure
+                if self.circuit_breaker is not None:
+                    self.circuit_breaker.record_failure()
                 break
             except AnthropicError as exc:
                 duration_ms = (time.time() - start_time) * 1000
                 error_msg = self._redactor.redact(str(exc))
                 error_code = "rate_limit_error" if isinstance(exc, RateLimitError) else "llm_api_error"
+                # Non-retryable error or retries exhausted - record failure immediately
+                if self.circuit_breaker is not None:
+                    self.circuit_breaker.record_failure()
                 payload = {
                     "success": False,
                     "duration_ms": duration_ms,
@@ -242,38 +288,61 @@ class AnthropicExecutor(LLMExecutor):
             except OSError as exc:
                 last_error = exc
                 if self._should_retry(exc, attempt):
+                    # Don't record failure yet - we'll retry
                     self._sleep_with_backoff(attempt)
                     continue
+                # Retries exhausted - record final failure
+                if self.circuit_breaker is not None:
+                    self.circuit_breaker.record_failure()
                 break
-            except Exception as exc:
-                last_error = exc
-                if self._should_retry(exc, attempt):
-                    retry_after = self._extract_retry_after(exc)
-                    self._sleep_with_backoff(attempt, retry_after=retry_after)
-                    continue
-                duration_ms = (time.time() - start_time) * 1000
-                error_msg = self._redactor.redact(str(exc))
-                error_code = "llm_api_error"
-                status = getattr(exc, "status_code", None)
-                if status == 401:
-                    error_code = "authentication_error"
-                elif status == 429:
-                    error_code = "rate_limit_error"
-                elif status == 400:
-                    error_code = "invalid_request"
-                payload = {
-                    "success": False,
-                    "duration_ms": duration_ms,
-                    "stdout": "",
-                    "stderr": error_msg,
-                    "error": error_msg,
-                    "error_type": type(exc).__name__,
-                    "error_code": error_code,
-                }
-                return self._attach_retry_metadata(payload, attempts=attempt)
+            except Exception as exc:  # Catch-all for other exceptions (including test mocks)
+                # Check if this looks like an API error with status_code
+                status_code = getattr(exc, "status_code", None)
+                if status_code is not None:
+                    # Treat as API error - check if retryable
+                    last_error = exc
+                    if self._should_retry(exc, attempt):
+                        # Don't record failure yet - we'll retry
+                        retry_after = self._extract_retry_after(exc)
+                        self._sleep_with_backoff(attempt, retry_after=retry_after)
+                        continue
+                    # Retries exhausted or non-retryable - record failure and return
+                    if self.circuit_breaker is not None:
+                        self.circuit_breaker.record_failure()
+                    duration_ms = (time.time() - start_time) * 1000
+                    error_msg = self._redactor.redact(str(exc))
+                    error_code = "llm_api_error"
+                    if status_code == 401:
+                        error_code = "authentication_error"
+                    elif status_code == 429:
+                        error_code = "rate_limit_error"
+                    elif status_code == 400:
+                        error_code = "invalid_request"
+                    payload = {
+                        "success": False,
+                        "duration_ms": duration_ms,
+                        "stdout": "",
+                        "stderr": error_msg,
+                        "error": error_msg,
+                        "error_type": type(exc).__name__,
+                        "error_code": error_code,
+                    }
+                    return self._attach_retry_metadata(payload, attempts=attempt)
+                # Not an API error - re-raise
+                raise
 
+        # All retries exhausted - record final failure and return error
+        if self.circuit_breaker is not None:
+            self.circuit_breaker.record_failure()
         duration_ms = (time.time() - start_time) * 1000
         fallback = self._redactor.redact(str(last_error)) if last_error else "Unknown error"
+        error_code = "llm_api_error"
+        if last_error:
+            status = getattr(last_error, "status_code", None)
+            if status == 429:
+                error_code = "rate_limit_error"
+            elif status == 500:
+                error_code = "server_error"
         payload = {
             "success": False,
             "duration_ms": duration_ms,
@@ -281,7 +350,7 @@ class AnthropicExecutor(LLMExecutor):
             "stderr": fallback,
             "error": fallback,
             "error_type": type(last_error).__name__ if last_error else "RuntimeError",
-            "error_code": "llm_api_error",
+            "error_code": error_code,
         }
         return self._attach_retry_metadata(payload, attempts=self.max_retries)
 

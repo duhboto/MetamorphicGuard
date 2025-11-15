@@ -61,6 +61,14 @@ disallow_incomplete_defs = true
 disallow_untyped_defs = true
 no_implicit_optional = true
 show_error_codes = true
+# Allow gradual migration - some files may not pass strict checking yet
+warn_return_any = true
+warn_unreachable = true
+strict_optional = true
+strict_equality = true
+# Include type stubs directory
+mypy_path = "stubs"
+# Note: Full strict checking will be enabled once all Any types are replaced
 exclude = [
     "build",
     "dist",

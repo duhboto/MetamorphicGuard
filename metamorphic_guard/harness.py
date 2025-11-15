@@ -12,6 +12,7 @@ from statistics import NormalDist
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 import warnings
 from .specs import Metric, Spec, get_task
+from .types import JSONDict, JSONValue
 from .util import (
     compute_spec_fingerprint,
     get_environment_fingerprint,
@@ -26,7 +27,7 @@ except ImportError:
     shrink_input = None
 
 
-def _serialize_for_report(value: Any) -> Any:
+def _serialize_for_report(value: Any) -> JSONValue:
     """
     Convert an arbitrary object into a JSON-friendly structure.
     Non-serializable objects are represented via repr().
@@ -81,10 +82,10 @@ from .harness.trust import compute_trust_scores as _compute_trust_scores_new
 
 # Backward compatibility aliases - use new module functions
 def _compute_trust_scores(
-    results: Sequence[Dict[str, Any]],
-    test_inputs: Sequence[Tuple[Any, ...]],
+    results: Sequence[JSONDict],
+    test_inputs: Sequence[Tuple[object, ...]],
     spec: Spec,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[JSONDict]:
     """Backward compatibility wrapper for compute_trust_scores."""
     return _compute_trust_scores_new(results, test_inputs, spec)
 
@@ -104,7 +105,7 @@ def _estimate_power(
     )
 
 
-def _fingerprint_payload(payload: Any) -> str:
+def _fingerprint_payload(payload: JSONValue) -> str:
     normalized = _serialize_for_report(payload)
     encoded = json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
@@ -122,9 +123,9 @@ def _prepare_execution_plan(
     seed: int,
     parallel: Optional[int],
     dispatcher: Dispatcher | str | None,
-    queue_config: Dict[str, Any] | None,
+    queue_config: JSONDict | None,
     monitors: Sequence[Monitor] | None,
-    explicit_inputs: Optional[List[Tuple[Any, ...]]],
+    explicit_inputs: Optional[List[Tuple[object, ...]]],
     executor: Optional[str],
 ) -> ExecutionPlan:
     """Backward compatibility wrapper for prepare_execution_plan."""
@@ -151,12 +152,12 @@ def _execute_implementations(
     timeout_s: float,
     mem_mb: int,
     executor: Optional[str],
-    executor_config: Dict[str, Any] | None,
+    executor_config: JSONDict | None,
     baseline_executor: Optional[str],
-    baseline_executor_config: Dict[str, Any] | None,
+    baseline_executor_config: JSONDict | None,
     candidate_executor: Optional[str],
-    candidate_executor_config: Dict[str, Any] | None,
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    candidate_executor_config: JSONDict | None,
+) -> Tuple[List[JSONDict], List[JSONDict]]:
     """Backward compatibility wrapper for execute_implementations."""
     return _execute_implementations_new(
         plan,
@@ -174,16 +175,16 @@ def _execute_implementations(
 
 
 # Backward compatibility alias
-def _summarize_llm_results(results: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+def _summarize_llm_results(results: Sequence[JSONDict]) -> JSONDict:
     """Backward compatibility wrapper for summarize_llm_results."""
     return _summarize_llm_results_new(results)
 
 
 # Backward compatibility alias
 def _compose_llm_metrics(
-    baseline_summary: Dict[str, Any],
-    candidate_summary: Dict[str, Any],
-) -> Optional[Dict[str, Any]]:
+    baseline_summary: JSONDict,
+    candidate_summary: JSONDict,
+) -> Optional[JSONDict]:
     """Backward compatibility wrapper for compose_llm_metrics."""
     return _compose_llm_metrics_new(baseline_summary, candidate_summary)
 
@@ -192,9 +193,9 @@ def _compose_llm_metrics(
 def _evaluate_roles(
     *,
     spec: Spec,
-    test_inputs: Sequence[Tuple[Any, ...]],
-    baseline_results: Sequence[Dict[str, Any]],
-    candidate_results: Sequence[Dict[str, Any]],
+    test_inputs: Sequence[Tuple[object, ...]],
+    baseline_results: Sequence[JSONDict],
+    candidate_results: Sequence[JSONDict],
     baseline_path: str,
     candidate_path: str,
     timeout_s: float,
@@ -202,9 +203,9 @@ def _evaluate_roles(
     violation_cap: int,
     seed: int,
     executor: Optional[str],
-    executor_config: Dict[str, Any] | None,
+    executor_config: JSONDict | None,
     shrink_violations: bool,
-) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+) -> Tuple[JSONDict, JSONDict]:
     """Backward compatibility wrapper for evaluate_roles."""
     return _evaluate_roles_new(
         spec=spec,
@@ -226,12 +227,12 @@ def _evaluate_roles(
 # Backward compatibility alias
 def _summarize_relations(
     spec: Spec,
-    baseline_metrics: Dict[str, Any],
-    candidate_metrics: Dict[str, Any],
+    baseline_metrics: JSONDict,
+    candidate_metrics: JSONDict,
     *,
     alpha: float,
     relation_correction: Optional[str],
-) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]], Optional[Dict[str, Any]]]:
+) -> Tuple[List[JSONDict], Dict[str, JSONDict], Optional[JSONDict]]:
     """Backward compatibility wrapper for summarize_relations."""
     return _summarize_relations_new(
         spec, baseline_metrics, candidate_metrics, alpha=alpha, relation_correction=relation_correction
@@ -239,7 +240,7 @@ def _summarize_relations(
 
 
 # Backward compatibility aliases for metric functions
-def _safe_extract_metric(metric: Metric, result: Dict[str, Any], args: Tuple[Any, ...]) -> Optional[float]:
+def _safe_extract_metric(metric: Metric, result: JSONDict, args: Tuple[object, ...]) -> Optional[float]:
     """Backward compatibility wrapper."""
     return _safe_extract_metric_new(metric, result, args)
 
@@ -253,8 +254,8 @@ def _metric_memo_key(metric: Metric) -> Optional[str]:
 
 def _get_or_compute_metric_value(
     metric: Metric,
-    result: Dict[str, Any],
-    args: Tuple[Any, ...],
+    result: JSONDict,
+    args: Tuple[object, ...],
     *,
     memo_key: Optional[str],
     cache: Dict[str, Dict[int, Optional[float]]],
@@ -272,7 +273,7 @@ def _aggregate_metric_values(
     *,
     kind: str,
     total_count: int,
-) -> Dict[str, Any]:
+) -> JSONDict:
     """Backward compatibility wrapper."""
     return _aggregate_metric_values_new(values, kind=kind, total_count=total_count)
 
@@ -283,18 +284,18 @@ def _bootstrap_metric_delta(
     samples: int,
     alpha: float,
     seed: Optional[int],
-) -> Optional[Dict[str, Any]]:
+) -> Optional[JSONDict]:
     """Backward compatibility wrapper."""
     return _bootstrap_metric_delta_new(deltas, kind=kind, samples=samples, alpha=alpha, seed=seed)
 
 def _collect_metrics(
     metrics: Sequence[Metric],
-    baseline_results: Sequence[Dict[str, Any]],
-    candidate_results: Sequence[Dict[str, Any]],
-    test_inputs: Sequence[Tuple[Any, ...]],
+    baseline_results: Sequence[JSONDict],
+    candidate_results: Sequence[JSONDict],
+    test_inputs: Sequence[Tuple[object, ...]],
     *,
     seed: Optional[int],
-) -> Dict[str, Any]:
+) -> JSONDict:
     """Backward compatibility wrapper."""
     return _collect_metrics_new(metrics, baseline_results, candidate_results, test_inputs, seed=seed)
 
@@ -318,21 +319,21 @@ def run_eval(
     bayesian_posterior_predictive: bool = False,
     bayesian_samples: int = 5000,
     executor: str | None = None,
-    executor_config: Dict[str, Any] | None = None,
+    executor_config: JSONDict | None = None,
     baseline_executor: str | None = None,
     candidate_executor: str | None = None,
-    baseline_executor_config: Dict[str, Any] | None = None,
-    candidate_executor_config: Dict[str, Any] | None = None,
+    baseline_executor_config: JSONDict | None = None,
+    candidate_executor_config: JSONDict | None = None,
     dispatcher: Dispatcher | str | None = None,
-    queue_config: Dict[str, Any] | None = None,
+    queue_config: JSONDict | None = None,
     monitors: Sequence[Monitor] | None = None,
     failed_artifact_limit: Optional[int] = None,
     failed_artifact_ttl_days: Optional[int] = None,
     policy_version: Optional[str] = None,
-    explicit_inputs: Optional[List[Tuple[Any, ...]]] = None,
+    explicit_inputs: Optional[List[Tuple[object, ...]]] = None,
     min_pass_rate: float = 0.80,
     power_target: float = 0.8,
-    policy_config: Optional[Dict[str, Any]] = None,
+    policy_config: Optional[JSONDict] = None,
     shrink_violations: bool = False,
     sequential_method: str = "none",
     max_looks: int = 1,
@@ -347,7 +348,7 @@ def run_eval(
     adaptive_sequential_method: str = "pocock",
     adaptive_max_looks: int = 5,
     **deprecated_kwargs: Any,
-) -> Dict[str, Any]:
+) -> JSONDict:
     """
     Run evaluation comparing baseline and candidate implementations.
 
@@ -933,16 +934,16 @@ def run_eval(
 
 # Backward compatibility alias
 def _evaluate_results(
-    results: Sequence[Dict[str, Any]],
+    results: Sequence[JSONDict],
     spec: Spec,
-    test_inputs: Sequence[Tuple[Any, ...]],
+    test_inputs: Sequence[Tuple[object, ...]],
     violation_cap: int,
     *,
     role: str,
     seed: int,
-    rerun: Callable[[Tuple[Any, ...]], Dict[str, Any]],
+    rerun: Callable[[Tuple[object, ...]], JSONDict],
     shrink_violations: bool = False,
-) -> Dict[str, Any]:
+) -> JSONDict:
     """Backward compatibility wrapper for evaluate_results."""
     return _evaluate_results_new(
         results, spec, test_inputs, violation_cap,
@@ -953,7 +954,7 @@ def _evaluate_results(
 def _compute_paired_stats(
     baseline_indicators: Sequence[int],
     candidate_indicators: Sequence[int],
-) -> Optional[Dict[str, Any]]:
+) -> Optional[JSONDict]:
     if not baseline_indicators or not candidate_indicators:
         return None
 
@@ -1015,7 +1016,7 @@ def _relation_rng(
     """Backward compatibility wrapper for relation_rng."""
     return _relation_rng_new(seed, case_index, relation_index, relation_name)
 
-def _relation_cache_key(relation_index: int, args: Tuple[Any, ...]) -> str:
+def _relation_cache_key(relation_index: int, args: Tuple[object, ...]) -> str:
     """Backward compatibility wrapper for relation_cache_key."""
     return _relation_cache_key_new(relation_index, args)
 
@@ -1025,15 +1026,15 @@ def _build_call_spec(
     timeout_s: float,
     mem_mb: int,
     executor: str | None,
-    executor_config: Dict[str, Any] | None,
-) -> Dict[str, Any]:
+    executor_config: JSONDict | None,
+) -> JSONDict:
     """Backward compatibility wrapper for build_call_spec."""
     return _build_call_spec_new(file_path, timeout_s=timeout_s, mem_mb=mem_mb, executor=executor, executor_config=executor_config)
 
 
 def _compute_delta_ci(
-    baseline_metrics: Dict[str, Any],
-    candidate_metrics: Dict[str, Any],
+    baseline_metrics: JSONDict,
+    candidate_metrics: JSONDict,
     *,
     alpha: float,
     seed: int,

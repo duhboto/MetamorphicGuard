@@ -10,14 +10,14 @@ from typing import Any, Dict, Optional
 
 import click
 
-from .dispatch_queue import (
+from .queue_adapter import (
     InMemoryQueueAdapter,
     RedisQueueAdapter,
     QueueAdapter,
-    _Result,
-    _decode_args,
 )
-from .sandbox import run_in_sandbox
+from .queue_serialization import decode_args as _decode_args
+from .queue_adapter import QueueResult as _Result
+from .sandbox import run_in_sandbox  # Import from refactored sandbox module
 from .observability import add_log_context, close_logging, configure_logging, configure_metrics, log_event
 
 

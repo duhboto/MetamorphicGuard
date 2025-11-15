@@ -15,7 +15,21 @@ import warnings
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Hashable,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Protocol,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 from .config import EvaluatorConfig, load_config
 from .policy import PolicyLoadError, PolicyParseError, resolve_policy_option
@@ -28,6 +42,21 @@ from .monitoring import Monitor, resolve_monitors
 from .specs import MetamorphicRelation, Metric, Property, Spec, register_spec, unregister_spec
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Type variables for generic task specifications
+T = TypeVar("T")  # Input/output type variable
+OutputT = TypeVar("OutputT")  # Output type variable
+
+
+class CallableImplementation(Protocol):
+    """Protocol for callable implementations that can be validated."""
+
+    __module__: str
+    __qualname__: str
+
+    def __call__(self, *args: object) -> object: ...
+
 
 # ---------------------------------------------------------------------------
 # User-facing dataclasses
@@ -43,13 +72,13 @@ class TaskSpec:
     """
 
     name: str
-    gen_inputs: Callable[[int, int], List[Tuple[Any, ...]]]
+    gen_inputs: Callable[[int, int], List[Tuple[object, ...]]]
     properties: Sequence[Property]
     relations: Sequence[MetamorphicRelation]
-    equivalence: Callable[[Any, Any], bool]
-    fmt_in: Callable[[Tuple[Any, ...]], str] = lambda args: str(args)
-    fmt_out: Callable[[Any], str] = lambda result: str(result)
-    cluster_key: Optional[Callable[[Tuple[Any, ...]], Any]] = None
+    equivalence: Callable[[object, object], bool]
+    fmt_in: Callable[[Tuple[object, ...]], str] = lambda args: str(args)
+    fmt_out: Callable[[object], str] = lambda result: str(result)
+    cluster_key: Optional[Callable[[Tuple[object, ...]], Hashable]] = None
     metrics: Sequence[Metric] = field(default_factory=tuple)
 
     def to_spec(self) -> Spec:
@@ -73,7 +102,7 @@ class Implementation:
     """
 
     path: Optional[str] = None
-    func: Optional[Callable[..., Any]] = None
+    func: Optional[CallableImplementation] = None
 
     def __post_init__(self) -> None:
         if (self.path is None) == (self.func is None):
@@ -85,7 +114,7 @@ class Implementation:
             self._validate_callable(self.func)
 
     @classmethod
-    def from_callable(cls, func: Callable[..., Any]) -> "Implementation":
+    def from_callable(cls, func: CallableImplementation) -> "Implementation":
         """Create an Implementation backed by a Python callable."""
         return cls(path=None, func=func)
 
@@ -111,7 +140,7 @@ class Implementation:
         except ImportError as exc:
             raise ValueError(f"Cannot import module '{module_name}'.") from exc
 
-        target: Any = module
+        target: object = module
         for part in attr_path.split("."):
             if not hasattr(target, part):
                 raise ValueError(f"Attribute '{part}' not found while resolving '{dotted}'.")
@@ -144,7 +173,7 @@ class Implementation:
         return cls(path=str(path_candidate))
 
     @staticmethod
-    def _validate_callable(func: Callable[..., Any]) -> None:
+    def _validate_callable(func: CallableImplementation) -> None:
         module = getattr(func, "__module__", None)
         qualname = getattr(func, "__qualname__", None)
         if not module or not qualname:

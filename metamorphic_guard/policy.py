@@ -9,26 +9,42 @@ from typing import Any, Dict, Optional
 
 import tomllib
 
+from .errors import PolicyError
 
-class PolicyLoadError(Exception):
+
+class PolicyLoadError(PolicyError):
     """Raised when a policy file cannot be loaded or parsed."""
 
+    def __init__(self, message: str, *, original: Exception | None = None) -> None:
+        super().__init__(
+            message,
+            error_code="POLICY_LOAD_ERROR",
+            original=original,
+        )
 
-class PolicyParseError(Exception):
+
+class PolicyParseError(PolicyError):
     """Raised when a policy string cannot be parsed."""
+
+    def __init__(self, message: str, *, original: Exception | None = None) -> None:
+        super().__init__(
+            message,
+            error_code="POLICY_PARSE_ERROR",
+            original=original,
+        )
 
 
 def load_policy_file(path: Path, *, schema: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Load a policy TOML file, optionally validating against a schema."""
     try:
         raw_text = path.read_text(encoding="utf-8")
-    except Exception as exc:  # pragma: no cover - filesystem errors
-        raise PolicyLoadError(f"Failed to read policy '{path}': {exc}") from exc
+    except (FileNotFoundError, PermissionError, OSError) as exc:  # pragma: no cover - filesystem errors
+        raise PolicyLoadError(f"Failed to read policy '{path}': {exc}", original=exc) from exc
 
     try:
         data = tomllib.loads(raw_text)
-    except Exception as exc:
-        raise PolicyLoadError(f"Failed to parse policy TOML '{path}': {exc}") from exc
+    except (tomllib.TOMLDecodeError, ValueError, TypeError) as exc:
+        raise PolicyLoadError(f"Failed to parse policy TOML '{path}': {exc}", original=exc) from exc
 
     if not isinstance(data, dict):
         raise PolicyLoadError("Policy file must decode to a TOML table.")
@@ -212,9 +228,10 @@ def _validate_policy(data: Dict[str, Any], schema: Dict[str, Any]) -> None:
     """Validates the policy data against a simple JSON-schema-like mapping."""
     try:
         from jsonschema import Draft202012Validator, validate  # type: ignore
-    except Exception as exc:  # pragma: no cover - optional dependency
+    except ImportError as exc:  # pragma: no cover - optional dependency
         raise PolicyLoadError(
-            "jsonschema is required for policy validation. Install with `pip install jsonschema`."
+            "jsonschema is required for policy validation. Install with `pip install jsonschema`.",
+            original=exc,
         ) from exc
 
     errors = sorted(Draft202012Validator(schema).iter_errors(data), key=lambda e: e.path)

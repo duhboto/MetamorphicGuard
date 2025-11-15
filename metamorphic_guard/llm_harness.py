@@ -4,11 +4,22 @@ LLM Harness for easy integration of LLM evaluation with Metamorphic Guard.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Union, TypedDict
 
 from .harness import run_eval
 from .judges import Judge, LLMJudge
 from .mutants import Mutant, PromptMutant
+
+
+# Type definitions for LLM evaluation
+LLMCaseInput = Union[Dict[str, str], List[str], str]
+"""Type for LLM case input: dict with system/user, list of prompts, or single prompt string."""
+
+ExecutorConfig = Dict[str, Union[str, int, float, bool, Dict[str, Any]]]
+"""Type for executor configuration dictionaries."""
+
+EvaluationReport = Dict[str, Any]
+"""Type for evaluation report dictionaries returned by run_eval."""
 
 
 class LLMHarness:
@@ -37,13 +48,13 @@ class LLMHarness:
         self,
         model: str = "gpt-3.5-turbo",
         provider: str = "openai",
-        executor_config: Optional[Dict[str, Any]] = None,
+        executor_config: Optional[ExecutorConfig] = None,
         max_tokens: int = 512,
         temperature: float = 0.0,
         seed: Optional[int] = None,
         baseline_model: Optional[str] = None,
         baseline_provider: Optional[str] = None,
-        baseline_executor_config: Optional[Dict[str, Any]] = None,
+        baseline_executor_config: Optional[ExecutorConfig] = None,
     ) -> None:
         """
         Initialize LLM harness.
@@ -128,7 +139,7 @@ class LLMHarness:
 
     def run(
         self,
-        case: Dict[str, Any] | List[str] | str,
+        case: LLMCaseInput,
         props: Optional[Sequence[Judge | LLMJudge]] = None,
         mrs: Optional[Sequence[Mutant | PromptMutant]] = None,
         n: int = 100,
@@ -137,7 +148,7 @@ class LLMHarness:
         baseline_model: Optional[str] = None,
         baseline_system: Optional[str] = None,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> EvaluationReport:
         """
         Run evaluation of LLM on test cases.
 

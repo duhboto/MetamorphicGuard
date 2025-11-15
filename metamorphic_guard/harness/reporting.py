@@ -275,7 +275,7 @@ def evaluate_results(
                     transformed_args = relation.transform(*args, rng=relation_rng_obj)
                 else:
                     transformed_args = relation.transform(*args)
-            except Exception as exc:
+            except Exception as exc:  # User-provided relation.transform may raise any exception
                 mr_passed = False
                 stats_entry["failures"] += 1
                 if len(mr_violations) < violation_cap:
@@ -369,7 +369,7 @@ def evaluate_results(
                     violation["shrunk_input"] = spec.fmt_in(shrunk_args)
                     violation["original_input"] = violation.get("input")
                     violation["input"] = spec.fmt_in(shrunk_args)
-            except Exception:
+            except Exception:  # shrink_input may raise any exception, keep original on failure
                 # Shrinking failed, keep original
                 pass
             return violation
@@ -545,7 +545,7 @@ def safe_extract_metric(metric: Metric, result: Dict[str, Any], args: Tuple[Any,
         if value is None:
             return None
         return float(value)
-    except Exception:
+    except (ValueError, TypeError):
         return None
 
 
@@ -583,7 +583,7 @@ def should_sample_metric(metric: Metric, index: int, global_seed: Optional[int])
     rate = getattr(metric, "sample_rate", 1.0)
     try:
         rate = float(rate)
-    except Exception:
+    except (ValueError, TypeError):
         rate = 1.0
     rate = max(0.0, min(1.0, rate))
     if rate <= 0.0:

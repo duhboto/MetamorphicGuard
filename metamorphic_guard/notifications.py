@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import urllib.error
 import urllib.request
 from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
@@ -54,7 +55,7 @@ def send_webhook_alerts(
         try:
             request = urllib.request.Request(url, data=data, headers=headers)
             opener(request)
-        except Exception as exc:  # pragma: no cover - network errors
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as exc:  # pragma: no cover - network errors
             logger.warning("Failed to send alert to %s: %s", url, exc)
             continue
 
@@ -76,7 +77,7 @@ def send_slack_message(webhook_url: str, message: str, *, metadata: Mapping[str,
     try:
         request = urllib.request.Request(webhook_url, data=data, headers={"Content-Type": "application/json"})
         urllib.request.urlopen(request)
-    except Exception as exc:  # pragma: no cover - best effort
+    except (urllib.error.URLError, urllib.error.HTTPError, OSError) as exc:  # pragma: no cover - best effort
         logger.warning("Failed to send Slack message: %s", exc)
 
 
@@ -114,7 +115,7 @@ def create_jira_issue(config: Mapping[str, Any], alert: Mapping[str, Any]) -> No
     )
     try:
         urllib.request.urlopen(request)
-    except Exception as exc:  # pragma: no cover
+    except (urllib.error.URLError, urllib.error.HTTPError, OSError) as exc:  # pragma: no cover
         logger.warning("Failed to create Jira issue: %s", exc)
 
 
@@ -136,7 +137,7 @@ def publish_datadog_event(api_key: str, title: str, text: str, *, tags: Sequence
     )
     try:
         urllib.request.urlopen(request)
-    except Exception as exc:  # pragma: no cover
+    except (urllib.error.URLError, urllib.error.HTTPError, OSError) as exc:  # pragma: no cover
         logger.warning("Failed to publish Datadog event: %s", exc)
 
 

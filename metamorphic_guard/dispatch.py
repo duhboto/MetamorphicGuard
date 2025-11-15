@@ -142,8 +142,16 @@ class LocalDispatcher(Dispatcher):
         return results
 
 
-# The queue-based dispatcher is defined in the sibling module to avoid circular imports.
-from .dispatch_queue import QueueDispatcher  # noqa: E402  # isort:skip
+# The queue-based dispatcher is defined in dispatch/queue_dispatcher.py to avoid circular imports.
+# Import it lazily using absolute import to avoid circular dependency issues.
+def _lazy_import_queue_dispatcher():
+    """Lazy import of QueueDispatcher to avoid circular imports."""
+    from .dispatch_queue_pkg.queue_dispatcher import QueueDispatcher  # noqa: E402  # isort:skip
+    return QueueDispatcher
+
+# Store the function but don't call it yet - actual imports happen at runtime
+# QueueDispatcher will be imported when needed via ensure_dispatcher
+QueueDispatcher = None  # type: ignore[assignment,misc]  # Set lazily to avoid circular import
 
 
 def ensure_dispatcher(
@@ -174,6 +182,7 @@ def ensure_dispatcher(
         # Explicit process pool dispatcher
         return LocalDispatcher(workers, use_process_pool=True)
     if name in {"queue", "distributed"}:
+        QueueDispatcher = _lazy_import_queue_dispatcher()  # Lazy import to avoid circular dependency
         return QueueDispatcher(workers, queue_config)
 
     plugin_registry = dispatcher_plugins()

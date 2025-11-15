@@ -8,6 +8,8 @@ import random
 import time
 from typing import Any, Dict, Optional, Sequence
 
+from .circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
+
 __all__ = ["Executor", "LLMExecutor"]
 
 
@@ -67,6 +69,19 @@ class LLMExecutor(Executor):
             ("RateLimitError", "ServiceUnavailableError", "Timeout", "APIError"),
         )
         self.retry_exception_tokens = tuple(str(name).lower() for name in retry_exceptions)
+
+        # Initialize circuit breaker (disabled by default, enabled via config)
+        enable_circuit_breaker = cfg.get("enable_circuit_breaker", True)
+        if enable_circuit_breaker:
+            circuit_breaker_config = cfg.get("circuit_breaker", {})
+            self.circuit_breaker = CircuitBreaker(
+                failure_threshold=int(circuit_breaker_config.get("failure_threshold", 5)),
+                success_threshold=int(circuit_breaker_config.get("success_threshold", 2)),
+                timeout_seconds=float(circuit_breaker_config.get("timeout_seconds", 60.0)),
+                failure_timeout_seconds=circuit_breaker_config.get("failure_timeout_seconds"),
+            )
+        else:
+            self.circuit_breaker = None
 
     def execute(
         self,
