@@ -203,13 +203,16 @@ def test_compute_violation_focused_score():
     # Cases in violation history should score higher
     score1 = compute_violation_focused_score((1,), violation_history)
     score2 = compute_violation_focused_score((2,), violation_history)
-    score3 = compute_violation_focused_score((3,), violation_history)  # Not in history
+    score3 = compute_violation_focused_score((3,), violation_history)  # Not in history, but similar (within 10 units)
+    score4 = compute_violation_focused_score((100,), violation_history)  # Not in history, not similar
     
     assert score1 == 1.0  # Direct match returns 1.0
     assert score2 == 1.0  # Direct match returns 1.0
-    assert score3 == 0.0  # Not in violation history
+    assert score3 == 0.5  # Similar pattern (within 10 units) returns 0.5
+    assert score4 == 0.0  # Not similar, not in history returns 0.0
     assert score1 > score3
     assert score2 > score3
+    assert score3 > score4
 
 
 def test_score_test_cases():
