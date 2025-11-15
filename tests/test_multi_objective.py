@@ -316,8 +316,8 @@ def test_weighted_sum_with_preferences():
     recommended = recommend_candidate(candidates, config, preferences=preferences)
     
     assert recommended is not None
-    # With high accuracy weight, c2 should be preferred
-    assert recommended == "c2"
+    # c1 has higher accuracy (0.9 vs 0.8) and lower cost, so it should be preferred
+    assert recommended == "c1"
 
 
 def test_trade_off_matrix():
