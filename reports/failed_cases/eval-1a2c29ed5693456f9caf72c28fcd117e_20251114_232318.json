@@ -1,0 +1,62 @@
+{
+  "task": "top_k",
+  "baseline": {
+    "passes": 10,
+    "total": 10,
+    "pass_rate": 1.0,
+    "prop_violations": [],
+    "mr_violations": []
+  },
+  "candidate": {
+    "passes": 10,
+    "total": 10,
+    "pass_rate": 1.0,
+    "prop_violations": [],
+    "mr_violations": []
+  },
+  "config": {
+    "timeout_s": 2.0,
+    "mem_mb": 512,
+    "alpha": 0.05,
+    "effective_alpha": 0.05,
+    "sequential_method": "none",
+    "max_looks": 1,
+    "look_number": 1,
+    "min_delta": 0.02,
+    "improve_delta": 0.02,
+    "min_pass_rate": 0.8,
+    "violation_cap": 25,
+    "parallel": 1,
+    "bootstrap_samples": 1000,
+    "ci_method": "bootstrap",
+    "rr_ci_method": "log",
+    "bayesian_hierarchical": false,
+    "bayesian_posterior_predictive": false,
+    "bayesian_samples": 5000,
+    "executor": null,
+    "executor_config": null,
+    "baseline_executor": null,
+    "candidate_executor": null,
+    "baseline_executor_config": null,
+    "candidate_executor_config": null,
+    "dispatcher": "queue",
+    "queue_config": {
+      "backend": "memory",
+      "heartbeat_interval": 0.5,
+      "lease_timeout": 10.0,
+      "result_poll_timeout": 2.0,
+      "spawn_local_workers": true,
+      "workers": 1
+    },
+    "relation_correction": null
+  },
+  "job_metadata": {
+    "hostname": "Spencers-Mac-Studio.local",
+    "executable": "/opt/anaconda3/bin/python",
+    "python_version": "3.11.8",
+    "git_commit": "5322fa97fbd7763fa7e9528108cb3fdf399adb36",
+    "git_dirty": true,
+    "run_id": "eval-1a2c29ed5693456f9caf72c28fcd117e"
+  },
+  "run_id": "eval-1a2c29ed5693456f9caf72c28fcd117e"
+}

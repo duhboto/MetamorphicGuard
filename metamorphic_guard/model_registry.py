@@ -228,3 +228,90 @@ def get_model_info(name: str) -> Optional[JSONDict]:
         "description": model.description,
         "constraints": model.constraints,
     }
+
+
+def is_valid_model(provider: str, model_name: str) -> bool:
+    """
+    Check if a model name is valid for a given provider.
+    
+    Args:
+        provider: Provider name (e.g., "openai", "anthropic")
+        model_name: Model name to validate
+    
+    Returns:
+        True if the model is registered for the provider, False otherwise
+    """
+    if not model_name or not isinstance(model_name, str) or not model_name.strip():
+        return False
+    
+    models = list_models(provider=provider)
+    return any(m.name == model_name.strip() for m in models)
+
+
+def get_valid_models(provider: str) -> set[str]:
+    """
+    Get set of valid model names for a provider.
+    
+    Args:
+        provider: Provider name (e.g., "openai", "anthropic")
+    
+    Returns:
+        Set of valid model names
+    """
+    models = list_models(provider=provider)
+    return {m.name for m in models}
+
+
+def validate_model(
+    provider: str,
+    model_name: str,
+    *,
+    raise_error: bool = False,
+) -> tuple[bool, Optional[str], list[str]]:
+    """
+    Validate a model name for a provider and optionally provide suggestions.
+    
+    Args:
+        provider: Provider name (e.g., "openai", "anthropic")
+        model_name: Model name to validate
+        raise_error: If True, raise ValueError for invalid models
+    
+    Returns:
+        Tuple of (is_valid, error_message, suggestions)
+    """
+    if not model_name or not isinstance(model_name, str) or not model_name.strip():
+        error_msg = f"Invalid model name: model name cannot be empty"
+        if raise_error:
+            raise ValueError(error_msg)
+        return False, error_msg, []
+    
+    model_name = model_name.strip()
+    is_valid = is_valid_model(provider, model_name)
+    
+    if is_valid:
+        return True, None, []
+    
+    # Generate suggestions (simple fuzzy matching by name similarity)
+    valid_models = get_valid_models(provider)
+    suggestions: list[str] = []
+    
+    # Simple substring matching for suggestions
+    for valid_model in valid_models:
+        if model_name.lower() in valid_model.lower() or valid_model.lower() in model_name.lower():
+            suggestions.append(valid_model)
+    
+    # Limit suggestions
+    suggestions = suggestions[:5]
+    
+    error_msg = f"Invalid model name '{model_name}' for provider '{provider}'"
+    if suggestions:
+        error_msg += f". Did you mean: {', '.join(suggestions[:3])}?"
+    
+    if raise_error:
+        raise ValueError(error_msg)
+    
+    return False, error_msg, suggestions
+
+
+# Initialize default registry on module import
+initialize_default_registry()
