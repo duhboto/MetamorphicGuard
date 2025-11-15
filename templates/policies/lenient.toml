@@ -1,0 +1,19 @@
+name = "lenient"
+description = "Lenient promotion policy for low-risk changes, allowing non-inferiority or small improvements."
+
+[gating]
+# Allow non-inferiority (candidate can be slightly worse, up to 1%)
+min_delta = -0.01
+
+# Candidate must pass at least 70% of test cases
+min_pass_rate = 0.70
+
+# More lenient significance level (10%)
+alpha = 0.10
+
+# Lower power requirement (70%)
+power_target = 0.7
+
+# Allow more violations
+violation_cap = 50
+
