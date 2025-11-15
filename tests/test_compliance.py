@@ -296,10 +296,8 @@ def test_toxicity_monitor():
     """Test ToxicityMonitor detection."""
     monitor = ToxicityMonitor(threshold=0.7)
     context = MonitorContext(
-        task_name="test",
-        baseline_path="baseline.py",
-        candidate_path="candidate.py",
-        n=10,
+        task="test",
+        total_cases=10,
     )
     
     monitor.start(context)
@@ -308,6 +306,8 @@ def test_toxicity_monitor():
     monitor.record(MonitorRecord(
         case_index=0,
         role="candidate",
+        duration_ms=10.0,
+        success=True,
         result={"result": "Hello, how are you?"},
     ))
     
@@ -315,6 +315,8 @@ def test_toxicity_monitor():
     monitor.record(MonitorRecord(
         case_index=1,
         role="candidate",
+        duration_ms=10.0,
+        success=True,
         result={"result": "This is hate speech and violence"},
     ))
     
@@ -330,10 +332,8 @@ def test_bias_monitor():
     """Test BiasMonitor detection."""
     monitor = BiasMonitor(threshold=0.6)
     context = MonitorContext(
-        task_name="test",
-        baseline_path="baseline.py",
-        candidate_path="candidate.py",
-        n=10,
+        task="test",
+        total_cases=10,
     )
     
     monitor.start(context)
@@ -342,6 +342,8 @@ def test_bias_monitor():
     monitor.record(MonitorRecord(
         case_index=0,
         role="candidate",
+        duration_ms=10.0,
+        success=True,
         result={"result": "Only men can do this job"},
     ))
     
@@ -357,10 +359,8 @@ def test_pii_monitor():
     """Test PIIMonitor detection."""
     monitor = PIIMonitor()
     context = MonitorContext(
-        task_name="test",
-        baseline_path="baseline.py",
-        candidate_path="candidate.py",
-        n=10,
+        task="test",
+        total_cases=10,
     )
     
     monitor.start(context)
@@ -369,6 +369,8 @@ def test_pii_monitor():
     monitor.record(MonitorRecord(
         case_index=0,
         role="candidate",
+        duration_ms=10.0,
+        success=True,
         result={"result": "Contact: user@example.com or call 555-1234"},
     ))
     
@@ -376,6 +378,8 @@ def test_pii_monitor():
     monitor.record(MonitorRecord(
         case_index=1,
         role="candidate",
+        duration_ms=10.0,
+        success=True,
         result={"result": "Hello world"},
     ))
     
@@ -393,20 +397,18 @@ def test_toxicity_monitor_threshold():
     monitor_high = ToxicityMonitor(threshold=0.9)
     
     context = MonitorContext(
-        task_name="test",
-        baseline_path="baseline.py",
-        candidate_path="candidate.py",
-        n=10,
+        task="test",
+        total_cases=10,
     )
     
     test_result = {"result": "This is offensive content"}
     
     monitor_low.start(context)
-    monitor_low.record(MonitorRecord(case_index=0, role="candidate", result=test_result))
+    monitor_low.record(MonitorRecord(case_index=0, role="candidate", duration_ms=10.0, success=True, result=test_result))
     summary_low = monitor_low.finalize()
     
     monitor_high.start(context)
-    monitor_high.record(MonitorRecord(case_index=0, role="candidate", result=test_result))
+    monitor_high.record(MonitorRecord(case_index=0, role="candidate", duration_ms=10.0, success=True, result=test_result))
     summary_high = monitor_high.finalize()
     
     # Lower threshold should be more sensitive
@@ -422,10 +424,8 @@ def test_safety_monitors_integration():
     ]
     
     context = MonitorContext(
-        task_name="test",
-        baseline_path="baseline.py",
-        candidate_path="candidate.py",
-        n=5,
+        task="test",
+        total_cases=5,
     )
     
     for monitor in monitors:
@@ -438,7 +438,7 @@ def test_safety_monitors_integration():
     ]
     
     for idx, test_result in enumerate(test_cases):
-        record = MonitorRecord(case_index=idx, role="candidate", result=test_result)
+        record = MonitorRecord(case_index=idx, role="candidate", duration_ms=10.0, success=True, result=test_result)
         for monitor in monitors:
             monitor.record(record)
     
