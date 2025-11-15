@@ -230,7 +230,6 @@ def test_score_test_cases():
     ]
     
     strategy = SamplingStrategy(
-        uncertainty_weight=0.5,
         diversity_weight=0.3,
         violation_weight=0.2,
         batch_size=2,
@@ -271,7 +270,6 @@ def test_select_next_batch():
     ]
     
     strategy = SamplingStrategy(
-        uncertainty_weight=0.5,
         diversity_weight=0.3,
         violation_weight=0.2,
         batch_size=2,
@@ -392,9 +390,9 @@ def test_sampling_strategy_weights():
     baseline_results = [None, None, None]
     candidate_results = [None, None, None]
     
-    # Strategy emphasizing uncertainty
+    # Strategy emphasizing uncertainty (default method)
     strategy_uncertainty = SamplingStrategy(
-        uncertainty_weight=1.0,
+        method="uncertainty",
         diversity_weight=0.0,
         violation_weight=0.0,
         batch_size=2,
@@ -402,7 +400,7 @@ def test_sampling_strategy_weights():
     
     # Strategy emphasizing diversity
     strategy_diversity = SamplingStrategy(
-        uncertainty_weight=0.0,
+        method="diversity",
         diversity_weight=1.0,
         violation_weight=0.0,
         batch_size=2,
