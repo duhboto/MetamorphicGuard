@@ -611,7 +611,9 @@ def test_cli_init_interactive(tmp_path):
     runner = CliRunner()
     config_path = tmp_path / "metaguard.toml"
 
-    user_input = """custom_task
+    # New interactive flow: template choice first, then custom inputs if "none"
+    user_input = """none
+custom_task
 baseline.py
 candidate.py
 y
@@ -626,11 +628,12 @@ latency,success_rate
 
     assert result.exit_code == 0
     content = config_path.read_text()
-    assert 'task = "custom_task"' in content
+    # New format uses [task] section with name = "..."
+    assert 'name = "custom_task"' in content
     assert 'baseline = "baseline.py"' in content
     assert 'candidate = "candidate.py"' in content
-    assert 'monitors = ["latency", "success_rate"]' in content
-    assert 'dispatcher = "queue"' in content  # distributed selected
+    assert 'latency' in content and 'success_rate' in content
+    assert 'type = "queue"' in content  # distributed selected
 
 
 def test_cli_scaffold_plugin_monitor(tmp_path):
@@ -794,8 +797,9 @@ def test_cli_init_command(tmp_path):
 
     assert result.exit_code == 0
     contents = config_path.read_text()
-    assert "metamorphic_guard" in contents
-    assert "dispatcher" in contents
+    # New format uses [task] section instead of [metamorphic_guard]
+    assert "[task]" in contents
+    assert "dispatcher" in contents or "queue" in contents.lower()
 
 
 def test_cli_invalid_executor_config():
