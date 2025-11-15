@@ -133,7 +133,9 @@ def test_analyze_trade_offs():
     assert "pareto_optimal" in analysis
     assert "weighted_scores" in analysis
     assert "trade_off_matrix" in analysis
-    assert len(analysis["pareto_frontier"]) == 2
+    # c2 is dominated by c1 (lower cost AND higher accuracy), so only c1 is in frontier
+    assert len(analysis["pareto_frontier"]) == 1
+    assert analysis["pareto_frontier"][0]["candidate_id"] == "c1"
     assert "c1" in analysis["weighted_scores"]
     assert "c2" in analysis["weighted_scores"]
 
