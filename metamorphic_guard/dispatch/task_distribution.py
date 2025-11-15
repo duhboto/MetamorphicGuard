@@ -56,6 +56,10 @@ class TaskDistributionManager:
             ),
         )
         self.max_batch_size = max_batch_size
+        
+        # Performance tracking for improved heuristics
+        self.avg_case_ms: Optional[float] = None
+        self.variance_ms: float = 0.0
         self.current_batch_size = max(1, int(config.get("initial_batch_size", self.configured_batch_size)))
         self.min_batch_size = max(1, int(config.get("min_batch_size", 1)))
         self.adjustment_window = max(1, int(config.get("adjustment_window", 10)))
@@ -77,8 +81,14 @@ class TaskDistributionManager:
         self.remaining_cases: Dict[str, Set[int]] = {}
         self.outstanding_cases = 0
         self.next_index = 0
-        self.avg_case_ms: Optional[float] = None
         self.cases_since_adjustment = 0
+        
+        # Enhanced fault tolerance: track requeue attempts
+        self.requeue_count: Dict[str, int] = {}  # task_id -> requeue count
+        self.max_requeue_attempts = int(config.get("max_requeue_attempts", 3))
+        
+        # Load balancing: track worker load
+        self.worker_load: Dict[str, int] = {}  # worker_id -> number of assigned tasks
 
     def publish_chunk(self, start_idx: int, size: int) -> None:
         """Publish a chunk of test cases as a task."""
@@ -131,34 +141,66 @@ class TaskDistributionManager:
             self.next_index += batch
 
     def update_adaptive_batching(self, duration_ms: float, pending_tasks: int) -> None:
-        """Update batch size based on observed performance."""
+        """Update batch size based on observed performance with improved heuristics."""
         if not self.adaptive_batching or duration_ms <= 0:
             return
 
         self.cases_since_adjustment += 1
+        
+        # Use exponential moving average with adaptive alpha based on variance
         if self.avg_case_ms is None:
             self.avg_case_ms = duration_ms
+            self.variance_ms = 0.0
         else:
-            self.avg_case_ms = 0.8 * self.avg_case_ms + 0.2 * duration_ms
+            # Adaptive smoothing: use higher alpha when variance is low (stable performance)
+            alpha = 0.3 if self.variance_ms < (self.avg_case_ms * 0.1) else 0.2
+            old_avg = self.avg_case_ms
+            self.avg_case_ms = (1 - alpha) * self.avg_case_ms + alpha * duration_ms
+            # Update variance estimate
+            self.variance_ms = 0.9 * self.variance_ms + 0.1 * ((duration_ms - old_avg) ** 2)
 
         if self.cases_since_adjustment >= self.adjustment_window:
+            # Improved heuristics:
+            # 1. Consider queue depth relative to workers
+            queue_ratio = pending_tasks / max(self.workers, 1)
+            
+            # 2. Consider throughput (cases per second)
+            throughput = 1000.0 / self.avg_case_ms if self.avg_case_ms > 0 else 0.0
+            
+            # 3. Increase batch size if:
+            #    - Fast execution AND low queue depth AND stable performance
             if (
                 self.avg_case_ms is not None
                 and self.avg_case_ms < self.fast_threshold_ms
-                and pending_tasks <= self.workers
+                and queue_ratio < 1.5  # Queue not backing up
+                and self.variance_ms < (self.avg_case_ms * 0.2)  # Stable performance
             ):
-                if self.current_batch_size < self.max_batch_size:
-                    self.current_batch_size += 1
+                # Aggressive increase when conditions are good
+                increment = max(1, int(self.current_batch_size * 0.2))
+                self.current_batch_size = min(self.max_batch_size, self.current_batch_size + increment)
+            
+            # 4. Decrease batch size if:
+            #    - Slow execution OR high queue depth OR unstable performance
             elif (
                 self.avg_case_ms is not None
-                and (self.avg_case_ms > self.slow_threshold_ms or pending_tasks > self.workers * 4)
+                and (
+                    self.avg_case_ms > self.slow_threshold_ms
+                    or queue_ratio > 3.0  # Queue backing up significantly
+                    or self.variance_ms > (self.avg_case_ms * 0.5)  # Unstable performance
+                )
             ):
-                if self.current_batch_size > self.min_batch_size:
-                    self.current_batch_size -= 1
-            self.target_inflight_cases = max(
+                # More conservative decrease
+                decrement = max(1, int(self.current_batch_size * 0.15))
+                self.current_batch_size = max(self.min_batch_size, self.current_batch_size - decrement)
+            
+            # Update target inflight cases based on throughput
+            # Aim for 2-3x worker capacity for good pipeline utilization
+            ideal_inflight = max(
                 self.current_batch_size * self.workers * self.inflight_factor,
-                self.current_batch_size,
+                int(throughput * self.avg_case_ms / 1000.0 * self.workers * 1.5) if throughput > 0 else self.current_batch_size,
             )
+            self.target_inflight_cases = max(self.current_batch_size, min(ideal_inflight, len(self.test_inputs)))
+            
             self.cases_since_adjustment = 0
 
     def requeue_stale_task(
@@ -202,7 +244,27 @@ class TaskDistributionManager:
         if not should_requeue:
             return False
 
+        # Enhanced fault tolerance: check requeue limit
+        requeue_count = self.requeue_count.get(task_id, 0)
+        if requeue_count >= self.max_requeue_attempts:
+            # Task has been requeued too many times - mark as failed
+            # Remove from tracking but don't requeue
+            self.tasks.pop(task_id, None)
+            self.deadlines.pop(task_id, None)
+            self.remaining_cases.pop(task_id, None)
+            self.requeue_count.pop(task_id, None)
+            self.outstanding_cases -= len(outstanding)
+            return False
+
+        # Increment requeue count
+        self.requeue_count[task_id] = requeue_count + 1
+
+        # Clear worker assignment
         self.adapter.pop_assignment(task_id)
+        if assigned_worker:
+            # Update worker load tracking
+            self.worker_load[assigned_worker] = max(0, self.worker_load.get(assigned_worker, 0) - 1)
+
         sorted_indices = sorted(outstanding)
         args_chunk = [self.test_inputs[i] for i in sorted_indices]
         payload, compressed_flag, _, _ = prepare_payload(

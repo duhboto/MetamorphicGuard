@@ -21,6 +21,7 @@ def run_in_sandbox(
     *,
     executor: Optional[str] = None,
     executor_config: Optional[Dict[str, Any]] = None,
+    enable_cache: bool = True,
 ) -> Dict[str, Any]:
     """
     Execute the requested function inside an isolated sandbox.
@@ -32,7 +33,32 @@ def run_in_sandbox(
     * `local`  (default): fork/exec on the host with resource limits.
     * `docker`: launch inside a Docker container with network disabled.
     * `<module>:<callable>`: import and invoke an external plugin.
+    
+    Args:
+        file_path: Path to implementation file
+        func_name: Function name to call
+        args: Input arguments
+        timeout_s: Timeout in seconds
+        mem_mb: Memory limit in MB
+        executor: Executor backend name
+        executor_config: Executor configuration
+        enable_cache: Whether to use result caching (default: True)
     """
+
+    # Check cache if enabled (only for non-LLM executors to avoid caching API calls)
+    if enable_cache:
+        backend, _ = _resolve_executor(executor, executor_config)
+        # Don't cache LLM executor results (they may vary, and caching API calls is not useful)
+        if backend not in ("openai", "anthropic", "vllm"):
+            try:
+                from ..result_cache import get_result_cache
+                cache = get_result_cache()
+                cached = cache.get(file_path, func_name, args)
+                if cached is not None:
+                    return cached
+            except Exception:
+                # If caching fails, continue with normal execution
+                pass
 
     backend, config = _resolve_executor(executor, executor_config)
 
@@ -75,7 +101,21 @@ def run_in_sandbox(
         call_kwargs["config"] = config
 
     raw_result = executor_callable(file_path, func_name, args, timeout_s, mem_mb, **call_kwargs)
-    return _finalize_result(raw_result, config)
+    result = _finalize_result(raw_result, config)
+    
+    # Cache result if enabled and not an LLM executor
+    if enable_cache and backend not in ("openai", "anthropic", "vllm"):
+        try:
+            from ..result_cache import get_result_cache
+            cache = get_result_cache()
+            # Only cache successful results to avoid caching errors
+            if result.get("success", False):
+                cache.set(file_path, func_name, args, result)
+        except Exception:
+            # If caching fails, continue normally
+            pass
+    
+    return result
 
 
 

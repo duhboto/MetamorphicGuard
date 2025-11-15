@@ -52,7 +52,15 @@ def prepare_execution_plan(
     else:
         test_inputs = spec.gen_inputs(n, seed)
 
-    worker_count = max(1, parallel or 1)
+    # Auto-detect optimal worker count if parallel is None
+    if parallel is None:
+        import os
+        # Default to CPU count for I/O-bound tasks (sandbox execution is I/O-bound)
+        cpu_count = os.cpu_count() or 4
+        worker_count = max(1, cpu_count)
+    else:
+        worker_count = max(1, parallel)
+    
     dispatcher_obj = ensure_dispatcher(dispatcher, worker_count, queue_config)
 
     monitor_objs = list(monitors or [])

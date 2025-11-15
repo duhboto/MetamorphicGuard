@@ -38,9 +38,10 @@ class LocalDispatcher(Dispatcher):
     for CPU-bound tasks, though this requires all callables to be picklable.
     """
 
-    def __init__(self, workers: int = 1, *, use_process_pool: bool = False) -> None:
+    def __init__(self, workers: int = 1, *, use_process_pool: bool = False, auto_workers: bool = False) -> None:
         super().__init__(workers, kind="local")
         self.use_process_pool = use_process_pool
+        self.auto_workers = auto_workers
 
     def execute(
         self,
@@ -52,7 +53,9 @@ class LocalDispatcher(Dispatcher):
         call_spec: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         monitors = list(monitors or [])
-        results: List[Dict[str, Any]] = [{} for _ in range(len(test_inputs))]
+        # Pre-allocate results list for memory efficiency
+        # Use None initially to reduce memory footprint for large test suites
+        results: List[Dict[str, Any]] = [None] * len(test_inputs)  # type: ignore[list-item]
 
         def _invoke(index: int, args: Tuple[Any, ...]) -> Dict[str, Any]:
             result = run_case(index, args)
@@ -101,7 +104,16 @@ class LocalDispatcher(Dispatcher):
             
             return result
 
-        if self.workers <= 1:
+        # Auto-detect optimal worker count if enabled
+        effective_workers = self.workers
+        if self.auto_workers and self.workers == 1:
+            import os
+            # For I/O-bound tasks (sandbox execution), use more workers
+            # Default to CPU count * 2 for I/O-bound, or CPU count for CPU-bound
+            cpu_count = os.cpu_count() or 4
+            effective_workers = cpu_count * 2 if not self.use_process_pool else cpu_count
+        
+        if effective_workers <= 1:
             for idx, args in enumerate(test_inputs):
                 results[idx] = _invoke(idx, args)
             return results
@@ -112,14 +124,17 @@ class LocalDispatcher(Dispatcher):
         executor_class = ProcessPoolExecutor if self.use_process_pool else ThreadPoolExecutor
         
         try:
-            with executor_class(max_workers=self.workers) as pool:
+            with executor_class(max_workers=effective_workers) as pool:
                 future_map = {
                     pool.submit(_invoke, idx, args): idx
                     for idx, args in enumerate(test_inputs)
                 }
                 for future in as_completed(future_map):
                     idx = future_map[future]
-                    results[idx] = future.result()
+                    result = future.result()
+                    results[idx] = result
+                    # Allow garbage collection of future object immediately
+                    del future_map[future]
         except (AttributeError, TypeError, pickle.PickleError) as e:
             # If process pool fails due to pickling issues, fall back to threads
             if self.use_process_pool:
@@ -160,6 +175,7 @@ def ensure_dispatcher(
     queue_config: Dict[str, Any] | None = None,
     *,
     use_process_pool: bool = False,
+    auto_workers: bool = False,
 ) -> Dispatcher:
     """
     Return an appropriate dispatcher instance based on user input.
@@ -177,10 +193,10 @@ def ensure_dispatcher(
 
     name = (dispatcher or "local").lower()
     if name in {"local", "threaded"}:
-        return LocalDispatcher(workers, use_process_pool=use_process_pool)
+        return LocalDispatcher(workers, use_process_pool=use_process_pool, auto_workers=auto_workers)
     if name == "process":
         # Explicit process pool dispatcher
-        return LocalDispatcher(workers, use_process_pool=True)
+        return LocalDispatcher(workers, use_process_pool=True, auto_workers=auto_workers)
     if name in {"queue", "distributed"}:
         QueueDispatcher = _lazy_import_queue_dispatcher()  # Lazy import to avoid circular dependency
         return QueueDispatcher(workers, queue_config)

@@ -70,12 +70,21 @@ class QueueDispatcher(Dispatcher):
             self.adapter = InMemoryQueueAdapter(heartbeat_config=heartbeat_config)
         elif backend_lower == "redis":
             self.adapter = RedisQueueAdapter(self.config)
+        elif backend_lower == "sqs":
+            from ..queue_adapters.sqs import SQSQueueAdapter
+            self.adapter = SQSQueueAdapter(self.config)
+        elif backend_lower == "rabbitmq":
+            from ..queue_adapters.rabbitmq import RabbitMQQueueAdapter
+            self.adapter = RabbitMQQueueAdapter(self.config)
+        elif backend_lower == "kafka":
+            from ..queue_adapters.kafka import KafkaQueueAdapter
+            self.adapter = KafkaQueueAdapter(self.config)
         else:
             from ..plugins import dispatcher_plugins
 
             definition = dispatcher_plugins().get(backend_lower)
             if not definition:
-                raise ValueError(f"Unsupported queue backend '{backend}'.")
+                raise ValueError(f"Unsupported queue backend '{backend}'. Available: memory, redis, sqs, rabbitmq, kafka")
             factory = definition.factory
             self.adapter = factory(self.config)
 
@@ -158,9 +167,15 @@ class QueueDispatcher(Dispatcher):
                         lost_workers = self.adapter.check_stale_workers()
 
                     heartbeats = self.adapter.worker_heartbeats()
+                    
+                    # Enhanced fault tolerance: check for stale workers
+                    if hasattr(self.adapter, "check_stale_workers"):
+                        detected_stale = self.adapter.check_stale_workers()
+                        lost_workers.update(detected_stale)
+                    
                     for task_id in list(task_manager.deadlines.keys()):
                         assigned = self.adapter.get_assignment(task_id)
-                        task_manager.requeue_stale_task(
+                        was_requeued = task_manager.requeue_stale_task(
                             task_id=task_id,
                             now=now,
                             enable_requeue=enable_requeue,
@@ -168,6 +183,10 @@ class QueueDispatcher(Dispatcher):
                             assigned_worker=assigned,
                             lost_workers=lost_workers,
                         )
+                        
+                        # Track worker load when task is assigned
+                        if assigned and not was_requeued and hasattr(task_manager, 'worker_load'):
+                            task_manager.worker_load[assigned] = task_manager.worker_load.get(assigned, 0) + 1
 
                 remaining_time = overall_deadline - now
                 if remaining_time <= 0:
@@ -180,7 +199,13 @@ class QueueDispatcher(Dispatcher):
                     continue
 
                 idx = message.case_index
-                self.adapter.pop_assignment(message.task_id)
+                assigned_worker = self.adapter.pop_assignment(message.task_id)
+                
+                # Update worker load for load balancing
+                if assigned_worker and hasattr(task_manager, 'worker_load'):
+                    task_manager.worker_load[assigned_worker] = max(
+                        0, task_manager.worker_load.get(assigned_worker, 0) - 1
+                    )
                 task_manager.mark_case_complete(message.task_id, idx)
 
                 results[idx] = message.result
