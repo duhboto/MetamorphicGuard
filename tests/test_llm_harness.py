@@ -125,6 +125,38 @@ class TestLLMHarnessIntegration:
             mock_openai,
         )
         
+        # Mock OpenAI executor __init__ to bypass API key check
+        original_init = None
+        try:
+            from metamorphic_guard.executors.openai import OpenAIExecutor
+            original_init = OpenAIExecutor.__init__
+            
+            def mock_init(self, config=None):
+                # Call parent __init__ but skip API key validation
+                from metamorphic_guard.executors import Executor
+                Executor.__init__(self, config)
+                cfg = config or {}
+                self.provider = cfg.get("provider", "openai")
+                self.model = cfg.get("model", "gpt-3.5-turbo")
+                self.max_tokens = cfg.get("max_tokens", 512)
+                self.temperature = cfg.get("temperature", 0.0)
+                self.seed = cfg.get("seed")
+                self.system_prompt = cfg.get("system_prompt")
+                self.max_retries = int(cfg.get("max_retries", 3))
+                # Set api_key to a dummy value to bypass validation
+                if config and "api_key" in config:
+                    self.api_key = config["api_key"]
+                else:
+                    self.api_key = "test-key"
+                self.client = mock_openai.OpenAI(api_key=self.api_key)
+            
+            monkeypatch.setattr(
+                "metamorphic_guard.executors.openai.OpenAIExecutor.__init__",
+                mock_init,
+            )
+        except ImportError:
+            pass
+        
         # Mock OpenAI executor execute method
         monkeypatch.setattr(
             "metamorphic_guard.executors.openai.OpenAIExecutor.execute",
