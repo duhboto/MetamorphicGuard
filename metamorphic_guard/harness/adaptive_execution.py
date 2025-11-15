@@ -254,8 +254,8 @@ def execute_adaptively(
                     seed=seed,
                 )
                 
-                if delta_ci_result:
-                    delta_ci = (delta_ci_result["lower"], delta_ci_result["upper"])
+                if delta_ci_result and len(delta_ci_result) == 2:
+                    delta_ci = (delta_ci_result[0], delta_ci_result[1])
                     early_stop_decision = should_stop_early(
                         baseline_pr_metrics,
                         candidate_pr_metrics,
