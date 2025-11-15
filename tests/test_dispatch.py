@@ -146,8 +146,12 @@ def test_queue_requeues_stalled_worker(monkeypatch):
     def _record_requeue(count: int = 1) -> None:
         requeue_counts.append(count)
 
+    # Patch where it's actually used (in task_distribution) since it's imported at module level
+    # This ensures we intercept the call even though it's imported from observability
+    import metamorphic_guard.dispatch.task_distribution as task_distribution_module
     monkeypatch.setattr(
-        "metamorphic_guard.dispatch_queue.increment_queue_requeued",
+        task_distribution_module,
+        "increment_queue_requeued",
         _record_requeue,
     )
 
@@ -229,4 +233,5 @@ def test_queue_requeues_stalled_worker(monkeypatch):
     # Note: Requeue may not always happen due to timing, but results should be correct
     # The important thing is that both tasks complete successfully
     assert len(results) == 2, "Both tasks should complete"
+    assert sum(requeue_counts) >= 1
 

@@ -116,7 +116,16 @@ class TestLLMHarnessIntegration:
                 "retries": 0,
             }
         
-        # Mock OpenAI executor
+        # Mock openai module to prevent ImportError in __init__
+        from unittest.mock import MagicMock
+        mock_openai = MagicMock()
+        mock_openai.OpenAI = MagicMock()
+        monkeypatch.setattr(
+            "metamorphic_guard.executors.openai.openai",
+            mock_openai,
+        )
+        
+        # Mock OpenAI executor execute method
         monkeypatch.setattr(
             "metamorphic_guard.executors.openai.OpenAIExecutor.execute",
             mock_execute,
