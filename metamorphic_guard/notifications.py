@@ -141,6 +141,46 @@ def publish_datadog_event(api_key: str, title: str, text: str, *, tags: Sequence
         logger.warning("Failed to publish Datadog event: %s", exc)
 
 
+def send_pagerduty_alert(
+    integration_key: str,
+    summary: str,
+    source: str = "metamorphic-guard",
+    severity: str = "warning",
+    *,
+    metadata: Mapping[str, Any] | None = None,
+) -> None:
+    """
+    Send a PagerDuty alert via Events API v2.
+    
+    Args:
+        integration_key: PagerDuty integration key
+        summary: Alert summary text
+        source: Source identifier (default: "metamorphic-guard")
+        severity: Alert severity (info, warning, error, critical)
+        metadata: Additional metadata to include in the alert
+    """
+    payload = {
+        "routing_key": integration_key,
+        "event_action": "trigger",
+        "payload": {
+            "summary": summary,
+            "source": source,
+            "severity": severity,
+            "custom_details": dict(metadata or {}),
+        },
+    }
+    data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        "https://events.pagerduty.com/v2/enqueue",
+        data=data,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        urllib.request.urlopen(request)
+    except (urllib.error.URLError, urllib.error.HTTPError, OSError) as exc:  # pragma: no cover
+        logger.warning("Failed to send PagerDuty alert: %s", exc)
+
+
 def base64_auth(user: str, token: str) -> str:
     import base64
 

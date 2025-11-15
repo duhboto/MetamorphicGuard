@@ -438,9 +438,67 @@ class LLMCostMonitor(Monitor):
         }
 
 
-def resolve_monitors(specs: Sequence[str], *, sandbox_plugins: bool = False) -> List[Monitor]:
-    """Instantiate monitors based on CLI-style specifications."""
+class CompositeMonitor(Monitor):
+    """Monitor that combines multiple monitors into one."""
+    
+    def __init__(self, monitors: Sequence[Monitor]) -> None:
+        super().__init__()
+        self._monitors = list(monitors)
+    
+    def identifier(self) -> str:
+        names = [m.identifier() for m in self._monitors]
+        return f"composite({','.join(names)})"
+    
+    def start(self, context: MonitorContext) -> None:
+        super().start(context)
+        for monitor in self._monitors:
+            monitor.start(context)
+    
+    def record(self, record: MonitorRecord) -> None:
+        for monitor in self._monitors:
+            monitor.record(record)
+    
+    def finalize(self) -> Dict[str, Any]:
+        results = {}
+        all_alerts = []
+        for monitor in self._monitors:
+            monitor_result = monitor.finalize()
+            monitor_id = monitor.identifier()
+            results[monitor_id] = monitor_result
+            alerts = monitor_result.get("alerts", [])
+            for alert in alerts:
+                alert["monitor"] = monitor_id
+                all_alerts.append(alert)
+        
+        return {
+            "id": self.identifier(),
+            "type": "composite",
+            "monitors": results,
+            "alerts": all_alerts,
+            "summary": {
+                "total_monitors": len(self._monitors),
+                "total_alerts": len(all_alerts),
+            },
+        }
 
+
+def create_composite_monitor(monitors: Sequence[Monitor]) -> CompositeMonitor:
+    """Create a composite monitor from a sequence of monitors."""
+    return CompositeMonitor(monitors)
+
+
+def resolve_monitors(specs: Sequence[str], *, sandbox_plugins: bool = False, composite: bool = False) -> List[Monitor]:
+    """
+    Instantiate monitors based on CLI-style specifications.
+    
+    Args:
+        specs: List of monitor specifications (e.g., ["latency", "llm_cost:alert_ratio=1.5"])
+        sandbox_plugins: Whether to sandbox plugin monitors
+        composite: If True, return a single CompositeMonitor containing all monitors
+    
+    Returns:
+        List of Monitor instances, or a single CompositeMonitor if composite=True
+    """
     builtin_registry = {
         "latency": LatencyMonitor,
         "success_rate": SuccessRateMonitor,
@@ -451,6 +509,8 @@ def resolve_monitors(specs: Sequence[str], *, sandbox_plugins: bool = False) -> 
         "resource_usage": ResourceUsageMonitor,
         "llm_cost": LLMCostMonitor,
         "llm_cost_monitor": LLMCostMonitor,
+        "performance": None,  # Lazy import to avoid circular dependency
+        "profiler": None,  # Lazy import
     }
 
     plugin_registry = monitor_plugins()
@@ -459,6 +519,15 @@ def resolve_monitors(specs: Sequence[str], *, sandbox_plugins: bool = False) -> 
     for spec in specs:
         name, params = _parse_monitor_spec(spec)
         factory = builtin_registry.get(name)
+        
+        # Handle lazy imports for performance profiler
+        if factory is None and name in ("performance", "profiler"):
+            try:
+                from .profiling import PerformanceProfiler
+                factory = PerformanceProfiler
+            except ImportError:
+                raise ValueError(f"Failed to import PerformanceProfiler for monitor '{name}'")
+        
         if factory is not None:
             monitors.append(factory(**params))
             continue
@@ -470,7 +539,10 @@ def resolve_monitors(specs: Sequence[str], *, sandbox_plugins: bool = False) -> 
 
         monitor = _instantiate_plugin_monitor(definition, params, sandbox_plugins)
         monitors.append(monitor)
-
+    
+    if composite and monitors:
+        return [CompositeMonitor(monitors)]
+    
     return monitors
 
 

@@ -8,20 +8,21 @@ import hashlib
 import random
 import uuid
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
 
 from ..dispatch import Dispatcher, ensure_dispatcher
 from ..monitoring import Monitor, MonitorContext
 from ..observability import add_log_context, log_event
 from ..sandbox import run_in_sandbox
 from ..specs import Spec
+from ..types import JSONDict
 
 
 @dataclass
 class ExecutionPlan:
     """Plan for executing an evaluation."""
     spec: Spec
-    test_inputs: List[Tuple[Any, ...]]
+    test_inputs: List[Tuple[object, ...]]
     dispatcher: Dispatcher
     monitors: List[Monitor]
     worker_count: int
@@ -40,9 +41,9 @@ def prepare_execution_plan(
     seed: int,
     parallel: Optional[int],
     dispatcher: Dispatcher | str | None,
-    queue_config: Dict[str, Any] | None,
+    queue_config: JSONDict | None,
     monitors: Sequence[Monitor] | None,
-    explicit_inputs: Optional[List[Tuple[Any, ...]]],
+    explicit_inputs: Optional[List[Tuple[object, ...]]],
     executor: Optional[str],
 ) -> ExecutionPlan:
     """Prepare an execution plan for running evaluations."""
@@ -88,19 +89,19 @@ def execute_implementations(
     timeout_s: float,
     mem_mb: int,
     executor: Optional[str],
-    executor_config: Dict[str, Any] | None,
+    executor_config: JSONDict | None,
     baseline_executor: Optional[str],
-    baseline_executor_config: Dict[str, Any] | None,
+    baseline_executor_config: JSONDict | None,
     candidate_executor: Optional[str],
-    candidate_executor_config: Dict[str, Any] | None,
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    candidate_executor_config: JSONDict | None,
+) -> Tuple[List[JSONDict], List[JSONDict]]:
     """Execute baseline and candidate implementations."""
     def make_runner(
         file_path: str,
         role_executor: Optional[str],
-        role_executor_config: Dict[str, Any] | None,
-    ) -> Callable[[int, Tuple[Any, ...]], Dict[str, Any]]:
-        def _run_case(index: int, call_args: Tuple[Any, ...]) -> Dict[str, Any]:
+        role_executor_config: JSONDict | None,
+    ) -> Callable[[int, Tuple[object, ...]], JSONDict]:
+        def _run_case(index: int, call_args: Tuple[object, ...]) -> JSONDict:
             return run_in_sandbox(
                 file_path,
                 "solve",
@@ -183,7 +184,7 @@ def relation_rng(
     return random.Random(seed_int)
 
 
-def relation_cache_key(relation_index: int, args: Tuple[Any, ...]) -> str:
+def relation_cache_key(relation_index: int, args: Tuple[object, ...]) -> str:
     """Build a stable cache key for relation reruns."""
     return f"{relation_index}:{repr(args)}"
 
@@ -194,10 +195,10 @@ def build_call_spec(
     timeout_s: float,
     mem_mb: int,
     executor: str | None,
-    executor_config: Dict[str, Any] | None,
-) -> Dict[str, Any]:
+    executor_config: JSONDict | None,
+) -> JSONDict:
     """Build a call specification for sandbox execution."""
-    spec: Dict[str, Any] = {
+    spec: JSONDict = {
         "file_path": file_path,
         "func_name": "solve",
         "timeout_s": timeout_s,

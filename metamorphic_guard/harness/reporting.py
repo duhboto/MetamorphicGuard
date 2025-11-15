@@ -7,12 +7,13 @@ from __future__ import annotations
 import math
 import random
 from collections import defaultdict
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, Hashable, List, Optional, Sequence, Tuple
 
 from ..multiple_comparisons import apply_multiple_comparisons_correction
 from ..observability import increment_metric
 from ..sandbox import run_in_sandbox
 from ..specs import Metric, Spec
+from ..types import JSONDict
 from .execution import relation_cache_key, relation_rng
 from .statistics import percentile, two_proportion_p_value
 
@@ -22,9 +23,9 @@ except ImportError:
     shrink_input = None  # type: ignore
 
 
-def summarize_llm_results(results: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+def summarize_llm_results(results: Sequence[JSONDict]) -> JSONDict:
     """Summarize LLM execution results with cost, tokens, and latency metrics."""
-    summary: Dict[str, Any] = {
+    summary: JSONDict = {
         "count": 0,
         "successes": 0,
         "failures": 0,
@@ -84,14 +85,14 @@ def summarize_llm_results(results: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def compose_llm_metrics(
-    baseline_summary: Dict[str, Any],
-    candidate_summary: Dict[str, Any],
-) -> Optional[Dict[str, Any]]:
+    baseline_summary: JSONDict,
+    candidate_summary: JSONDict,
+) -> Optional[JSONDict]:
     """Compose LLM metrics from baseline and candidate summaries."""
     if not baseline_summary.get("count") and not candidate_summary.get("count"):
         return None
 
-    payload: Dict[str, Any] = {
+    payload: JSONDict = {
         "baseline": baseline_summary,
         "candidate": candidate_summary,
     }
@@ -121,9 +122,9 @@ def compose_llm_metrics(
 def evaluate_roles(
     *,
     spec: Spec,
-    test_inputs: Sequence[Tuple[Any, ...]],
-    baseline_results: Sequence[Dict[str, Any]],
-    candidate_results: Sequence[Dict[str, Any]],
+    test_inputs: Sequence[Tuple[object, ...]],
+    baseline_results: Sequence[JSONDict],
+    candidate_results: Sequence[JSONDict],
     baseline_path: str,
     candidate_path: str,
     timeout_s: float,
@@ -131,9 +132,9 @@ def evaluate_roles(
     violation_cap: int,
     seed: int,
     executor: Optional[str],
-    executor_config: Dict[str, Any] | None,
+    executor_config: JSONDict | None,
     shrink_violations: bool,
-) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+) -> Tuple[JSONDict, JSONDict]:
     """Evaluate baseline and candidate results against spec."""
     baseline_metrics = evaluate_results(
         baseline_results,
@@ -175,25 +176,25 @@ def evaluate_roles(
 
 
 def evaluate_results(
-    results: Sequence[Dict[str, Any]],
+    results: Sequence[JSONDict],
     spec: Spec,
-    test_inputs: Sequence[Tuple[Any, ...]],
+    test_inputs: Sequence[Tuple[object, ...]],
     violation_cap: int,
     *,
     role: str,
     seed: int,
-    rerun: Callable[[Tuple[Any, ...]], Dict[str, Any]],
+    rerun: Callable[[Tuple[object, ...]], JSONDict],
     shrink_violations: bool = False,
-) -> Dict[str, Any]:
+) -> JSONDict:
     """Evaluate results against properties and metamorphic relations."""
     passes = 0
     total = len(results)
-    prop_violations: list[Dict[str, Any]] = []
-    mr_violations: list[Dict[str, Any]] = []
+    prop_violations: list[JSONDict] = []
+    mr_violations: list[JSONDict] = []
     pass_indicators: list[int] = []
-    cluster_labels: list[Any] = []
-    rerun_cache: Dict[str, Dict[str, Any]] = {}
-    relation_stats: Dict[str, Dict[str, Any]] = {}
+    cluster_labels: list[Hashable] = []
+    rerun_cache: Dict[str, JSONDict] = {}
+    relation_stats: Dict[str, JSONDict] = {}
     for relation in spec.relations:
         relation_stats[relation.name] = {
             "category": relation.category or "uncategorized",
@@ -342,9 +343,9 @@ def evaluate_results(
 
     # Shrink violations if enabled
     if shrink_violations and shrink_input is not None:
-        def _shrink_violation(violation: Dict[str, Any], original_args: Tuple[Any, ...]) -> Dict[str, Any]:
+        def _shrink_violation(violation: JSONDict, original_args: Tuple[object, ...]) -> JSONDict:
             """Shrink a violation's input while preserving the failure."""
-            def test_fails(shrunken_args: Tuple[Any, ...]) -> bool:
+            def test_fails(shrunken_args: Tuple[object, ...]) -> bool:
                 """Test if shrunken args still fail."""
                 try:
                     result = rerun(shrunken_args)
@@ -402,16 +403,16 @@ def evaluate_results(
 
 def summarize_relations(
     spec: Spec,
-    baseline_metrics: Dict[str, Any],
-    candidate_metrics: Dict[str, Any],
+    baseline_metrics: JSONDict,
+    candidate_metrics: JSONDict,
     *,
     alpha: float,
     relation_correction: Optional[str],
-) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]], Optional[Dict[str, Any]]]:
+) -> Tuple[List[JSONDict], Dict[str, JSONDict], Optional[JSONDict]]:
     """Summarize metamorphic relation results with statistical analysis."""
-    relation_summary: List[Dict[str, Any]] = []
+    relation_summary: List[JSONDict] = []
     relation_p_values: List[float] = []
-    category_totals: Dict[str, Dict[str, Any]] = {}
+    category_totals: Dict[str, JSONDict] = {}
 
     def _pass_rate(total: int, failures: int) -> Optional[float]:
         if total <= 0:
@@ -508,7 +509,7 @@ def summarize_relations(
             cat_entry["candidate_total"], cat_entry["candidate_failures"]
         )
 
-    correction_metadata: Optional[Dict[str, Any]] = None
+    correction_metadata: Optional[JSONDict] = None
     if relation_summary and relation_correction and relation_p_values:
         if relation_correction == "holm":
             correction_method = "holm"
@@ -536,7 +537,7 @@ def summarize_relations(
     return relation_summary, category_totals, correction_metadata
 
 
-def safe_extract_metric(metric: Metric, result: Dict[str, Any], args: Tuple[Any, ...]) -> Optional[float]:
+def safe_extract_metric(metric: Metric, result: JSONDict, args: Tuple[object, ...]) -> Optional[float]:
     """Safely extract a metric value from a result."""
     if not result.get("success"):
         return None
@@ -560,8 +561,8 @@ def metric_memo_key(metric: Metric) -> Optional[str]:
 
 def get_or_compute_metric_value(
     metric: Metric,
-    result: Dict[str, Any],
-    args: Tuple[Any, ...],
+    result: JSONDict,
+    args: Tuple[object, ...],
     *,
     memo_key: Optional[str],
     cache: Dict[str, Dict[int, Optional[float]]],
@@ -603,9 +604,9 @@ def aggregate_metric_values(
     *,
     kind: str,
     total_count: int,
-) -> Dict[str, Any]:
+) -> JSONDict:
     """Aggregate metric values into summary statistics."""
-    summary: Dict[str, Any] = {"count": 0, "missing": total_count}
+    summary: JSONDict = {"count": 0, "missing": total_count}
     if total_count <= 0:
         return summary
 
@@ -643,7 +644,7 @@ def bootstrap_metric_delta(
     samples: int,
     alpha: float,
     seed: Optional[int],
-) -> Optional[Dict[str, Any]]:
+) -> Optional[JSONDict]:
     """Compute bootstrap confidence interval for metric deltas."""
     count = len(deltas)
     if count == 0 or samples <= 0:
@@ -660,7 +661,7 @@ def bootstrap_metric_delta(
     upper_mean = percentile(resampled_means, 1 - alpha / 2)
 
     observed_mean = sum(deltas) / count
-    ci_payload: Dict[str, Any] = {
+    ci_payload: JSONDict = {
         "method": "bootstrap",
         "level": 1 - alpha,
         "mean": {
@@ -684,17 +685,17 @@ def bootstrap_metric_delta(
 
 def collect_metrics(
     metrics: Sequence[Metric],
-    baseline_results: Sequence[Dict[str, Any]],
-    candidate_results: Sequence[Dict[str, Any]],
-    test_inputs: Sequence[Tuple[Any, ...]],
+    baseline_results: Sequence[JSONDict],
+    candidate_results: Sequence[JSONDict],
+    test_inputs: Sequence[Tuple[object, ...]],
     *,
     seed: Optional[int],
-) -> Dict[str, Any]:
+) -> JSONDict:
     """Collect and aggregate metrics from baseline and candidate results."""
     if not metrics:
         return {}
 
-    metrics_payload: Dict[str, Any] = {}
+    metrics_payload: JSONDict = {}
     global_seed = seed
     shared_baseline_cache: Dict[str, Dict[int, Optional[float]]] = defaultdict(dict)
     shared_candidate_cache: Dict[str, Dict[int, Optional[float]]] = defaultdict(dict)
@@ -746,7 +747,7 @@ def collect_metrics(
             total_count=len(candidate_values),
         )
 
-        delta_payload: Dict[str, Any] = {}
+        delta_payload: JSONDict = {}
         baseline_value = baseline_summary.get("value")
         candidate_value = candidate_summary.get("value")
         if baseline_value is not None and candidate_value is not None:
@@ -783,7 +784,7 @@ def collect_metrics(
             if effect_sizes:
                 delta_payload["effect_sizes"] = effect_sizes
 
-        metric_entry: Dict[str, Any] = {
+        metric_entry: JSONDict = {
             "kind": metric.kind,
             "higher_is_better": metric.higher_is_better,
             "baseline": baseline_summary,

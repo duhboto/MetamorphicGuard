@@ -387,7 +387,26 @@ EVALUATE_OPTIONS = [
         "--estimate-cost",
         is_flag=True,
         default=False,
-        help="Estimate cost before running evaluation (for LLM executors only).",
+        help="Estimate cost before running evaluation (LLM executors only).",
+    ),
+    click.option(
+        "--budget-limit",
+        type=float,
+        default=None,
+        help="Hard budget limit in USD. Aborts evaluation if estimated cost exceeds this limit.",
+    ),
+    click.option(
+        "--budget-warning",
+        type=float,
+        default=None,
+        help="Warning threshold in USD. Warns user if estimated cost exceeds this threshold.",
+    ),
+    click.option(
+        "--budget-action",
+        type=click.Choice(["allow", "warn", "abort"], case_sensitive=False),
+        default="warn",
+        show_default=True,
+        help="Action to take when budget warning threshold is exceeded: 'allow' (no action), 'warn' (show warning), 'abort' (abort execution).",
     ),
 ]
 
@@ -454,6 +473,9 @@ def evaluate_command(
     stability: int,
     shrink_violations: bool,
     estimate_cost: bool,
+    budget_limit: Optional[float],
+    budget_warning: Optional[float],
+    budget_action: str,
     adaptive_testing: bool,
     adaptive_min_sample_size: int,
     adaptive_check_interval: int,
@@ -584,9 +606,13 @@ def evaluate_command(
                     policy_version = derived_version
 
         # Cost estimation (if requested and executor is LLM)
-        if estimate_cost and executor:
+        if (estimate_cost or budget_limit is not None or budget_warning is not None) and executor:
             try:
-                from ..cost_estimation import estimate_llm_cost
+                from ..cost_estimation import (
+                    BudgetAction,
+                    BudgetExceededError,
+                    estimate_and_check_budget,
+                )
                 from ..specs import get_task
                 
                 spec = get_task(task)
@@ -603,34 +629,74 @@ def evaluate_command(
                     except (json.JSONDecodeError, TypeError):
                         executor_cfg = {}
                 
-                estimate = estimate_llm_cost(
-                    executor_name=executor,
-                    executor_config=executor_cfg,
-                    n=effective_n,
-                    system_prompt=system_prompt,
-                    user_prompts=user_prompts,
-                    max_tokens=512,  # Default, could be from config
-                )
+                # Convert budget_action string to enum
+                action_map = {
+                    "allow": BudgetAction.ALLOW,
+                    "warn": BudgetAction.WARN,
+                    "abort": BudgetAction.ABORT,
+                }
+                budget_action_enum = action_map.get(budget_action.lower(), BudgetAction.WARN)
                 
-                click.echo("\n" + "=" * 60)
-                click.echo("COST ESTIMATION")
-                click.echo("=" * 60)
-                click.echo(f"Estimated total cost: ${estimate['total_cost_usd']:.4f}")
-                click.echo(f"  Baseline: ${estimate['baseline_cost_usd']:.4f}")
-                click.echo(f"  Candidate: ${estimate['candidate_cost_usd']:.4f}")
-                if estimate['judge_cost_usd'] > 0:
-                    click.echo(f"  Judge: ${estimate['judge_cost_usd']:.4f}")
-                click.echo(f"\nTest cases: {effective_n}")
-                click.echo(f"  Baseline calls: {estimate['breakdown']['baseline_calls']}")
-                click.echo(f"  Candidate calls: {estimate['breakdown']['candidate_calls']}")
-                if estimate['breakdown']['judge_calls'] > 0:
-                    click.echo(f"  Judge calls: {estimate['breakdown']['judge_calls']}")
-                click.echo(f"\nEstimated tokens:")
-                click.echo(f"  Baseline: {estimate['estimated_tokens']['baseline']['total']:,} tokens")
-                click.echo(f"  Candidate: {estimate['estimated_tokens']['candidate']['total']:,} tokens")
-                if estimate['estimated_tokens']['judge']['total'] > 0:
-                    click.echo(f"  Judge: {estimate['estimated_tokens']['judge']['total']:,} tokens")
-                click.echo("=" * 60 + "\n")
+                try:
+                    result = estimate_and_check_budget(
+                        executor_name=executor,
+                        executor_config=executor_cfg,
+                        n=effective_n,
+                        budget_limit=budget_limit,
+                        warning_threshold=budget_warning,
+                        action=budget_action_enum,
+                        system_prompt=system_prompt,
+                        user_prompts=user_prompts,
+                        max_tokens=512,  # Default, could be from config
+                    )
+                    estimate = result
+                    budget_check = result.get("budget_check", {})
+                except BudgetExceededError as e:
+                    click.echo("\n" + "=" * 60, err=True)
+                    click.echo("BUDGET EXCEEDED", err=True)
+                    click.echo("=" * 60, err=True)
+                    click.echo(f"❌ {str(e)}", err=True)
+                    click.echo("\nEvaluation aborted to prevent exceeding budget.", err=True)
+                    sys.exit(1)
+                
+                if estimate_cost:
+                    click.echo("\n" + "=" * 60)
+                    click.echo("COST ESTIMATION")
+                    click.echo("=" * 60)
+                    click.echo(f"Estimated total cost: ${estimate['total_cost_usd']:.4f}")
+                    click.echo(f"  Baseline: ${estimate['baseline_cost_usd']:.4f}")
+                    click.echo(f"  Candidate: ${estimate['candidate_cost_usd']:.4f}")
+                    if estimate['judge_cost_usd'] > 0:
+                        click.echo(f"  Judge: ${estimate['judge_cost_usd']:.4f}")
+                    click.echo(f"\nTest cases: {effective_n}")
+                    click.echo(f"  Baseline calls: {estimate['breakdown']['baseline_calls']}")
+                    click.echo(f"  Candidate calls: {estimate['breakdown']['candidate_calls']}")
+                
+                # Show budget check results
+                if budget_check:
+                    click.echo("\n" + "=" * 60)
+                    click.echo("BUDGET CHECK")
+                    click.echo("=" * 60)
+                    message = budget_check.get("message", "")
+                    action_taken = budget_check.get("action_taken", "none")
+                    
+                    if action_taken == "warn":
+                        click.echo(f"⚠️  {message}", err=True)
+                    elif action_taken == "abort":
+                        click.echo(f"❌ {message}", err=True)
+                        sys.exit(1)
+                    else:
+                        click.echo(f"✓ {message}")
+                
+                if estimate_cost:
+                    if estimate['breakdown']['judge_calls'] > 0:
+                        click.echo(f"  Judge calls: {estimate['breakdown']['judge_calls']}")
+                    click.echo(f"\nEstimated tokens:")
+                    click.echo(f"  Baseline: {estimate['estimated_tokens']['baseline']['total']:,} tokens")
+                    click.echo(f"  Candidate: {estimate['estimated_tokens']['candidate']['total']:,} tokens")
+                    if estimate['estimated_tokens']['judge']['total'] > 0:
+                        click.echo(f"  Judge: {estimate['estimated_tokens']['judge']['total']:,} tokens")
+                    click.echo("=" * 60 + "\n")
                 
                 # Ask for confirmation if cost is significant
                 if estimate['total_cost_usd'] > 1.0:

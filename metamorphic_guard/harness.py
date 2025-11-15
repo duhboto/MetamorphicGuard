@@ -9,7 +9,7 @@ import json
 import math
 import random
 from statistics import NormalDist
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Hashable, List, Optional, Sequence, Tuple
 import warnings
 from .specs import Metric, Spec, get_task
 from .types import JSONDict, JSONValue
@@ -721,7 +721,7 @@ def run_eval(
     )
 
     if relation_summary:
-        relation_coverage_payload: Dict[str, Any] = {
+        relation_coverage_payload: JSONDict = {
             "relations": relation_summary,
             "categories": category_totals,
         }
@@ -770,7 +770,7 @@ def run_eval(
         result["policy"] = _serialize_for_report(policy_config)
 
     # Build provenance section
-    provenance_data: Dict[str, Any] = {}
+    provenance_data: JSONDict = {}
     
     # Library version
     try:
@@ -808,7 +808,7 @@ def run_eval(
     if "spec_fingerprint" in result:
         provenance_data["spec_fingerprint"] = result["spec_fingerprint"]
 
-    sandbox_provenance: Dict[str, Any] = {
+    sandbox_provenance: JSONDict = {
         "executor": result["config"]["executor"] or "local",
         "baseline_executor": result["config"].get("baseline_executor") or "local",
         "candidate_executor": result["config"].get("candidate_executor") or "local",
@@ -841,7 +841,7 @@ def run_eval(
         sandbox_provenance["candidate_executor_config_fingerprint"] = _fingerprint_payload(
             candidate_executor_config_payload
         )
-    runtime_metadata: Dict[str, Any] = {}
+    runtime_metadata: JSONDict = {}
     if baseline_runtime_meta:
         runtime_metadata["baseline"] = baseline_runtime_meta
     if candidate_runtime_meta:
@@ -1084,7 +1084,7 @@ def _compute_bootstrap_ci(
     alpha: float,
     seed: int,
     samples: int,
-    clusters: Optional[Sequence[Any]] = None,
+    clusters: Optional[Sequence[Hashable]] = None,
     use_bca: bool = False,
     observed_delta: float | None = None,
 ) -> List[float]:
@@ -1130,7 +1130,7 @@ def _generate_bootstrap_deltas(
     *,
     rng: random.Random,
     samples: int,
-    clusters: Optional[Sequence[Any]] = None,
+    clusters: Optional[Sequence[Hashable]] = None,
 ) -> List[float]:
     """Generate bootstrap deltas (candidate - baseline pass rate)."""
     n = len(baseline_indicators)
@@ -1140,7 +1140,7 @@ def _generate_bootstrap_deltas(
     deltas: List[float] = []
 
     if clusters:
-        cluster_indices: Dict[Any, List[int]] = {}
+        cluster_indices: Dict[Hashable, List[int]] = {}
         for idx, cluster_id in enumerate(clusters):
             cluster_indices.setdefault(cluster_id, []).append(idx)
         unique_clusters = list(cluster_indices.keys())
@@ -1182,7 +1182,7 @@ def _compute_bca_interval(
     baseline_indicators: Sequence[int],
     candidate_indicators: Sequence[int],
     alpha: float,
-    clusters: Optional[Sequence[Any]] = None,
+    clusters: Optional[Sequence[Hashable]] = None,
 ) -> List[float]:
     """Compute the bias-corrected and accelerated (BCa) interval for bootstrap deltas."""
     if not deltas:
@@ -1206,7 +1206,7 @@ def _compute_bca_interval(
 
     jackknife: List[float] = []
 
-    cluster_map: Dict[Any, List[int]] | None = None
+    cluster_map: Dict[Hashable, List[int]] | None = None
     if clusters:
         cluster_map = {}
         for idx, cluster_id in enumerate(clusters):
@@ -1307,8 +1307,8 @@ def _wilson_interval(successes: int, total: int, alpha: float) -> Tuple[float, f
 
 
 def _compute_relative_risk(
-    baseline_metrics: Dict[str, Any],
-    candidate_metrics: Dict[str, Any],
+    baseline_metrics: JSONDict,
+    candidate_metrics: JSONDict,
     *,
     alpha: float,
     method: str,

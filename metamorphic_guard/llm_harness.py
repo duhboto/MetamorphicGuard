@@ -4,22 +4,40 @@ LLM Harness for easy integration of LLM evaluation with Metamorphic Guard.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Sequence, Union, TypedDict
+from typing import Dict, List, Optional, Sequence, Union, TypedDict
 
 from .harness import run_eval
 from .judges import Judge, LLMJudge
 from .mutants import Mutant, PromptMutant
+from .types import JSONDict, JSONValue
 
 
 # Type definitions for LLM evaluation
 LLMCaseInput = Union[Dict[str, str], List[str], str]
 """Type for LLM case input: dict with system/user, list of prompts, or single prompt string."""
 
-ExecutorConfig = Dict[str, Union[str, int, float, bool, Dict[str, Any]]]
-"""Type for executor configuration dictionaries."""
 
-EvaluationReport = Dict[str, Any]
-"""Type for evaluation report dictionaries returned by run_eval."""
+# ExecutorConfig: Use Dict[str, JSONValue] for runtime flexibility
+# TypedDict doesn't work well for mutable dicts that are updated at runtime
+ExecutorConfig = Dict[str, JSONValue]
+"""Type for executor configuration dictionaries. Allows provider-specific fields."""
+
+
+class EvaluationReport(TypedDict, total=False):
+    """Type for evaluation report dictionaries returned by run_eval."""
+
+    task: str
+    n: int
+    seed: int
+    config: JSONDict
+    baseline: JSONDict
+    candidate: JSONDict
+    delta_pass_rate: float
+    delta_ci: List[float]
+    decision: JSONDict
+    monitors: JSONDict
+    llm_metrics: Optional[JSONDict]
+    # Note: TypedDict with total=False allows additional keys beyond those defined
 
 
 class LLMHarness:
@@ -147,7 +165,7 @@ class LLMHarness:
         bootstrap: bool = True,
         baseline_model: Optional[str] = None,
         baseline_system: Optional[str] = None,
-        **kwargs: Any,
+        **kwargs: JSONValue,
     ) -> EvaluationReport:
         """
         Run evaluation of LLM on test cases.
@@ -187,7 +205,7 @@ class LLMHarness:
             if case and isinstance(case[0], dict) and "role" in case[0]:
                 # Multi-turn: list of message dicts
                 is_multi_turn = True
-                conversation_history = case
+                conversation_history = case  # type: ignore[assignment]
                 prompts = None  # Will extract user prompts from history
             else:
                 # Single turn: list of user prompts
@@ -197,17 +215,20 @@ class LLMHarness:
             # Check for multi-turn format
             if "conversation" in case:
                 is_multi_turn = True
-                conversation_history = case.get("conversation", [])
+                conv = case.get("conversation", [])
+                conversation_history = conv if isinstance(conv, list) else []  # type: ignore[assignment]
                 if "user" in case:
                     # New user message to append
-                    prompts = [case.get("user", "")]
+                    user_msg = case.get("user", "")
+                    prompts = [user_msg] if isinstance(user_msg, str) else []
                 else:
                     # Use last user message from history
                     prompts = None
                 candidate_system = case.get("system")
             else:
                 # Single turn: system + user
-                prompts = [case.get("user", "")]
+                user_msg = case.get("user", "")
+                prompts = [user_msg] if isinstance(user_msg, str) else []
                 candidate_system = case.get("system")
         else:
             raise ValueError(f"Invalid case type: {type(case)}")
@@ -289,53 +310,83 @@ class LLMHarness:
                 )
                 
                 # Aggregate cost and latency metrics from results
-                result = self._aggregate_llm_metrics(result)
+                # Cast result to EvaluationReport since run_eval returns Dict[str, Any]
+                result_dict: JSONDict = result  # type: ignore[assignment]
+                result = self._aggregate_llm_metrics(result_dict)  # type: ignore[arg-type]
         finally:
             # Clean up temporary task
             if task_name in _TASK_REGISTRY:
                 del _TASK_REGISTRY[task_name]
 
-        return result
+        return result  # type: ignore[return-value]
     
-    def _aggregate_llm_metrics(self, result: Dict[str, Any]) -> Dict[str, Any]:
+    def _aggregate_llm_metrics(self, result: JSONDict) -> EvaluationReport:
         """
         Aggregate cost and latency metrics from evaluation results.
         
         Extracts token usage, costs, and latency from individual test results
         and adds summary statistics to the report.
         """
-        llm_metrics = result.get("llm_metrics")
-        if llm_metrics:
-            baseline = llm_metrics.get("baseline", {})
-            candidate = llm_metrics.get("candidate", {})
+        llm_metrics_raw = result.get("llm_metrics")
+        if llm_metrics_raw and isinstance(llm_metrics_raw, dict):
+            llm_metrics: JSONDict = llm_metrics_raw
+            baseline_raw = llm_metrics.get("baseline", {})
+            candidate_raw = llm_metrics.get("candidate", {})
+            baseline: JSONDict = baseline_raw if isinstance(baseline_raw, dict) else {}
+            candidate: JSONDict = candidate_raw if isinstance(candidate_raw, dict) else {}
             if "cost_delta_usd" not in llm_metrics:
-                llm_metrics["cost_delta_usd"] = candidate.get("total_cost_usd", 0.0) - baseline.get("total_cost_usd", 0.0)
+                baseline_cost = baseline.get("total_cost_usd")
+                candidate_cost = candidate.get("total_cost_usd")
+                baseline_cost_val = baseline_cost if isinstance(baseline_cost, (int, float)) else 0.0
+                candidate_cost_val = candidate_cost if isinstance(candidate_cost, (int, float)) else 0.0
+                llm_metrics["cost_delta_usd"] = candidate_cost_val - baseline_cost_val
             if "cost_ratio" not in llm_metrics:
-                baseline_cost = baseline.get("total_cost_usd", 0.0)
-                candidate_cost = candidate.get("total_cost_usd", 0.0)
+                baseline_cost = baseline.get("total_cost_usd")
+                candidate_cost = candidate.get("total_cost_usd")
+                baseline_cost_val = baseline_cost if isinstance(baseline_cost, (int, float)) else 0.0
+                candidate_cost_val = candidate_cost if isinstance(candidate_cost, (int, float)) else 0.0
                 llm_metrics["cost_ratio"] = (
-                    candidate_cost / baseline_cost if baseline_cost else None
+                    candidate_cost_val / baseline_cost_val if baseline_cost_val else None
                 )
             if "tokens_delta" not in llm_metrics:
-                llm_metrics["tokens_delta"] = candidate.get("total_tokens", 0) - baseline.get("total_tokens", 0)
+                baseline_tokens = baseline.get("total_tokens")
+                candidate_tokens = candidate.get("total_tokens")
+                baseline_tokens_val = baseline_tokens if isinstance(baseline_tokens, int) else 0
+                candidate_tokens_val = candidate_tokens if isinstance(candidate_tokens, int) else 0
+                llm_metrics["tokens_delta"] = candidate_tokens_val - baseline_tokens_val
             if "retry_delta" not in llm_metrics:
-                llm_metrics["retry_delta"] = candidate.get("retry_total", 0) - baseline.get("retry_total", 0)
+                baseline_retry = baseline.get("retry_total")
+                candidate_retry = candidate.get("retry_total")
+                baseline_retry_val = baseline_retry if isinstance(baseline_retry, int) else 0
+                candidate_retry_val = candidate_retry if isinstance(candidate_retry, int) else 0
+                llm_metrics["retry_delta"] = candidate_retry_val - baseline_retry_val
             result["llm_metrics"] = llm_metrics
-            return result
+            return result  # type: ignore[return-value]
 
         # Fallback: compute minimal metrics from monitors if harness skipped aggregation
-        baseline_metrics = {"total_cost_usd": 0.0, "total_tokens": 0}
-        candidate_metrics = {"total_cost_usd": 0.0, "total_tokens": 0}
-        for monitor_data in result.get("monitors", {}).values():
-            summary = monitor_data.get("summary", {})
-            baseline_metrics.update(summary.get("baseline", {}))
-            candidate_metrics.update(summary.get("candidate", {}))
+        baseline_metrics: JSONDict = {"total_cost_usd": 0.0, "total_tokens": 0}
+        candidate_metrics: JSONDict = {"total_cost_usd": 0.0, "total_tokens": 0}
+        monitors_raw = result.get("monitors", {})
+        if isinstance(monitors_raw, dict):
+            for monitor_data in monitors_raw.values():
+                if isinstance(monitor_data, dict):
+                    summary_raw = monitor_data.get("summary", {})
+                    if isinstance(summary_raw, dict):
+                        summary: JSONDict = summary_raw
+                        baseline_raw = summary.get("baseline", {})
+                        candidate_raw = summary.get("candidate", {})
+                        if isinstance(baseline_raw, dict):
+                            baseline_metrics.update(baseline_raw)
+                        if isinstance(candidate_raw, dict):
+                            candidate_metrics.update(candidate_raw)
 
         result["llm_metrics"] = {
             "baseline": baseline_metrics,
             "candidate": candidate_metrics,
-            "cost_delta_usd": candidate_metrics.get("total_cost_usd", 0.0)
-            - baseline_metrics.get("total_cost_usd", 0.0),
+            "cost_delta_usd": (
+                (candidate_metrics.get("total_cost_usd") if isinstance(candidate_metrics.get("total_cost_usd"), (int, float)) else 0.0)
+                - (baseline_metrics.get("total_cost_usd") if isinstance(baseline_metrics.get("total_cost_usd"), (int, float)) else 0.0)
+            ),
         }
-        return result
+        return result  # type: ignore[return-value]
 

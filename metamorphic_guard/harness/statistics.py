@@ -7,9 +7,20 @@ from __future__ import annotations
 import math
 import random
 from statistics import NormalDist
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Hashable, List, Optional, Sequence, Tuple, TypedDict
 
 from ..power import calculate_power, calculate_sample_size
+from ..types import JSONDict, JSONValue
+
+
+class PassRateMetrics(TypedDict, total=False):
+    """Type for pass rate metrics dictionaries."""
+
+    passes: int
+    total: int
+    pass_rate: float
+    pass_indicators: Sequence[int]
+    cluster_labels: Optional[Sequence[Hashable]]
 
 
 def _resolve_beta_prior(prior_type: str) -> Tuple[float, float]:
@@ -107,8 +118,8 @@ def estimate_power(
 
 
 def compute_delta_ci(
-    baseline_metrics: Dict[str, Any],
-    candidate_metrics: Dict[str, Any],
+    baseline_metrics: PassRateMetrics,
+    candidate_metrics: PassRateMetrics,
     *,
     alpha: float,
     seed: int,
@@ -177,7 +188,7 @@ def compute_bootstrap_ci(
     alpha: float,
     seed: int,
     samples: int,
-    clusters: Optional[Sequence[Any]] = None,
+    clusters: Optional[Sequence[Hashable]] = None,
     use_bca: bool = False,
     observed_delta: float | None = None,
 ) -> List[float]:
@@ -223,7 +234,7 @@ def generate_bootstrap_deltas(
     *,
     rng: random.Random,
     samples: int,
-    clusters: Optional[Sequence[Any]] = None,
+    clusters: Optional[Sequence[Hashable]] = None,
 ) -> List[float]:
     """Generate bootstrap deltas (candidate - baseline pass rate)."""
     n = len(baseline_indicators)
@@ -233,7 +244,7 @@ def generate_bootstrap_deltas(
     deltas: List[float] = []
 
     if clusters:
-        cluster_indices: Dict[Any, List[int]] = {}
+        cluster_indices: Dict[Hashable, List[int]] = {}
         for idx, cluster_id in enumerate(clusters):
             cluster_indices.setdefault(cluster_id, []).append(idx)
         unique_clusters = list(cluster_indices.keys())
@@ -275,7 +286,7 @@ def compute_bca_interval(
     baseline_indicators: Sequence[int],
     candidate_indicators: Sequence[int],
     alpha: float,
-    clusters: Optional[Sequence[Any]] = None,
+    clusters: Optional[Sequence[Hashable]] = None,
 ) -> List[float]:
     """Compute the bias-corrected and accelerated (BCa) interval for bootstrap deltas."""
     if not deltas:
@@ -299,7 +310,7 @@ def compute_bca_interval(
 
     jackknife: List[float] = []
 
-    cluster_map: Dict[Any, List[int]] | None = None
+    cluster_map: Dict[Hashable, List[int]] | None = None
     if clusters:
         cluster_map = {}
         for idx, cluster_id in enumerate(clusters):
@@ -401,8 +412,8 @@ def wilson_interval(successes: int, total: int, alpha: float) -> Tuple[float, fl
 
 
 def compute_relative_risk(
-    baseline_metrics: Dict[str, Any],
-    candidate_metrics: Dict[str, Any],
+    baseline_metrics: PassRateMetrics,
+    candidate_metrics: PassRateMetrics,
     *,
     alpha: float,
     method: str,
@@ -492,7 +503,7 @@ def percentile(values: Sequence[float], q: float) -> float:
 def compute_paired_stats(
     baseline_indicators: Sequence[int],
     candidate_indicators: Sequence[int],
-) -> Optional[Dict[str, Any]]:
+) -> Optional[JSONDict]:
     """
     Compute paired statistics for baseline and candidate pass indicators.
     
@@ -652,8 +663,8 @@ def compute_bayesian_ci(
 
 
 def compute_bayesian_posterior_predictive(
-    baseline_metrics: Dict[str, Any],
-    candidate_metrics: Dict[str, Any],
+    baseline_metrics: PassRateMetrics,
+    candidate_metrics: PassRateMetrics,
     *,
     samples: int,
     hierarchical: bool,

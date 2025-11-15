@@ -2,17 +2,27 @@
 Adoption gate logic for deciding whether to accept a candidate implementation.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TypedDict
 import warnings
+
+from .types import JSONDict, JSONValue
+
+
+class AdoptionDecision(TypedDict, total=False):
+    """Type for adoption decision result."""
+
+    adopt: bool
+    reason: str
+    policy_checks: Dict[str, bool]
 
 
 def decide_adopt(
-    result: Dict[str, Any],
+    result: JSONDict,
     min_delta: float = 0.02,
     min_pass_rate: float = 0.80,
-    policy: Optional[Dict[str, Any]] = None,
+    policy: Optional[JSONDict] = None,
     **deprecated_kwargs: Any,
-) -> Dict[str, Any]:
+) -> AdoptionDecision:
     """
     Decide whether to adopt the candidate based on evaluation results.
 
@@ -76,7 +86,7 @@ def decide_adopt(
     return {"adopt": True, "reason": "meets_gate"}
 
 
-def _decide_adopt_with_policy(result: Dict[str, Any], policy: Dict[str, Any]) -> Dict[str, Any]:
+def _decide_adopt_with_policy(result: JSONDict, policy: JSONDict) -> AdoptionDecision:
     """
     Routing-aware adoption gate that considers quality, cost, latency, and trust.
 

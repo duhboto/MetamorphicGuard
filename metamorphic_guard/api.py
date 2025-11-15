@@ -28,6 +28,7 @@ from typing import (
     Sequence,
     Tuple,
     TypeVar,
+    TypedDict,
     Union,
 )
 
@@ -35,6 +36,7 @@ from .config import EvaluatorConfig, load_config
 from .policy import PolicyLoadError, PolicyParseError, resolve_policy_option
 from .notifications import collect_alerts, send_webhook_alerts
 from .observability import configure_logging, configure_metrics, close_logging
+from .types import JSONDict, JSONValue
 
 from .harness import run_eval
 from .dispatch import Dispatcher
@@ -42,6 +44,52 @@ from .monitoring import Monitor, resolve_monitors
 from .specs import MetamorphicRelation, Metric, Property, Spec, register_spec, unregister_spec
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# TypedDict definitions for structured configurations
+# ---------------------------------------------------------------------------
+
+
+class PolicyConfig(TypedDict, total=False):
+    """Type for policy configuration dictionaries."""
+
+    gating: Dict[str, JSONValue]
+    descriptor: Dict[str, JSONValue]
+    name: str
+
+
+class ExtraOptions(TypedDict, total=False):
+    """Type for extra options in EvaluationConfig."""
+
+    parallel: Optional[int]
+    dispatcher: Optional[Union[str, JSONValue]]  # Dispatcher serialized as string or dict
+    executor: Optional[str]
+    executor_config: Optional[JSONDict]
+    queue_config: Optional[JSONDict]
+    monitors: Optional[JSONValue]  # Monitors serialized for TypedDict
+    relation_correction: Optional[str]
+    policy_version: Optional[str]
+    policy_config: Optional[PolicyConfig]
+
+
+class ObservabilityConfig(TypedDict, total=False):
+    """Type for observability configuration."""
+
+    logging_enabled: Optional[bool]
+    log_path: Optional[Union[str, Path]]
+    log_context: Optional[Mapping[str, JSONValue]]
+    metrics_enabled: Optional[bool]
+    metrics_port: Optional[int]
+    metrics_host: Optional[str]
+
+
+class QueueConfig(TypedDict, total=False):
+    """Type for queue configuration."""
+
+    backend: str
+    url: Optional[str]
+    heartbeat_timeout: Optional[float]
+    enable_requeue: Optional[bool]
 
 # ---------------------------------------------------------------------------
 # Type variables for generic task specifications
@@ -264,10 +312,12 @@ class EvaluationConfig:
     look_number: int = 1
     relation_correction: Optional[str] = None
     policy_version: Optional[str] = None
-    policy_config: Optional[Dict[str, Any]] = None
+    policy_config: Optional[PolicyConfig] = None
 
     # Flexible extension point for advanced options not yet surfaced above.
-    extra_options: Dict[str, Any] = field(default_factory=dict)
+    # Note: Using Dict[str, JSONValue] instead of ExtraOptions because TypedDict
+    # doesn't work well with dataclass fields that are mutated at runtime.
+    extra_options: Dict[str, JSONValue] = field(default_factory=dict)
 
     def __init__(
         self,
@@ -292,8 +342,8 @@ class EvaluationConfig:
         look_number: int = 1,
         relation_correction: Optional[str] = None,
         policy_version: Optional[str] = None,
-        policy_config: Optional[Dict[str, Any]] = None,
-        extra_options: Optional[Dict[str, Any]] = None,
+        policy_config: Optional[PolicyConfig] = None,
+        extra_options: Optional[Dict[str, JSONValue]] = None,
     ) -> None:
         if improve_delta is not None:
             warnings.warn(
@@ -337,10 +387,10 @@ class EvaluationConfig:
         self.policy_config = dict(policy_config) if policy_config is not None else None
         self.extra_options = dict(extra_options) if extra_options else {}
 
-    def to_kwargs(self) -> Dict[str, Any]:
+    def to_kwargs(self) -> Dict[str, JSONValue]:
         """Render keyword arguments for the harness without deep-copying extras."""
 
-        payload: Dict[str, Any] = {
+        payload: Dict[str, JSONValue] = {
             "n": self.n,
             "seed": self.seed,
             "timeout_s": self.timeout_s,
@@ -380,7 +430,7 @@ class EvaluationConfig:
 class EvaluationResult:
     """Wrapper over the harness response."""
 
-    report: Dict[str, Any]
+    report: JSONDict
 
     @property
     def adopt(self) -> bool:
@@ -459,7 +509,7 @@ def _observability_context(
     *,
     logging_enabled: Optional[bool] = None,
     log_path: Optional[str | Path] = None,
-    log_context: Optional[Mapping[str, Any]] = None,
+    log_context: Optional[Mapping[str, JSONValue]] = None,
     metrics_enabled: Optional[bool] = None,
     metrics_port: Optional[int] = None,
     metrics_host: Optional[str] = None,
@@ -492,9 +542,9 @@ def _observability_context(
 
 
 def _dispatch_alerts(
-    result: Dict[str, Any],
+    result: JSONDict,
     alert_webhooks: Optional[Sequence[str]],
-    alert_metadata: Optional[Mapping[str, Any]] = None,
+    alert_metadata: Optional[Mapping[str, JSONValue]] = None,
 ) -> None:
     if not alert_webhooks:
         return
@@ -508,7 +558,7 @@ def _dispatch_alerts(
     if not alerts:
         return
 
-    metadata: Dict[str, Any] = {
+    metadata: Dict[str, JSONValue] = {
         "task": result.get("task"),
         "decision": result.get("decision"),
         "run_id": (result.get("job_metadata") or {}).get("run_id"),
@@ -555,8 +605,8 @@ def _compose_monitors(
 
 def _evaluation_config_from_evaluator(
     cfg: EvaluatorConfig,
-) -> Tuple[EvaluationConfig, Dict[str, Any], List[str], Optional[bool]]:
-    extra_options: Dict[str, Any] = {}
+) -> Tuple[EvaluationConfig, ObservabilityConfig, List[str], Optional[bool]]:
+    extra_options: Dict[str, JSONValue] = {}
     min_delta = cfg.min_delta
     alpha = cfg.alpha
     min_pass_rate = cfg.min_pass_rate
@@ -577,7 +627,7 @@ def _evaluation_config_from_evaluator(
     if cfg.executor_config is not None:
         extra_options["executor_config"] = cfg.executor_config
 
-    observability: Dict[str, Any] = {
+    observability: ObservabilityConfig = {
         "logging_enabled": cfg.log_json,
         "log_path": cfg.log_file,
         "log_context": None,
@@ -653,15 +703,15 @@ def run(
     config: Optional[EvaluationConfig] = None,
     *,
     alert_webhooks: Optional[Sequence[str]] = None,
-    alert_metadata: Optional[Mapping[str, Any]] = None,
+    alert_metadata: Optional[Mapping[str, JSONValue]] = None,
     dispatcher: Optional[Union[str, Dispatcher]] = None,
-    queue_config: Optional[Mapping[str, Any]] = None,
+    queue_config: Optional[QueueConfig] = None,
     monitors: Optional[Sequence[Monitor]] = None,
     monitor_specs: Optional[Sequence[str]] = None,
     sandbox_plugins: Optional[bool] = None,
     logging_enabled: Optional[bool] = None,
     log_path: Optional[str | Path] = None,
-    log_context: Optional[Mapping[str, Any]] = None,
+    log_context: Optional[Mapping[str, JSONValue]] = None,
     metrics_enabled: Optional[bool] = None,
     metrics_port: Optional[int] = None,
     metrics_host: Optional[str] = None,
@@ -716,19 +766,19 @@ def run(
 
 
 def run_with_config(
-    config: Union[EvaluatorConfig, str, Path, Mapping[str, Any]],
+    config: Union[EvaluatorConfig, str, Path, Mapping[str, JSONValue]],
     *,
     task: TaskSpec,
     alert_webhooks: Optional[Sequence[str]] = None,
-    alert_metadata: Optional[Mapping[str, Any]] = None,
+    alert_metadata: Optional[Mapping[str, JSONValue]] = None,
     dispatcher: Optional[Union[str, Dispatcher]] = None,
-    queue_config: Optional[Mapping[str, Any]] = None,
+    queue_config: Optional[QueueConfig] = None,
     monitors: Optional[Sequence[Monitor]] = None,
     monitor_specs: Optional[Sequence[str]] = None,
     sandbox_plugins: Optional[bool] = None,
     logging_enabled: Optional[bool] = None,
     log_path: Optional[str | Path] = None,
-    log_context: Optional[Mapping[str, Any]] = None,
+    log_context: Optional[Mapping[str, JSONValue]] = None,
     metrics_enabled: Optional[bool] = None,
     metrics_port: Optional[int] = None,
     metrics_host: Optional[str] = None,

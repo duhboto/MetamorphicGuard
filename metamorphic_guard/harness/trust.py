@@ -4,14 +4,19 @@ Trust score computation for RAG evaluations.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Dict, Optional, Sequence, Tuple
+
+from ..types import JSONDict
+
+if TYPE_CHECKING:
+    from ..specs import Spec
 
 
 def compute_trust_scores(
-    results: Sequence[Dict[str, Any]],
-    test_inputs: Sequence[Tuple[Any, ...]],
-    spec: Any,  # Spec type
-) -> Optional[Dict[str, Any]]:
+    results: Sequence[JSONDict],
+    test_inputs: Sequence[Tuple[object, ...]],
+    spec: "Spec",
+) -> Optional[JSONDict]:
     """
     Compute trust scores for RAG evaluations if applicable.
     

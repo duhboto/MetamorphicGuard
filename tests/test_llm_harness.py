@@ -92,3 +92,274 @@ def test_llm_harness_retains_llm_metrics(monkeypatch):
     assert result["llm_metrics"]["cost_delta_usd"] == pytest.approx(-0.01, rel=1e-6)
     assert result["llm_metrics"]["cost_ratio"] == pytest.approx(0.8, rel=1e-6)
 
+
+class TestLLMHarnessIntegration:
+    """End-to-end integration tests for LLM evaluation."""
+
+    def test_full_evaluation_flow(self, monkeypatch):
+        """Test complete evaluation flow with mocked executors."""
+        from metamorphic_guard.judges.builtin import LengthJudge
+        from metamorphic_guard.mutants.builtin import ParaphraseMutant
+        
+        # Mock executor responses
+        def mock_execute(self, system_prompt, func_name, args, **kwargs):
+            prompt = args[0] if args else ""
+            return {
+                "success": True,
+                "result": f"Response to: {prompt}",
+                "tokens_prompt": 10,
+                "tokens_completion": 20,
+                "tokens_total": 30,
+                "cost_usd": 0.0001,
+                "duration_ms": 500.0,
+                "finish_reason": "stop",
+                "retries": 0,
+            }
+        
+        # Mock OpenAI executor
+        monkeypatch.setattr(
+            "metamorphic_guard.executors.openai.OpenAIExecutor.execute",
+            mock_execute,
+        )
+        
+        harness = LLMHarness(
+            model="gpt-3.5-turbo",
+            provider="openai",
+            executor_config={"api_key": "test-key"},
+        )
+        
+        result = harness.run(
+            case="Test prompt",
+            props=[LengthJudge(min_chars=5)],
+            mrs=[ParaphraseMutant()],
+            n=5,
+            seed=42,
+            bootstrap=False,
+        )
+        
+        assert "baseline" in result
+        assert "candidate" in result
+        assert "decision" in result
+        assert "llm_metrics" in result
+
+    def test_error_handling_and_retries(self, monkeypatch):
+        """Test error handling and retry logic in integration."""
+        attempt_count = {"count": 0}
+        
+        def mock_execute_with_retry(self, system_prompt, func_name, args, **kwargs):
+            attempt_count["count"] += 1
+            if attempt_count["count"] < 2:
+                return {
+                    "success": False,
+                    "error": "Rate limit exceeded",
+                    "error_code": "rate_limit",
+                    "retries": attempt_count["count"] - 1,
+                }
+            return {
+                "success": True,
+                "result": "Success after retry",
+                "tokens_prompt": 5,
+                "tokens_completion": 10,
+                "tokens_total": 15,
+                "cost_usd": 0.00005,
+                "duration_ms": 200.0,
+                "finish_reason": "stop",
+                "retries": 1,
+            }
+        
+        monkeypatch.setattr(
+            "metamorphic_guard.executors.openai.OpenAIExecutor.execute",
+            mock_execute_with_retry,
+        )
+        
+        harness = LLMHarness(
+            model="gpt-3.5-turbo",
+            provider="openai",
+            executor_config={"api_key": "test-key", "max_retries": 3},
+        )
+        
+        result = harness.run(case="Test", n=1, seed=42, bootstrap=False)
+        
+        # Should eventually succeed after retry
+        assert result["candidate"]["total"] == 1
+        llm_metrics = result.get("llm_metrics", {})
+        candidate_metrics = llm_metrics.get("candidate", {})
+        assert candidate_metrics.get("retry_total", 0) >= 1
+
+    def test_cost_tracking(self, monkeypatch):
+        """Test that cost is properly tracked across evaluations."""
+        def mock_execute(self, system_prompt, func_name, args, **kwargs):
+            return {
+                "success": True,
+                "result": "Response",
+                "tokens_prompt": 100,
+                "tokens_completion": 200,
+                "tokens_total": 300,
+                "cost_usd": 0.001,
+                "duration_ms": 1000.0,
+                "finish_reason": "stop",
+                "retries": 0,
+            }
+        
+        monkeypatch.setattr(
+            "metamorphic_guard.executors.openai.OpenAIExecutor.execute",
+            mock_execute,
+        )
+        
+        harness = LLMHarness(
+            model="gpt-4",
+            provider="openai",
+            executor_config={"api_key": "test-key"},
+        )
+        
+        result = harness.run(case="Test", n=10, seed=42, bootstrap=False)
+        
+        llm_metrics = result.get("llm_metrics", {})
+        assert "baseline" in llm_metrics
+        assert "candidate" in llm_metrics
+        assert "cost_delta_usd" in llm_metrics
+        
+        # Should have tracked costs
+        baseline_cost = llm_metrics["baseline"].get("total_cost_usd", 0)
+        candidate_cost = llm_metrics["candidate"].get("total_cost_usd", 0)
+        assert baseline_cost > 0
+        assert candidate_cost > 0
+
+    def test_multiple_model_comparison(self, monkeypatch):
+        """Test comparison between different models."""
+        def mock_execute(self, system_prompt, func_name, args, **kwargs):
+            model = func_name or "gpt-3.5-turbo"
+            # Simulate different costs for different models
+            if "gpt-4" in model:
+                cost = 0.002
+            else:
+                cost = 0.0005
+            
+            return {
+                "success": True,
+                "result": f"Response from {model}",
+                "tokens_prompt": 50,
+                "tokens_completion": 100,
+                "tokens_total": 150,
+                "cost_usd": cost,
+                "duration_ms": 800.0,
+                "finish_reason": "stop",
+                "retries": 0,
+            }
+        
+        monkeypatch.setattr(
+            "metamorphic_guard.executors.openai.OpenAIExecutor.execute",
+            mock_execute,
+        )
+        
+        harness = LLMHarness(
+            model="gpt-4",
+            provider="openai",
+            executor_config={"api_key": "test-key"},
+            baseline_model="gpt-3.5-turbo",
+        )
+        
+        result = harness.run(case="Test", n=5, seed=42, bootstrap=False)
+        
+        llm_metrics = result.get("llm_metrics", {})
+        cost_delta = llm_metrics.get("cost_delta_usd", 0)
+        
+        # GPT-4 should be more expensive
+        assert cost_delta > 0
+
+    def test_system_prompt_handling(self, monkeypatch):
+        """Test that system prompts are properly handled."""
+        captured_prompts = []
+        
+        def mock_execute(self, system_prompt, func_name, args, **kwargs):
+            captured_prompts.append({
+                "system": system_prompt,
+                "user": args[0] if args else "",
+            })
+            return {
+                "success": True,
+                "result": "Response",
+                "tokens_prompt": 10,
+                "tokens_completion": 5,
+                "tokens_total": 15,
+                "cost_usd": 0.00001,
+                "duration_ms": 100.0,
+                "finish_reason": "stop",
+                "retries": 0,
+            }
+        
+        monkeypatch.setattr(
+            "metamorphic_guard.executors.openai.OpenAIExecutor.execute",
+            mock_execute,
+        )
+        
+        harness = LLMHarness(
+            model="gpt-3.5-turbo",
+            provider="openai",
+            executor_config={"api_key": "test-key"},
+        )
+        
+        result = harness.run(
+            case={"system": "You are helpful", "user": "Hello"},
+            n=2,
+            seed=42,
+            bootstrap=False,
+        )
+        
+        # Should have captured system prompts
+        assert len(captured_prompts) >= 2
+        assert any("You are helpful" in p.get("system", "") for p in captured_prompts)
+
+    def test_judge_and_mutant_integration(self, monkeypatch):
+        """Test integration with judges and mutants."""
+        from metamorphic_guard.judges.builtin import LengthJudge, RegexJudge
+        from metamorphic_guard.mutants.builtin import ParaphraseMutant
+        
+        def mock_execute(self, system_prompt, func_name, args, **kwargs):
+            return {
+                "success": True,
+                "result": "A valid response with sufficient length",
+                "tokens_prompt": 10,
+                "tokens_completion": 10,
+                "tokens_total": 20,
+                "cost_usd": 0.00001,
+                "duration_ms": 100.0,
+                "finish_reason": "stop",
+                "retries": 0,
+            }
+        
+        monkeypatch.setattr(
+            "metamorphic_guard.executors.openai.OpenAIExecutor.execute",
+            mock_execute,
+        )
+        
+        harness = LLMHarness(
+            model="gpt-3.5-turbo",
+            provider="openai",
+            executor_config={"api_key": "test-key"},
+        )
+        
+        result = harness.run(
+            case="Test prompt",
+            props=[
+                LengthJudge(min_chars=10),
+                RegexJudge(pattern=r"valid"),
+            ],
+            mrs=[ParaphraseMutant()],
+            n=5,
+            seed=42,
+            bootstrap=False,
+        )
+        
+        # Should have evaluated properties and relations
+        assert "baseline" in result
+        assert "candidate" in result
+        baseline = result["baseline"]
+        candidate = result["candidate"]
+        
+        # Should have property and MR results
+        assert "prop_violations" in baseline
+        assert "mr_violations" in baseline
+        assert "prop_violations" in candidate
+        assert "mr_violations" in candidate
+

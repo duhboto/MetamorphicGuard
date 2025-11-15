@@ -10,6 +10,7 @@ import click
 
 from .evaluate import evaluate_command
 from .init import init_command
+from .model import model_group
 from .plugin import plugin_group
 from .power import power_command
 from .provenance import provenance_diff_command
@@ -48,6 +49,7 @@ def main() -> None:
 
 # Register all commands
 main.add_command(evaluate_command, "evaluate")
+main.add_command(model_group, "model")
 main.add_command(init_command, "init")
 main.add_command(plugin_group, "plugin")
 main.add_command(power_command, "power")
