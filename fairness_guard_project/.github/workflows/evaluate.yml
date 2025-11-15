@@ -1,0 +1,148 @@
+name: Fairness Guard Evaluation
+
+on:
+  pull_request:
+    paths:
+      - 'implementations/candidate_*.py'
+      - 'fairness_guard_project/**'
+      - '.github/workflows/evaluate.yml'
+  workflow_dispatch:
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          cd fairness_guard_project
+          pip install -e .
+      
+      - name: Find candidate implementations
+        id: candidates
+        run: |
+          cd fairness_guard_project
+          if ls implementations/candidate_*.py 1> /dev/null 2>&1; then
+            echo "candidates=$(ls implementations/candidate_*.py | tr '\n' ' ')" >> $GITHUB_OUTPUT
+          else
+            echo "candidates=" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Evaluate candidates
+        id: evaluate
+        run: |
+          cd fairness_guard_project
+          if [ -z "${{ steps.candidates.outputs.candidates }}" ]; then
+            echo "No candidate implementations found"
+            exit 0
+          fi
+          
+          failed=0
+          for candidate in ${{ steps.candidates.outputs.candidates }}; do
+            echo "Evaluating $candidate..."
+            if fairness-guard evaluate --candidate "$candidate" --n 400; then
+              echo "✅ $candidate passed evaluation"
+            else
+              echo "❌ $candidate failed evaluation"
+              failed=1
+            fi
+          done
+          
+          if [ $failed -eq 1 ]; then
+            exit 1
+          fi
+      
+      - name: Upload reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: fairness-guard-reports
+          path: reports/*.json
+          retention-days: 30
+      
+      - name: Check fairness metrics
+        id: fairness-check
+        run: |
+          cd fairness_guard_project
+          python3 << 'EOF'
+          import json
+          import glob
+          import sys
+          
+          issues = []
+          for report_file in glob.glob('../reports/report_*.json'):
+              with open(report_file) as f:
+                  report = json.load(f)
+              
+              candidate_gap = report['candidate'].get('fairness_metrics', {}).get('fairness_gap', 0)
+              baseline_gap = report['baseline'].get('fairness_metrics', {}).get('fairness_gap', 0)
+              
+              if candidate_gap > baseline_gap * 1.1:
+                  issues.append(f"{report_file}: Candidate fairness gap ({candidate_gap:.3f}) exceeds baseline ({baseline_gap:.3f}) by more than 10%")
+          
+          if issues:
+              print("⚠️  Fairness concerns detected:")
+              for issue in issues:
+                  print(f"  - {issue}")
+              sys.exit(1)
+          else:
+              print("✅ All fairness metrics within acceptable bounds")
+          EOF
+      
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const glob = require('glob');
+            
+            // Find all report files
+            const reports = glob.sync('reports/report_*.json');
+            
+            if (reports.length === 0) {
+              core.setOutput('comment', 'No evaluation reports found.');
+              return;
+            }
+            
+            let comment = '## Fairness Guard Evaluation Results\n\n';
+            
+            for (const reportPath of reports) {
+              const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+              const decision = report.decision;
+              const baselineMetrics = report.baseline.fairness_metrics || {};
+              const candidateMetrics = report.candidate.fairness_metrics || {};
+              
+              comment += `### Report: ${path.basename(reportPath)}\n\n`;
+              comment += `- **Decision**: ${decision.adopt ? '✅ Adopt' : '❌ Reject'}\n`;
+              comment += `- **Reason**: ${decision.reason}\n`;
+              comment += `- **Δ Pass Rate**: ${report.delta_pass_rate?.toFixed(4) || 'N/A'}\n`;
+              comment += `- **95% CI**: [${report.delta_ci?.[0]?.toFixed(4) || 'N/A'}, ${report.delta_ci?.[1]?.toFixed(4) || 'N/A'}]\n\n`;
+              comment += `#### Fairness Metrics\n\n`;
+              comment += `**Baseline:**\n`;
+              comment += `- Overall Approval Rate: ${baselineMetrics.overall_approval_rate?.toFixed(4) || 'N/A'}\n`;
+              comment += `- Fairness Gap: ${baselineMetrics.fairness_gap?.toFixed(4) || 'N/A'}\n`;
+              comment += `- Group Rates: ${JSON.stringify(baselineMetrics.group_approval_rates || {})}\n\n`;
+              comment += `**Candidate:**\n`;
+              comment += `- Overall Approval Rate: ${candidateMetrics.overall_approval_rate?.toFixed(4) || 'N/A'}\n`;
+              comment += `- Fairness Gap: ${candidateMetrics.fairness_gap?.toFixed(4) || 'N/A'}\n`;
+              comment += `- Group Rates: ${JSON.stringify(candidateMetrics.group_approval_rates || {})}\n\n`;
+            }
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+

@@ -1,0 +1,111 @@
+name: Ranking Guard Evaluation
+
+on:
+  pull_request:
+    paths:
+      - 'implementations/candidate_*.py'
+      - 'ranking_guard_project/**'
+      - '.github/workflows/evaluate.yml'
+  workflow_dispatch:
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          cd ranking_guard_project
+          pip install -e .
+      
+      - name: Find candidate implementations
+        id: candidates
+        run: |
+          cd ranking_guard_project
+          if ls implementations/candidate_*.py 1> /dev/null 2>&1; then
+            echo "candidates=$(ls implementations/candidate_*.py | tr '\n' ' ')" >> $GITHUB_OUTPUT
+          else
+            echo "candidates=" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Evaluate candidates
+        id: evaluate
+        run: |
+          cd ranking_guard_project
+          if [ -z "${{ steps.candidates.outputs.candidates }}" ]; then
+            echo "No candidate implementations found"
+            exit 0
+          fi
+          
+          failed=0
+          for candidate in ${{ steps.candidates.outputs.candidates }}; do
+            echo "Evaluating $candidate..."
+            if ranking-guard evaluate --candidate "$candidate" --n 400 --ci-method bootstrap; then
+              echo "✅ $candidate passed evaluation"
+            else
+              echo "❌ $candidate failed evaluation"
+              failed=1
+            fi
+          done
+          
+          if [ $failed -eq 1 ]; then
+            exit 1
+          fi
+      
+      - name: Upload reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: ranking-guard-reports
+          path: reports/*.json
+          retention-days: 30
+      
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const glob = require('glob');
+            
+            // Find all report files
+            const reports = glob.sync('reports/report_*.json');
+            
+            if (reports.length === 0) {
+              core.setOutput('comment', 'No evaluation reports found.');
+              return;
+            }
+            
+            let comment = '## Ranking Guard Evaluation Results\n\n';
+            
+            for (const reportPath of reports) {
+              const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+              const decision = report.decision;
+              const candidate = report.hashes?.candidate ? report.hashes.candidate.substring(0, 8) : 'unknown';
+              
+              comment += `### Report: ${path.basename(reportPath)}\n\n`;
+              comment += `- **Decision**: ${decision.adopt ? '✅ Adopt' : '❌ Reject'}\n`;
+              comment += `- **Reason**: ${decision.reason}\n`;
+              comment += `- **Δ Pass Rate**: ${report.delta_pass_rate?.toFixed(4) || 'N/A'}\n`;
+              comment += `- **95% CI**: [${report.delta_ci?.[0]?.toFixed(4) || 'N/A'}, ${report.delta_ci?.[1]?.toFixed(4) || 'N/A'}]\n`;
+              comment += `- **Baseline Pass Rate**: ${report.baseline.pass_rate.toFixed(4)}\n`;
+              comment += `- **Candidate Pass Rate**: ${report.candidate.pass_rate.toFixed(4)}\n\n`;
+            }
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
