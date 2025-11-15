@@ -13,6 +13,7 @@ from .init import init_command
 from .model import model_group
 from .plugin import plugin_group
 from .power import power_command
+from .profile import export_profile
 from .provenance import provenance_diff_command
 from .regression import regression_guard_command
 from .replay import replay_command
@@ -57,6 +58,7 @@ main.add_command(provenance_diff_command, "provenance-diff")
 main.add_command(regression_guard_command, "regression-guard")
 main.add_command(replay_command, "replay")
 main.add_command(report_command, "report")
+main.add_command(export_profile, "export-profile")
 main.add_command(scaffold_plugin, "scaffold-plugin")
 main.add_command(stability_audit_command, "stability-audit")
 main.add_command(trace_group, "trace")

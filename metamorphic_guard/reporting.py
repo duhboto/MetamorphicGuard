@@ -68,6 +68,7 @@ def render_html_report(payload: Dict[str, Any], destination: Path) -> Path:
 
     fairness_chart = _extract_fairness_chart(monitors)
     resource_chart = _extract_resource_chart(monitors)
+    performance_chart = _extract_performance_chart(monitors)
     relation_block = _render_relation_coverage(payload.get("relation_coverage"))
     replay_block = _render_replay_block(payload.get("replay"))
     policy_block = _render_policy_block(payload.get("policy"), decision)
@@ -96,7 +97,18 @@ def render_html_report(payload: Dict[str, Any], destination: Path) -> Path:
         else ""
     )
 
-    chart_script = _build_chart_script(pass_chart_config, fairness_chart, resource_chart, coverage_chart)
+    performance_block = (
+        """
+  <div class="chart-container">
+    <h2>Performance Profiling</h2>
+    <canvas id="performance-chart"></canvas>
+  </div>
+"""
+        if performance_chart
+        else ""
+    )
+
+    chart_script = _build_chart_script(pass_chart_config, fairness_chart, resource_chart, coverage_chart, performance_chart)
 
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -166,6 +178,7 @@ def render_html_report(payload: Dict[str, Any], destination: Path) -> Path:
 
   {fairness_block}
   {resource_block}
+  {performance_block}
   {relation_block}
   
   {('<div class="chart-container"><h2>MR Coverage by Category</h2><canvas id="coverage-chart"></canvas></div>' if coverage_chart else '')}
@@ -638,11 +651,115 @@ def _extract_resource_chart(monitors: Dict[str, Any] | Sequence[Any]) -> Dict[st
     return None
 
 
+def _extract_performance_chart(monitors: Dict[str, Any] | Sequence[Any]) -> Dict[str, Any] | None:
+    """Extract performance profiling chart data from monitors."""
+    entries: Sequence[Any]
+    if isinstance(monitors, dict):
+        entries = monitors.values()
+    else:
+        entries = monitors or []
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("type") != "performance_profiler":
+            continue
+        
+        profile = entry
+        latency_data = profile.get("latency", {})
+        cost_data = profile.get("cost", {})
+        
+        # Build latency comparison chart
+        baseline_latency = latency_data.get("baseline", {})
+        candidate_latency = latency_data.get("candidate", {})
+        
+        if not baseline_latency or not candidate_latency:
+            continue
+        
+        baseline_mean = baseline_latency.get("mean_ms")
+        candidate_mean = candidate_latency.get("mean_ms")
+        baseline_p95 = baseline_latency.get("percentiles", {}).get("p95_ms")
+        candidate_p95 = candidate_latency.get("percentiles", {}).get("p95_ms")
+        
+        if baseline_mean is None or candidate_mean is None:
+            continue
+        
+        # Create multi-dataset chart for latency metrics
+        datasets = [
+            {
+                "label": "Mean Latency (ms)",
+                "backgroundColor": ["#4caf50", "#2196f3"],
+                "data": [
+                    round(float(baseline_mean), 2),
+                    round(float(candidate_mean), 2),
+                ],
+            }
+        ]
+        
+        if baseline_p95 is not None and candidate_p95 is not None:
+            datasets.append({
+                "label": "P95 Latency (ms)",
+                "backgroundColor": ["#81c784", "#64b5f6"],
+                "data": [
+                    round(float(baseline_p95), 2),
+                    round(float(candidate_p95), 2),
+                ],
+            })
+        
+        # Add cost data if available
+        if cost_data:
+            baseline_cost = cost_data.get("baseline", {}).get("mean_usd")
+            candidate_cost = cost_data.get("candidate", {}).get("mean_usd")
+            if baseline_cost is not None and candidate_cost is not None:
+                datasets.append({
+                    "label": "Mean Cost (USD)",
+                    "backgroundColor": ["#ff9800", "#f44336"],
+                    "data": [
+                        round(float(baseline_cost), 4),
+                        round(float(candidate_cost), 4),
+                    ],
+                    "yAxisID": "y1",
+                })
+        
+        return {
+            "type": "bar",
+            "data": {
+                "labels": ["Baseline", "Candidate"],
+                "datasets": datasets,
+            },
+            "options": {
+                "responsive": True,
+                "plugins": {
+                    "title": {
+                        "display": True,
+                        "text": "Performance Comparison (Latency & Cost)",
+                    },
+                    "legend": {"display": True},
+                },
+                "scales": {
+                    "y": {
+                        "beginAtZero": True,
+                        "title": {"display": True, "text": "Latency (ms)"},
+                    },
+                    "y1": {
+                        "type": "linear",
+                        "display": True,
+                        "position": "right",
+                        "title": {"display": True, "text": "Cost (USD)"},
+                        "grid": {"drawOnChartArea": False},
+                    },
+                },
+            },
+        }
+    return None
+
+
 def _build_chart_script(
     pass_chart: Dict[str, Any],
     fairness_chart: Dict[str, Any] | None,
     resource_chart: Dict[str, Any] | None,
     coverage_chart: Dict[str, Any] | None,
+    performance_chart: Dict[str, Any] | None = None,
 ) -> str:
     fairness_def = ""
     fairness_init = ""
@@ -662,6 +779,12 @@ def _build_chart_script(
         coverage_def = f"const coverageChartConfig = {json.dumps(coverage_chart)};"
         coverage_init = "const coverageCtx = document.getElementById('coverage-chart');\n    if (coverageCtx) { new Chart(coverageCtx, coverageChartConfig); }"
 
+    performance_def = ""
+    performance_init = ""
+    if performance_chart:
+        performance_def = f"const performanceChartConfig = {json.dumps(performance_chart)};"
+        performance_init = "const performanceCtx = document.getElementById('performance-chart');\n    if (performanceCtx) { new Chart(performanceCtx, performanceChartConfig); }"
+
     return (
         "\n  <script src=\"https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js\"></script>\n  <script>\n    const passRateChartConfig = "
         + json.dumps(pass_chart)
@@ -672,12 +795,16 @@ def _build_chart_script(
         + ("\n    " if resource_def else "")
         + coverage_def
         + ("\n    " if coverage_def else "")
+        + performance_def
+        + ("\n    " if performance_def else "")
         + "document.addEventListener('DOMContentLoaded', () => {\n      if (typeof Chart === 'undefined') { return; }\n      const passCtx = document.getElementById('pass-rate-chart');\n      if (passCtx) { new Chart(passCtx, passRateChartConfig); }\n      "
         + fairness_init
         + ("\n      " if fairness_init else "")
         + resource_init
         + ("\n      " if resource_init else "")
         + coverage_init
+        + ("\n      " if coverage_init else "")
+        + performance_init
         + "\n    });\n  </script>\n"
     )
 

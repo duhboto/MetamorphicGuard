@@ -616,10 +616,29 @@ def evaluate_command(
                 from ..specs import get_task
                 
                 spec = get_task(task)
-                # Try to extract prompt information from spec
-                # This is a simplified estimation - actual prompts may vary
+                # Generate sample inputs from spec for cost estimation
+                # Use a small sample to estimate average prompt length
                 system_prompt = None
-                user_prompts = ["Sample prompt"]  # Placeholder
+                user_prompts: list[str] = []
+                
+                try:
+                    # Generate a small sample of test inputs to estimate prompt sizes
+                    sample_size = min(5, effective_n)
+                    sample_inputs = spec.gen_inputs(sample_size, seed)
+                    
+                    # Format inputs as strings (prompts for LLM executors)
+                    for test_input in sample_inputs:
+                        if spec.fmt_in:
+                            formatted = spec.fmt_in(test_input)
+                            if isinstance(formatted, str) and formatted.strip():
+                                user_prompts.append(formatted)
+                    
+                    # If no prompts generated, use a default
+                    if not user_prompts:
+                        user_prompts = ["Example test case input"]
+                except Exception:
+                    # Fallback if spec doesn't support input generation
+                    user_prompts = ["Example test case input"]
                 
                 # Get executor config
                 executor_cfg = {}
