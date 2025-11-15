@@ -28,6 +28,7 @@ Homepage = "https://github.com/duhboto/MetamorphicGuard"
 Documentation = "https://pypi.org/project/metamorphic-guard/"
 
 [project.optional-dependencies]
+# Development dependencies
 dev = [
     "pytest>=7.0.0",
     "pytest-timeout>=2.1.0",
@@ -36,17 +37,53 @@ dev = [
     "hypothesis>=6.0.0",
     "mypy>=1.10.0",
 ]
+
+# LLM executor dependencies
 llm = [
     "openai>=1.0.0",
     "anthropic>=0.18.0",
     "vllm>=0.2.0",
 ]
+
+# OpenTelemetry observability dependencies
 otel = [
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
 ]
+
+# Queue backend dependencies (for distributed execution)
+queue = [
+    "redis>=5.0.0",
+    "boto3>=1.28.0",
+    "pika>=1.3.0",
+    "kafka-python>=2.0.0",
+]
+
+# Documentation dependencies
 docs = [
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.0.0",
+    "mkdocstrings[python]>=0.24.0",
+    "pymdown-extensions>=10.0.0",
+]
+
+# All optional dependencies combined
+all = [
+    # LLM
+    "openai>=1.0.0",
+    "anthropic>=0.18.0",
+    "vllm>=0.2.0",
+    # OpenTelemetry
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
+    # Queue backends
+    "redis>=5.0.0",
+    "boto3>=1.28.0",
+    "pika>=1.3.0",
+    "kafka-python>=2.0.0",
+    # Documentation
     "mkdocs>=1.5.0",
     "mkdocs-material>=9.0.0",
     "mkdocstrings[python]>=0.24.0",
