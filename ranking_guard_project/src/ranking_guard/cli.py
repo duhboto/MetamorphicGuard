@@ -42,6 +42,7 @@ def main() -> None:
 @click.option("--mem-mb", default=512, show_default=True, help="Sandbox memory limit.")
 @click.option(
     "--improve-delta",
+    "min_delta",
     default=0.0,
     show_default=True,
     help="Minimum improvement required for the CI lower bound.",
