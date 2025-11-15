@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Optional, Sequence
 
 import click
+from click import Command, Option, HelpFormatter
 
 from ..config import load_config
 from ..harness import run_eval
@@ -29,6 +30,170 @@ from .utils import (
     resolve_policy_option,
     write_violation_report,
 )
+
+
+class GroupedCommand(Command):
+    """Command that groups options in help output."""
+    
+    def __init__(self, *args: Any, option_groups: Optional[dict[str, list[str]]] = None, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.option_groups = option_groups or {}
+    
+    def format_options(self, ctx: click.Context, formatter: HelpFormatter) -> None:
+        """Format options grouped by category."""
+        if not self.option_groups:
+            # Fallback to default formatting
+            return super().format_options(ctx, formatter)
+        
+        # Get all options
+        opts = []
+        for param in self.get_params(ctx):
+            if isinstance(param, Option) and not param.hidden:
+                opts.append(param)
+        
+        # Group options
+        grouped: dict[str, list[Option]] = {}
+        ungrouped: list[Option] = []
+        
+        # Reverse mapping: option name -> group name
+        option_to_group: dict[str, str] = {}
+        for group_name, option_names in self.option_groups.items():
+            for opt_name in option_names:
+                option_to_group[opt_name] = group_name
+        
+        for opt in opts:
+            # Find the option name (handle both --option and --option-name formats)
+            opt_names = [name.lstrip('-').replace('-', '_') for name in opt.opts if name.startswith('--')]
+            found_group = None
+            for opt_name in opt_names:
+                if opt_name in option_to_group:
+                    found_group = option_to_group[opt_name]
+                    break
+            
+            if found_group:
+                grouped.setdefault(found_group, []).append(opt)
+            else:
+                ungrouped.append(opt)
+        
+        # Write grouped options
+        for group_name in sorted(grouped.keys()):
+            group_opts = grouped[group_name]
+            if group_opts:
+                with formatter.section(f"{group_name} Options"):
+                    self._format_options_list(ctx, formatter, group_opts)
+        
+        # Write ungrouped options
+        if ungrouped:
+            with formatter.section("Other Options"):
+                self._format_options_list(ctx, formatter, ungrouped)
+    
+    def _format_options_list(self, ctx: click.Context, formatter: HelpFormatter, opts: list[Option]) -> None:
+        """Format a list of options."""
+        for param in opts:
+            self._format_option(ctx, formatter, param)
+    
+    def _format_option(self, ctx: click.Context, formatter: HelpFormatter, param: Option) -> None:
+        """Format a single option."""
+        # Get option help - returns tuple of (option_string, help_text)
+        help_record = param.get_help_record(ctx)
+        if help_record and isinstance(help_record, tuple) and len(help_record) >= 2:
+            # write_dl expects a list of tuples, each with exactly 2 elements
+            formatter.write_dl([help_record])
+        elif help_record:
+            # Fallback: just write the option string and help separately
+            opt_str = help_record[0] if isinstance(help_record, tuple) else str(help_record)
+            help_text = help_record[1] if isinstance(help_record, tuple) and len(help_record) > 1 else ""
+            formatter.write_dl([(opt_str, help_text)])
+
+
+# Option groups for help organization
+OPTION_GROUPS = {
+    "Configuration": [
+        "config",
+        "preset",
+    ],
+    "Core": [
+        "task",
+        "baseline",
+        "candidate",
+        "n",
+        "seed",
+        "timeout_s",
+        "mem_mb",
+        "alpha",
+        "min_delta",
+        "min_pass_rate",
+        "violation_cap",
+    ],
+    "Statistical": [
+        "bootstrap_samples",
+        "ci_method",
+        "rr_ci_method",
+        "bayesian_samples",
+        "bayesian_hierarchical",
+        "bayesian_posterior_predictive",
+        "power_target",
+    ],
+    "Sequential Testing": [
+        "sequential_method",
+        "max_looks",
+        "look_number",
+    ],
+    "Adaptive Testing": [
+        "adaptive_testing",
+        "adaptive_min_sample_size",
+        "adaptive_check_interval",
+        "adaptive_power_threshold",
+        "adaptive_max_sample_size",
+        "adaptive_group_sequential",
+        "adaptive_sequential_method",
+        "adaptive_max_looks",
+    ],
+    "Execution": [
+        "parallel",
+        "dispatcher",
+        "executor",
+        "executor_config",
+        "queue_config",
+        "replay_input",
+    ],
+    "Reporting": [
+        "report_dir",
+        "html_report",
+        "junit_report",
+        "export_violations",
+    ],
+    "Advanced": [
+        "policy",
+        "monitor_names",
+        "mr_fwer",
+        "mr_hochberg",
+        "mr_fdr",
+        "no_mr_correction",
+        "shrink_violations",
+        "failed_artifact_limit",
+        "failed_artifact_ttl_days",
+        "policy_version",
+        "stability",
+        "estimate_cost",
+        "budget_limit",
+        "budget_warning",
+        "budget_action",
+    ],
+    "Observability": [
+        "log_file",
+        "log_json",
+        "metrics_enabled",
+        "metrics_port",
+        "metrics_host",
+        "otlp_endpoint",
+        "alert_webhooks",
+    ],
+    "Security": [
+        "sandbox_plugins",
+        "allow_unsafe_plugins",
+    ],
+}
 
 # Evaluate command options - extracted from original cli.py
 EVALUATE_OPTIONS = [
@@ -418,7 +583,7 @@ def apply_evaluate_options(func):
     return func
 
 
-@click.command("evaluate")
+@click.command("evaluate", cls=GroupedCommand, option_groups=OPTION_GROUPS)
 @apply_evaluate_options
 def evaluate_command(
     task: str,
