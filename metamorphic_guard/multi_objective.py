@@ -319,7 +319,9 @@ def multi_criteria_gate(
             continue
         
         # Check if objective meets threshold
-        if obj.minimize:
+        # Use config.minimize if available, otherwise use obj.minimize
+        should_minimize = config.minimize.get(obj_name, obj.minimize) if config.minimize else obj.minimize
+        if should_minimize:
             passes = obj.value <= threshold
         else:
             passes = obj.value >= threshold
