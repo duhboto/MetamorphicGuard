@@ -251,6 +251,7 @@ def execute_adaptively(
                     method="bootstrap",
                     alpha=alpha,
                     samples=1000,
+                    seed=seed,
                 )
                 
                 if delta_ci_result:
