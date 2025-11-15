@@ -187,8 +187,10 @@ def solve(x):
     
     # Verify metrics are computed
     assert "metrics" in result
-    assert "baseline" in result["metrics"]
-    assert "candidate" in result["metrics"]
+    # Metrics are organized by metric name, each containing baseline/candidate/delta
+    assert "value" in result["metrics"]
+    assert "baseline" in result["metrics"]["value"]
+    assert "candidate" in result["metrics"]["value"]
 
 
 def test_evaluation_with_different_implementations(tmp_path: Path):
@@ -255,11 +257,13 @@ def solve(x):
     
     # Verify metrics are present
     assert "metrics" in result
-    baseline_metrics = result["metrics"]["baseline"]
-    candidate_metrics = result["metrics"]["candidate"]
+    # Metrics are organized by metric name
+    assert "value" in result["metrics"]
+    assert "squared" in result["metrics"]
     
-    assert "value" in baseline_metrics
-    assert "value" in candidate_metrics
-    assert "squared" in baseline_metrics
-    assert "squared" in candidate_metrics
+    # Each metric has baseline, candidate, and delta
+    assert "baseline" in result["metrics"]["value"]
+    assert "candidate" in result["metrics"]["value"]
+    assert "baseline" in result["metrics"]["squared"]
+    assert "candidate" in result["metrics"]["squared"]
 
