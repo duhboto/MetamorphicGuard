@@ -34,6 +34,15 @@ from .model_comparison import (
     ModelComparisonReport,
 )
 
+# Scalability: 100k+ test case support
+from .scalability import (
+    ChunkedInputGenerator,
+    ProgressTracker,
+    IncrementalResultProcessor,
+    estimate_memory_requirements,
+    create_scalable_config,
+)
+
 # Version management via setuptools_scm
 try:
     from importlib.metadata import version
