@@ -511,6 +511,10 @@ def resolve_monitors(specs: Sequence[str], *, sandbox_plugins: bool = False, com
         "llm_cost_monitor": LLMCostMonitor,
         "performance": None,  # Lazy import to avoid circular dependency
         "profiler": None,  # Lazy import
+        "safety": None,  # Lazy import for SafetyMonitor
+        "toxicity": None,  # Lazy import for ToxicityMonitor
+        "bias": None,  # Lazy import for BiasMonitor
+        "pii": None,  # Lazy import for PIIMonitor
     }
 
     plugin_registry = monitor_plugins()
@@ -527,6 +531,26 @@ def resolve_monitors(specs: Sequence[str], *, sandbox_plugins: bool = False, com
                 factory = PerformanceProfiler
             except ImportError:
                 raise ValueError(f"Failed to import PerformanceProfiler for monitor '{name}'")
+        
+        # Handle lazy imports for safety monitors
+        if factory is None and name in ("safety", "toxicity", "bias", "pii"):
+            try:
+                from .safety_monitors import (
+                    SafetyMonitor,
+                    ToxicityMonitor,
+                    BiasMonitor,
+                    PIIMonitor,
+                )
+                if name == "safety":
+                    factory = SafetyMonitor
+                elif name == "toxicity":
+                    factory = ToxicityMonitor
+                elif name == "bias":
+                    factory = BiasMonitor
+                elif name == "pii":
+                    factory = PIIMonitor
+            except ImportError:
+                raise ValueError(f"Failed to import safety monitors for '{name}'")
         
         if factory is not None:
             monitors.append(factory(**params))

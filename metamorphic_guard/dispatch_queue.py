@@ -6,7 +6,7 @@ All functionality has been moved to the dispatch package.
 """
 
 # Re-export from the refactored module structure
-from .dispatch_queue_pkg import QueueDispatcher
+from .dispatch import QueueDispatcher
 
 # Backwards compatibility exports
 from .queue_adapter import (

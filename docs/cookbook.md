@@ -2,6 +2,19 @@
 
 A few opinionated recipes for real-world adoption.
 
+## Table of Contents
+
+- [Distributed Evaluations](#distributed-evaluations)
+- [Advanced Monitors](#advanced-monitors)
+- [Metrics, Provenance & Dashboards](#metrics-provenance--dashboards)
+- [Programmatic Gates & Config Pipelines](#programmatic-gates--config-pipelines)
+- [Advanced Monitors & Alerts](#advanced-monitors--alerts)
+- [Security Hardening & Redaction](#security-hardening--redaction)
+- [Interactive Init & Plugin Scaffolds](#interactive-init--plugin-scaffolds)
+- [CI/CD Integration](#cicd-integration)
+- [Advanced Patterns](cookbook/advanced-patterns.md) - Complex use cases and patterns
+- [Case Studies](cookbook/case-studies.md) - Real-world deployment examples
+
 ## Distributed Evaluations
 
 1. Launch Redis (`docker run -p 6379:6379 redis`).

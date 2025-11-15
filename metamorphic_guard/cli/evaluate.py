@@ -489,10 +489,16 @@ def evaluate_command(
 
     available_tasks = list_tasks()
     if task not in available_tasks:
-        click.echo(
-            f"Error: Task '{task}' not found. Available tasks: {available_tasks}",
-            err=True,
-        )
+        from .progress import echo_error, format_error_message
+        
+        error_msg = f"Task '{task}' not found"
+        suggestions = [
+            f"Available tasks: {', '.join(available_tasks)}",
+            "Register your task with @task decorator",
+            "See: metamorphic-guard plugin list",
+        ]
+        
+        click.echo(format_error_message(ValueError(error_msg), {"suggestions": suggestions}), err=True)
         sys.exit(1)
 
     try:
@@ -1069,19 +1075,23 @@ def evaluate_command(
                 # Silently fail if telemetry export fails
                 pass
 
+        from .progress import echo_success, echo_error
+        
         if decision["adopt"]:
-            click.echo("✅ Candidate accepted!")
+            echo_success("Candidate accepted!")
             sys.exit(0)
 
-        click.echo("❌ Candidate rejected!")
+        echo_error("Candidate rejected!")
         sys.exit(1)
 
     except KeyboardInterrupt:  # pragma: no cover - defensive surface
-        click.echo("Evaluation interrupted by user.", err=True)
+        from .progress import echo_warning
+        echo_warning("Evaluation interrupted by user.")
         sys.exit(1)
 
     except Exception as exc:  # pragma: no cover - defensive surface
-        click.echo(f"Error during evaluation: {exc}", err=True)
+        from .progress import echo_error
+        echo_error("Error during evaluation", error=exc)
         sys.exit(1)
     finally:
         close_logging()

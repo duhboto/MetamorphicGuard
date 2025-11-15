@@ -13,6 +13,97 @@
       "    )"
     ],
     "description": "Register a Metamorphic Guard task."
+  },
+  "Property Definition": {
+    "prefix": "mg-property",
+    "body": [
+      "Property(",
+      "    check=lambda ${1:output}, ${2:*args}: ${3:condition},",
+      "    description=\"${4:Property description}\"",
+      ")"
+    ],
+    "description": "Define a property to check on outputs."
+  },
+  "Metamorphic Relation": {
+    "prefix": "mg-relation",
+    "body": [
+      "MetamorphicRelation(",
+      "    name=\"${1:relation_name}\",",
+      "    transform=lambda ${2:*args}, rng=None: ${3:transformed_args},",
+      "    expect=\"${4|equal,similar,proportional|}\",",
+      "    accepts_rng=${5:True},",
+      "    category=\"${6:category}\",",
+      "    description=\"${7:Description}\"",
+      ")"
+    ],
+    "description": "Define a metamorphic relation."
+  },
+  "TaskSpec": {
+    "prefix": "mg-taskspec",
+    "body": [
+      "from metamorphic_guard import TaskSpec, Property, MetamorphicRelation",
+      "",
+      "SPEC = TaskSpec(",
+      "    name=\"${1:task_name}\",",
+      "    gen_inputs=lambda n, seed: ${2:[(i,) for i in range(n)]},",
+      "    properties=[",
+      "        ${3:Property(check=lambda out, x: True, description=\"Example property\")}",
+      "    ],",
+      "    relations=[",
+      "        ${4:# Add MetamorphicRelation objects}",
+      "    ],",
+      "    equivalence=lambda a, b: ${5:a == b},",
+      "    fmt_in=lambda args: ${6:str(args)},",
+      "    fmt_out=lambda result: ${7:str(result)},",
+      ")"
+    ],
+    "description": "Create a TaskSpec for programmatic evaluation."
+  },
+  "LLM Harness": {
+    "prefix": "mg-llm",
+    "body": [
+      "from metamorphic_guard.llm_harness import LLMHarness",
+      "",
+      "harness = LLMHarness(",
+      "    model=\"${1|gpt-3.5-turbo,gpt-4,claude-3-opus|}\",",
+      "    provider=\"${2|openai,anthropic|}\",",
+      "    executor_config={\"api_key\": \"${3:YOUR_API_KEY}\"},",
+      "    max_tokens=${4:512},",
+      "    temperature=${5:0.0},",
+      ")",
+      "",
+      "report = harness.run(",
+      "    case={\"system\": \"${6:You are a helpful assistant}\", \"user\": \"${7:Your question}\"},",
+      "    props=[${8:# Add judges}],",
+      "    mrs=[${9:# Add mutants}],",
+      "    n=${10:100},",
+      ")"
+    ],
+    "description": "Set up LLM evaluation harness."
+  },
+  "Monitor": {
+    "prefix": "mg-monitor",
+    "body": [
+      "from metamorphic_guard.monitors import ${1|LatencyMonitor,LLMCostMonitor,FairnessGapMonitor,ResourceMonitor,PerformanceProfiler|}",
+      "",
+      "monitor = ${1:LatencyMonitor}(",
+      "    ${2:percentile=0.99, alert_ratio=1.2}",
+      ")"
+    ],
+    "description": "Create a monitor for evaluation."
+  },
+  "Run Evaluation": {
+    "prefix": "mg-run",
+    "body": [
+      "from metamorphic_guard import run, TaskSpec, Implementation",
+      "",
+      "result = run(",
+      "    task=${1:my_task_spec},",
+      "    baseline=Implementation.from_path(\"${2:baseline.py}\"),",
+      "    candidate=Implementation.from_path(\"${3:candidate.py}\"),",
+      "    config=${4:None},",
+      ")"
+    ],
+    "description": "Run an evaluation programmatically."
   }
 }
-

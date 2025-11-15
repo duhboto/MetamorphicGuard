@@ -161,7 +161,7 @@ class LocalDispatcher(Dispatcher):
 # Import it lazily using absolute import to avoid circular dependency issues.
 def _lazy_import_queue_dispatcher():
     """Lazy import of QueueDispatcher to avoid circular imports."""
-    from .dispatch_queue_pkg.queue_dispatcher import QueueDispatcher  # noqa: E402  # isort:skip
+    from .dispatch.queue_dispatcher import QueueDispatcher  # noqa: E402  # isort:skip
     return QueueDispatcher
 
 # Store the function but don't call it yet - actual imports happen at runtime

@@ -1,8 +1,8 @@
 {
   "name": "metamorphic-guard-snippets",
   "displayName": "Metamorphic Guard Snippets",
-  "description": "Developer snippets for writing specs, properties, and relations.",
-  "version": "0.1.0",
+  "description": "Developer snippets and tools for Metamorphic Guard.",
+  "version": "0.2.0",
   "publisher": "metamorphicguard",
   "engines": {
     "vscode": "^1.70.0"
@@ -12,6 +12,36 @@
       {
         "language": "python",
         "path": "./snippets/code-snippets.json"
+      }
+    ],
+    "configuration": {
+      "title": "Metamorphic Guard",
+      "properties": {
+        "metamorphicGuard.defaultTask": {
+          "type": "string",
+          "default": "top_k",
+          "description": "Default task name for evaluations"
+        },
+        "metamorphicGuard.defaultN": {
+          "type": "number",
+          "default": 400,
+          "description": "Default number of test cases"
+        },
+        "metamorphicGuard.enableLinting": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable linting for Metamorphic Guard code"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "metamorphicGuard.runEvaluation",
+        "title": "Run Metamorphic Guard Evaluation"
+      },
+      {
+        "command": "metamorphicGuard.viewReport",
+        "title": "View Evaluation Report"
       }
     ]
   }

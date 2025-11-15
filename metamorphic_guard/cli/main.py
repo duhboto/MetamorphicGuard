@@ -8,6 +8,7 @@ from typing import Any
 
 import click
 
+from .compare import compare_command, compare_baseline_command
 from .evaluate import evaluate_command
 from .init import init_command
 from .model import model_group
@@ -18,12 +19,14 @@ from .provenance import provenance_diff_command
 from .regression import regression_guard_command
 from .replay import replay_command
 from .report import report_command
+from .risk import risk_group
 from .scaffold import scaffold_plugin
 from .stability import stability_audit_command
 from .trace import trace_group
 from .policy import policy_group
 from .audit import audit_group
 from .mr import mr_group
+from .debug import debug_group
 
 
 class DefaultCommandGroup(click.Group):
@@ -50,6 +53,8 @@ def main() -> None:
 
 # Register all commands
 main.add_command(evaluate_command, "evaluate")
+main.add_command(compare_command, "compare")
+main.add_command(compare_baseline_command, "compare-baseline")
 main.add_command(model_group, "model")
 main.add_command(init_command, "init")
 main.add_command(plugin_group, "plugin")
@@ -65,4 +70,6 @@ main.add_command(trace_group, "trace")
 main.add_command(policy_group, "policy")
 main.add_command(mr_group, "mr")
 main.add_command(audit_group, "audit")
+main.add_command(debug_group, "debug")
+main.add_command(risk_group, "risk")
 

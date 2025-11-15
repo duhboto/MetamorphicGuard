@@ -416,6 +416,15 @@ def run_eval(
     # Use adaptive execution if enabled, otherwise normal execution
     if adaptive_testing:
         from .harness import adaptive_execution
+        from .early_stopping import EarlyStoppingConfig
+        
+        # Configure early stopping if adaptive testing is enabled
+        early_stopping_config = EarlyStoppingConfig(
+            enabled=True,
+            method="combined",  # Use combined method for best results
+            confidence_threshold=0.95,
+            min_samples=adaptive_config.min_sample_size,
+        )
         
         baseline_results, candidate_results, adaptive_metadata = adaptive_execution.execute_adaptively(
             plan=plan,
@@ -437,6 +446,7 @@ def run_eval(
             seed=seed,
             shrink_violations=shrink_violations,
             spec=spec,
+            early_stopping_config=early_stopping_config,
         )
         
         # Update n to reflect actual samples run

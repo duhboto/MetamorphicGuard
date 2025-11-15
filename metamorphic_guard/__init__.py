@@ -7,6 +7,33 @@ from .generators import gen_top_k_inputs
 from .relations import permute_input, add_noise_below_min
 from .stability import multiset_equal
 
+# Phase 5: Advanced Features
+# Export key classes for advanced features (optional imports to avoid breaking existing code)
+try:
+    from .adaptive_sampling import SamplingStrategy, select_next_batch
+    from .early_stopping import EarlyStoppingConfig, should_stop_early
+    from .multi_objective import (
+        CandidateMetrics,
+        MultiObjectiveConfig,
+        analyze_trade_offs,
+        recommend_candidate,
+    )
+    from .trust_scoring import compute_trust_score, TrustScore
+    from .safety_monitors import SafetyMonitor, ToxicityMonitor, BiasMonitor, PIIMonitor
+    from .compliance import check_compliance, GDPR_RULE, HIPAA_RULE, FINANCIAL_RULE
+    from .audit_enhanced import AuditTrail, create_audit_trail, verify_audit_trail
+except ImportError:
+    # Graceful degradation if dependencies are missing
+    pass
+
+# Section 6: Model Comparison
+from .model_comparison import (
+    compare_models,
+    compare_with_baseline,
+    ModelComparisonResult,
+    ModelComparisonReport,
+)
+
 # Version management via setuptools_scm
 try:
     from importlib.metadata import version

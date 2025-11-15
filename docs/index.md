@@ -37,10 +37,17 @@ metamorphic-guard evaluate \
 ## Documentation
 
 - [Getting Started](getting-started/quickstart.md) - Install and run your first evaluation
-- [User Guide](user-guide/basic-usage.md) - Learn how to use Metamorphic Guard
+- [Cookbook](cookbook.md) - Recipes for real-world adoption
+  - [Advanced Patterns](cookbook/advanced-patterns.md) - Complex use cases and patterns
+  - [Case Studies](cookbook/case-studies.md) - Real-world deployment examples
+  - [CI/CD Integration](cookbook/cicd-integration.md) - Pipeline integration guides
+- [User Guide](user-guide/llm-evaluation.md) - Learn how to use Metamorphic Guard
 - [LLM Evaluation](user-guide/llm-evaluation.md) - Evaluate Large Language Models
-- [API Reference](api/harness.md) - Complete API documentation
-- [Examples](examples/basic.md) - Code examples and tutorials
+- [API Reference](api/reference.md) - Complete API documentation
+- [Architecture](architecture.md) - System architecture and design
+- [Integrations](integrations/pytest.md) - Framework integrations (pytest, etc.)
+- [Contributing](contributing.md) - How to contribute to the project
+- [Plugin Marketplace](plugins/marketplace.md) - Community plugins and extensions
 
 ## Example Output
 

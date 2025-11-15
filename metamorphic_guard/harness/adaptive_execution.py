@@ -11,6 +11,8 @@ from .reporting import evaluate_roles
 from ..observability import log_event
 from ..specs import Spec
 from .execution import ExecutionPlan, execute_implementations, prepare_execution_plan
+from ..early_stopping import EarlyStoppingConfig, should_stop_early
+from ..harness.statistics import PassRateMetrics
 
 
 def execute_adaptively(
@@ -222,6 +224,57 @@ def execute_adaptively(
                 recommended_n=decision.recommended_n,
                 reason=decision.reason,
             )
+            
+            # Check early stopping if enabled
+            if early_stopping_config and early_stopping_config.enabled:
+                from ..harness.statistics import compute_delta_ci
+                
+                # Convert metrics to PassRateMetrics format
+                baseline_pr_metrics: PassRateMetrics = {
+                    "passes": baseline_metrics.get("passes", 0),
+                    "total": baseline_metrics.get("total", 0),
+                    "pass_rate": baseline_metrics.get("pass_rate", 0.0),
+                    "pass_indicators": baseline_metrics.get("pass_indicators", []),
+                }
+                candidate_pr_metrics: PassRateMetrics = {
+                    "passes": candidate_metrics.get("passes", 0),
+                    "total": candidate_metrics.get("total", 0),
+                    "pass_rate": candidate_metrics.get("pass_rate", 0.0),
+                    "pass_indicators": candidate_metrics.get("pass_indicators", []),
+                }
+                
+                # Compute delta CI for early stopping
+                delta_ci_result = compute_delta_ci(
+                    baseline_pr_metrics,
+                    candidate_pr_metrics,
+                    method="bootstrap",
+                    alpha=alpha,
+                    samples=1000,
+                )
+                
+                if delta_ci_result:
+                    delta_ci = (delta_ci_result["lower"], delta_ci_result["upper"])
+                    early_stop_decision = should_stop_early(
+                        baseline_pr_metrics,
+                        candidate_pr_metrics,
+                        delta_ci,
+                        min_delta,
+                        early_stopping_config,
+                    )
+                    
+                    if early_stop_decision.should_stop:
+                        adaptive_metadata["early_stop"] = True
+                        adaptive_metadata["early_stop_reason"] = early_stop_decision.reason
+                        adaptive_metadata["early_stop_confidence"] = early_stop_decision.confidence
+                        adaptive_metadata["final_n"] = processed
+                        final_n = processed
+                        log_event(
+                            "early_stop",
+                            n=processed,
+                            reason=early_stop_decision.reason,
+                            confidence=early_stop_decision.confidence,
+                        )
+                        break
             
             if not decision.continue_sampling:
                 # Stop early
