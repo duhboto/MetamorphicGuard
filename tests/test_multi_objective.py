@@ -70,10 +70,14 @@ def test_compute_pareto_frontier():
     
     frontier = compute_pareto_frontier(candidates, objectives, minimize)
     
-    assert len(frontier) == 3
     # c1 and c3 should be Pareto-optimal (c2 is dominated by c1)
     optimal_ids = [p.candidate_id for p in frontier if not p.dominated]
-    assert "c1" in optimal_ids or "c3" in optimal_ids
+    assert len(optimal_ids) == 2
+    assert "c1" in optimal_ids
+    assert "c3" in optimal_ids
+    # c2 should be dominated
+    c2_point = next(p for p in frontier if p.candidate_id == "c2")
+    assert c2_point.dominated is True
 
 
 def test_compute_weighted_sum_score():
