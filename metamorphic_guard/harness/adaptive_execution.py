@@ -36,6 +36,7 @@ def execute_adaptively(
     seed: int,
     shrink_violations: bool,
     spec: Spec,
+    early_stopping_config: Optional[EarlyStoppingConfig] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
     """
     Execute baseline and candidate with adaptive sample size determination.
