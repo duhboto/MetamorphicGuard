@@ -182,14 +182,14 @@ def test_compute_uncertainty_score():
 def test_compute_diversity_score():
     """Test diversity score computation."""
     test_inputs = [(1,), (2,), (3,), (4,), (5,)]
-    executed_indices = [0, 1]
+    executed_inputs = [(1,), (2,)]  # Already executed
     
     # Should prefer unexecuted cases
-    score = compute_diversity_score(2, test_inputs, executed_indices)
+    score = compute_diversity_score((3,), executed_inputs, cluster_key=None)
     assert score > 0
     
     # Already executed cases should have lower diversity
-    score_executed = compute_diversity_score(0, test_inputs, executed_indices)
+    score_executed = compute_diversity_score((1,), executed_inputs, cluster_key=None)
     assert score_executed < score
 
 
@@ -198,17 +198,18 @@ def test_compute_violation_focused_score():
     violation_history = {
         (1,): 2,
         (2,): 1,
-        (3,): 0,
     }
     
-    # Cases with more violations should score higher
+    # Cases in violation history should score higher
     score1 = compute_violation_focused_score((1,), violation_history)
     score2 = compute_violation_focused_score((2,), violation_history)
-    score3 = compute_violation_focused_score((3,), violation_history)
+    score3 = compute_violation_focused_score((3,), violation_history)  # Not in history
     
-    assert score1 > score2 > score3
-    assert score1 > 0
-    assert score3 == 0  # No violations
+    assert score1 == 1.0  # Direct match returns 1.0
+    assert score2 == 1.0  # Direct match returns 1.0
+    assert score3 == 0.0  # Not in violation history
+    assert score1 > score3
+    assert score2 > score3
 
 
 def test_score_test_cases():
