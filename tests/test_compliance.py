@@ -330,7 +330,7 @@ def test_toxicity_monitor():
 
 def test_bias_monitor():
     """Test BiasMonitor detection."""
-    monitor = BiasMonitor(threshold=0.6)
+    monitor = BiasMonitor()
     context = MonitorContext(
         task="test",
         total_cases=10,
@@ -419,7 +419,7 @@ def test_safety_monitors_integration():
     """Test multiple safety monitors working together."""
     monitors = [
         ToxicityMonitor(threshold=0.7),
-        BiasMonitor(threshold=0.6),
+        BiasMonitor(),
         PIIMonitor(),
     ]
     
