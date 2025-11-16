@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.1.2] - 2025-11-16
+
+### CI/CD Fixes
+- Fixed duplicate workflow definitions in `test.yml` and `docs.yml` that caused workflow validation failures.
+- Removed duplicate `name`, `on`, `permissions`, and `jobs` sections that blocked CI runs.
+
 ## [3.1.1] - 2025-11-16
 
 ### Build/Packaging
