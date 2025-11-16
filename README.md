@@ -66,6 +66,11 @@ New to Metamorphic Guard? Check out our [First PR Gate Tutorial](docs/first-pr-g
 - Integrating with GitHub Actions
 - Generating reports and badges
 
+**Getting Started:**
+- **[Quick Start Guide](docs/getting-started/quickstart.md)** - Step-by-step walkthrough
+- **[Onboarding Checklist](docs/getting-started/checklist.md)** - Ensure you have everything set up
+- **[Installation Guide](docs/getting-started/installation.md)** - Installation options and profiles
+
 **Architecture**: See [Architecture Documentation](docs/architecture.md) for details on component interfaces, execution system, worker liveness, and signal handling.
 
 ## Reference Projects in This Repository
