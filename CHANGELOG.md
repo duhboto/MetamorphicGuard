@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.1.0] - 2025-11-16
+
+### Enhancements
+- Added replay command to reports for easy reproduction (`report.replay.cli`).
+- Introduced bounded benchmark test to guard performance budgets in CI.
+- Added observability documentation with Prometheus scrape example.
+- Added SECURITY.md and `templates/docker-executor.toml` with hardened defaults.
+- Updated GitHub Actions docs to be test-gated; added docs deploy workflow (MkDocs → GH Pages).
+
+### CI/CD
+- Gated publishing on tests and mypy; unified versioning to static `pyproject.toml`.
+- Added entry point resolution test to catch broken plugins/scripts before release.
+
+### Notes
+- No breaking API changes. Safe minor update.
+
 ## [3.0.1] - 2025-01-15
 
 ### Bug Fixes
