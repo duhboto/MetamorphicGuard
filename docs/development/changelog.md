@@ -40,3 +40,4 @@ Each release entry uses this structure:
 - [ ] Dates are correct (UTC)
 - [ ] Version matches `pyproject.toml`
 - [ ] Commit the updated changelog
+

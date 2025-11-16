@@ -45,30 +45,8 @@ _compose_llm_metrics = compose_llm_metrics
 _evaluate_results = evaluate_results
 _summarize_llm_results = summarize_llm_results
 
-# Import run_eval from parent module (harness.py) for backward compatibility
-# We need to use importlib to avoid circular imports
-import importlib.util
-import sys
-from pathlib import Path
-
-# Get the parent directory and import harness.py as a module
-_parent_dir = Path(__file__).parent.parent
-_harness_file = _parent_dir / "harness.py"
-if _harness_file.exists():
-    spec = importlib.util.spec_from_file_location("metamorphic_guard.harness_module", _harness_file)
-    if spec and spec.loader:
-        _harness_module = importlib.util.module_from_spec(spec)
-        sys.modules["metamorphic_guard.harness_module"] = _harness_module
-        spec.loader.exec_module(_harness_module)
-        run_eval = _harness_module.run_eval
-    else:
-        # Fallback: try direct import
-        from .. import harness as _harness_module
-        run_eval = _harness_module.run_eval
-else:
-    # If harness.py doesn't exist, create a stub
-    def run_eval(*args, **kwargs):
-        raise ImportError("run_eval not available")
+# Import run_eval from evaluation module
+from .evaluation import run_eval
 
 __all__ = [
     # Statistics
@@ -96,7 +74,7 @@ __all__ = [
     "summarize_relations",
     # Trust
     "compute_trust_scores",
-    # Main entry point (imported from parent harness.py)
+    # Main entry point (from evaluation module)
     "run_eval",
     # Backward compatibility aliases for private functions (used by tests)
     "_compute_delta_ci",

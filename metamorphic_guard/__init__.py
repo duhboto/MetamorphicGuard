@@ -50,10 +50,7 @@ try:
     __version__ = version("metamorphic_guard")
 except Exception:
     # Fallback for development or if package not installed
-    try:
-        from ._version import __version__  # type: ignore
-    except ImportError:
-        __version__ = "dev"  # type: ignore
+    __version__ = "dev"  # type: ignore
 
 
 @task("top_k")

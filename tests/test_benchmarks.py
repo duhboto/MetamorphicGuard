@@ -1,3 +1,96 @@
+from __future__ import annotations
+
+import time
+
+from metamorphic_guard.api import (
+    TaskSpec,
+    Property,
+    MetamorphicRelation,
+    Implementation,
+    EvaluationConfig,
+    run,
+)
+from metamorphic_guard.stability import multiset_equal
+
+
+def _gen_small_inputs(n: int, seed: int):
+    # Deterministic tiny workload - return a concrete list
+    rng = seed
+    cases = []
+    for i in range(n):
+        L = [((i * 31 + j * 17 + rng) % 1000) for j in range(40)]
+        cases.append((L, 10))
+    return cases
+
+
+def _permute_input(args, rng=None):
+    L, k = args
+    # Simple, deterministic permutation based on length to avoid randomness
+    idx = list(range(len(L)))
+    idx.reverse()
+    return (L[::-1], k)
+
+
+def _top_k_baseline(L, k):
+    if not L or k <= 0:
+        return []
+    return sorted(L, reverse=True)[: min(k, len(L))]
+
+
+def _top_k_candidate(L, k):
+    # Equivalent but with a small branch difference
+    if k >= len(L):
+        return sorted(L, reverse=True)
+    return sorted(L, reverse=True)[:k]
+
+
+def test_small_run_finishes_within_time_budget():
+    # Construct a minimal spec
+    spec = TaskSpec(
+        name="bench_top_k",
+        gen_inputs=_gen_small_inputs,
+        properties=[
+            Property(
+                check=lambda out, L, k: len(out) == min(k, len(L)),
+                description="Output length equals min(k, len(L))",
+            ),
+            Property(
+                check=lambda out, L, k: sorted(out, reverse=True) == out,
+                description="Output is sorted in descending order",
+            ),
+        ],
+        relations=[
+            MetamorphicRelation(
+                name="permute_input",
+                transform=_permute_input,
+                expect="equal",
+                category="permutation_invariance",
+            )
+        ],
+        equivalence=multiset_equal,
+    )
+
+    baseline = Implementation.from_callable(_top_k_baseline)
+    candidate = Implementation.from_callable(_top_k_candidate)
+    cfg = EvaluationConfig(
+        n=150,
+        seed=123,
+        min_delta=-0.5,
+        ci_method="newcombe",
+        bootstrap_samples=200,  # keep very small to bound runtime
+    )
+
+    start = time.perf_counter()
+    result = run(spec, baseline, candidate, cfg)
+    elapsed = time.perf_counter() - start
+    # CI budget: should comfortably run under 10 seconds on typical runners
+    assert elapsed < 10.0, f"Elapsed {elapsed:.2f}s exceeds time budget"
+    # Basic structural checks
+    report = result.report
+    assert report.get("task") == "bench_top_k"
+    assert "baseline" in report and "candidate" in report
+    assert "decision" in report and isinstance(report["decision"], dict)
+
 """
 Benchmark regression suites for validating statistics engine.
 

@@ -1,9 +1,6 @@
 [build-system]
-requires = ["setuptools>=64", "wheel", "setuptools-scm>=7.0"]
+requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
-
-[tool.setuptools_scm]
-write_to = "metamorphic_guard/_version.py"
 
 [project]
 name = "metamorphic_guard"
@@ -12,6 +9,17 @@ description = "A Python library for comparing program versions using metamorphic
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Spencer Duh" }]
+license = { file = "LICENSE" }
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Testing",
+]
 dependencies = [
     "click>=8.1",
     "pydantic>=2.0",

@@ -9,7 +9,7 @@ import random
 
 import pytest
 
-from metamorphic_guard.harness import _compute_delta_ci, _estimate_power
+from metamorphic_guard.harness.statistics import compute_delta_ci, estimate_power
 from metamorphic_guard.sequential_testing import (
     SequentialTestConfig,
     apply_sequential_correction,
@@ -51,7 +51,7 @@ def test_bootstrap_ci_empirical_coverage():
         candidate = _simulate_binomial(rng, n, p_candidate)
         baseline_metrics = _build_metrics(baseline)
         candidate_metrics = _build_metrics(candidate)
-        ci = _compute_delta_ci(
+        ci = compute_delta_ci(
             baseline_metrics,
             candidate_metrics,
             alpha=0.05,
@@ -77,7 +77,7 @@ def test_sequential_correction_expands_interval():
     baseline_metrics = _build_metrics(baseline)
     candidate_metrics = _build_metrics(candidate)
 
-    original_ci = _compute_delta_ci(
+    original_ci = compute_delta_ci(
         baseline_metrics,
         candidate_metrics,
         alpha=0.05,
@@ -94,7 +94,7 @@ def test_sequential_correction_expands_interval():
     )
 
     def _recompute(new_alpha: float):
-        return _compute_delta_ci(
+        return compute_delta_ci(
             baseline_metrics,
             candidate_metrics,
             alpha=new_alpha,
@@ -119,7 +119,7 @@ def test_power_estimate_monotonic_with_threshold():
     p_candidate = 0.82
     sample_size = 200
 
-    power_lo, n_lo = _estimate_power(
+    power_lo, n_lo = estimate_power(
         p_baseline,
         p_candidate,
         sample_size,
@@ -127,7 +127,7 @@ def test_power_estimate_monotonic_with_threshold():
         delta_value=0.01,
         power_target=0.8,
     )
-    power_hi, n_hi = _estimate_power(
+    power_hi, n_hi = estimate_power(
         p_baseline,
         p_candidate,
         sample_size,

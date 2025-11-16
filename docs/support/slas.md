@@ -31,3 +31,4 @@ This document defines support expectations for Metamorphic Guard.
 
 ## Version Support
 - We support the latest MAJOR.MINOR and the previous MINOR for critical fixes
+

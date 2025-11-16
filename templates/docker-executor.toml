@@ -1,0 +1,22 @@
+# Example Docker executor configuration for stronger isolation
+
+task = "top_k"
+baseline = "examples/top_k_baseline.py"
+candidate = "examples/top_k_improved.py"
+n = 600
+seed = 1337
+executor = "docker"
+
+[executor_config]
+image = "python:3.11-slim"
+cpus = 2
+memory_mb = 1024
+read_only = true
+tmpfs = ["/tmp"]
+cap_drop = ["ALL"]
+security_opt = ["no-new-privileges:true"]
+
+[metamorphic_guard.alerts]
+webhooks = []
+
+

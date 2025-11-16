@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from metamorphic_guard.harness import _compute_delta_ci
+from metamorphic_guard.harness.statistics import compute_delta_ci
 
 
 def _build_metrics(indicators, cluster=False):
@@ -27,7 +27,7 @@ def test_bootstrap_bca_interval_contains_delta():
     baseline_metrics = _build_metrics(baseline)
     candidate_metrics = _build_metrics(candidate)
 
-    ci = _compute_delta_ci(
+    ci = compute_delta_ci(
         baseline_metrics,
         candidate_metrics,
         alpha=0.05,
@@ -47,7 +47,7 @@ def test_bootstrap_cluster_bca_interval_contains_delta():
     baseline_metrics = _build_metrics(baseline, cluster=True)
     candidate_metrics = _build_metrics(candidate, cluster=True)
 
-    ci = _compute_delta_ci(
+    ci = compute_delta_ci(
         baseline_metrics,
         candidate_metrics,
         alpha=0.05,

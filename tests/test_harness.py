@@ -7,15 +7,17 @@ import textwrap
 
 import pytest
 
-from metamorphic_guard.harness import (
-    _collect_metrics,
-    _compute_bootstrap_ci,
-    _compute_delta_ci,
-    _compute_relative_risk,
-    _compose_llm_metrics,
-    _evaluate_results,
-    _summarize_llm_results,
-    run_eval,
+from metamorphic_guard.harness import run_eval
+from metamorphic_guard.harness.statistics import (
+    compute_bootstrap_ci,
+    compute_delta_ci,
+    compute_relative_risk,
+)
+from metamorphic_guard.harness.reporting import (
+    collect_metrics,
+    compose_llm_metrics,
+    evaluate_results,
+    summarize_llm_results,
 )
 from metamorphic_guard.specs import (
     Metric,
@@ -35,7 +37,7 @@ def test_bootstrap_ci_calculation():
     baseline_indicators = [1, 0, 1, 0, 1] * 20  # 60% pass rate
     candidate_indicators = [1, 1, 1, 0, 1] * 20  # 80% pass rate
     
-    ci = _compute_bootstrap_ci(
+    ci = compute_bootstrap_ci(
         baseline_indicators,
         candidate_indicators,
         alpha=0.05,
@@ -52,7 +54,7 @@ def test_bootstrap_ci_no_improvement():
     """Test bootstrap CI when there's no improvement."""
     indicators = [1, 0, 1, 0, 1] * 20  # Same for both
     
-    ci = _compute_bootstrap_ci(indicators, indicators, alpha=0.05, seed=321, samples=500)
+    ci = compute_bootstrap_ci(indicators, indicators, alpha=0.05, seed=321, samples=500)
     
     assert len(ci) == 2
     # CI should contain 0 (no improvement)
@@ -65,7 +67,7 @@ def test_bootstrap_cluster_ci():
     candidate = [1, 1, 1, 0] * 10
     clusters = [0, 0, 1, 1] * 10
 
-    ci = _compute_bootstrap_ci(
+    ci = compute_bootstrap_ci(
         baseline,
         candidate,
         alpha=0.1,
@@ -100,7 +102,7 @@ def test_evaluate_results():
     ]
     test_inputs = [(1, 2), (3, 4)]
     
-    metrics = _evaluate_results(
+    metrics = evaluate_results(
         results,
         spec,
         test_inputs,
@@ -137,7 +139,7 @@ def test_evaluate_results_failure_handling():
     ]
     test_inputs = [(1, 2)]
     
-    metrics = _evaluate_results(
+    metrics = evaluate_results(
         results,
         spec,
         test_inputs,
@@ -173,7 +175,7 @@ def test_evaluate_results_cluster_labels():
         {"success": True, "result": 3},
     ]
 
-    metrics = _evaluate_results(
+    metrics = evaluate_results(
         results,
         spec,
         spec.gen_inputs(3, 0),
@@ -212,7 +214,7 @@ def test_metamorphic_relation_violations_detected():
     def rerun(_args):
         return {"success": True, "result": [1, 2]}  # Different order to trigger failure
 
-    metrics = _evaluate_results(
+    metrics = evaluate_results(
         run_results,
         spec,
         inputs,
@@ -257,7 +259,7 @@ def test_relation_rng_injection():
 
     results = [{"success": True, "result": (1,)}, {"success": True, "result": (2,)}]
 
-    _evaluate_results(
+    evaluate_results(
         results,
         spec,
         inputs,
@@ -269,7 +271,7 @@ def test_relation_rng_injection():
     first_calls = list(calls)
 
     calls.clear()
-    _evaluate_results(
+    evaluate_results(
         results,
         spec,
         inputs,
@@ -313,7 +315,7 @@ def test_relation_rerun_cache():
 
     results = [{"success": True, "result": (1,)}, {"success": True, "result": (1,)}]
 
-    _evaluate_results(
+    evaluate_results(
         results,
         spec,
         inputs,
@@ -452,7 +454,7 @@ def test_run_eval_collects_metrics(tmp_path):
     assert sandbox_info["executions_fingerprint"]["baseline"]
 
 
-def test_collect_metrics_sampling_and_memoization():
+def testcollect_metrics_sampling_and_memoization():
     call_counts = {"baseline": 0, "candidate": 0}
 
     def extractor(output, args):
@@ -493,7 +495,7 @@ def test_collect_metrics_sampling_and_memoization():
             {"success": True, "result": {"value": float(i) + 1.0, "role": "candidate"}}
         )
 
-    payload = _collect_metrics(
+    payload = collect_metrics(
         metrics,
         baseline_results,
         candidate_results,
@@ -525,7 +527,7 @@ def test_newcombe_ci_difference():
         "pass_indicators": [1] * 90 + [0] * 10,
     }
 
-    ci = _compute_delta_ci(
+    ci = compute_delta_ci(
         baseline_metrics,
         candidate_metrics,
         alpha=0.05,
@@ -537,7 +539,7 @@ def test_newcombe_ci_difference():
     assert ci[0] < ci[1]
     assert ci[0] > 0
 
-    rr, rr_ci = _compute_relative_risk(
+    rr, rr_ci = compute_relative_risk(
         baseline_metrics,
         candidate_metrics,
         alpha=0.05,
@@ -548,7 +550,7 @@ def test_newcombe_ci_difference():
     assert rr_ci[0] < rr_ci[1]
 
 
-def test_summarize_llm_results_and_compose_metrics():
+def testsummarize_llm_results_and_compose_metrics():
     baseline_results = [
         {
             "success": True,
@@ -573,8 +575,8 @@ def test_summarize_llm_results_and_compose_metrics():
         }
     ]
 
-    baseline_summary = _summarize_llm_results(baseline_results)
-    candidate_summary = _summarize_llm_results(candidate_results)
+    baseline_summary = summarize_llm_results(baseline_results)
+    candidate_summary = summarize_llm_results(candidate_results)
 
     assert baseline_summary["count"] == 2
     assert baseline_summary["successes"] == 1
@@ -586,7 +588,7 @@ def test_summarize_llm_results_and_compose_metrics():
     assert candidate_summary["total_tokens"] == 19
     assert candidate_summary["retry_total"] == 2
 
-    llm_metrics = _compose_llm_metrics(baseline_summary, candidate_summary)
+    llm_metrics = compose_llm_metrics(baseline_summary, candidate_summary)
     assert llm_metrics is not None
     assert llm_metrics["cost_delta_usd"] == pytest.approx(0.005, rel=1e-6)
     assert llm_metrics["tokens_delta"] == 4

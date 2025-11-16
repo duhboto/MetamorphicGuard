@@ -49,3 +49,4 @@ Breaking changes are only allowed in MAJOR releases and must:
 ## Library and CLI
 
 Both the Python API and CLI are covered by this policy. Internal/private modules (prefix `_`) are not included in compatibility guarantees.
+

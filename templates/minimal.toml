@@ -1,0 +1,25 @@
+# Minimal evaluation configuration
+# This template provides the bare minimum options needed for evaluation
+
+[task]
+name = "your_task_name"
+baseline = "path/to/baseline.py"
+candidate = "path/to/candidate.py"
+
+[execution]
+n = 400
+seed = 42
+timeout_s = 2.0
+mem_mb = 512
+
+[statistics]
+alpha = 0.05
+min_delta = 0.02
+ci_method = "bootstrap"
+bootstrap_samples = 1000
+
+[reporting]
+report_dir = "reports"
+
+
+

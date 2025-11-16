@@ -741,6 +741,25 @@ def run(
 
     cfg = replace(cfg, extra_options=extra_options)
 
+    # Security warning for local executor when evaluating potentially untrusted code.
+    try:
+        import os as _os  # local import to avoid polluting module namespace
+        suppress = _os.environ.get("METAMORPHIC_GUARD_SUPPRESS_SECURITY_WARNING") == "1"
+    except Exception:
+        suppress = False
+    try:
+        executor_value = extra_options.get("executor") if extra_options is not None else None
+    except Exception:
+        executor_value = None
+    if not suppress and (executor_value is None or str(executor_value).strip().lower() == "local"):
+        logger.warning(
+            "Running with executor=local. This isolation is not sufficient for untrusted code. "
+            "Use the Docker executor for stronger isolation: --executor docker "
+            "--executor-config '{\"image\":\"python:3.11-slim\",\"read_only\":true,\"cap_drop\":[\"ALL\"],"
+            "\"tmpfs\":[\"/tmp\"],\"security_opt\":[\"no-new-privileges:true\"]}'. "
+            "To silence this warning, set METAMORPHIC_GUARD_SUPPRESS_SECURITY_WARNING=1."
+        )
+
     with _observability_context(
         logging_enabled=logging_enabled,
         log_path=log_path,
@@ -759,6 +778,33 @@ def run(
                 candidate_path=candidate_path,
                 **kwargs,
             )
+
+    # Attach a lightweight replay hint to the report for UX.
+    try:
+        replay_args = [
+            "metamorphic-guard",
+            "evaluate",
+            "--task",
+            task.name,
+            "--baseline",
+            str(baseline_path),
+            "--candidate",
+            str(candidate_path),
+            "--n",
+            str(cfg.n),
+            "--seed",
+            str(cfg.seed),
+            "--ci-method",
+            cfg.ci_method,
+        ]
+        # Only include min_delta if non-default to reduce noise
+        if cfg.min_delta != 0.02:
+            replay_args += ["--min-delta", str(cfg.min_delta)]
+        if cfg.policy_version:
+            replay_args += ["--policy-version", str(cfg.policy_version)]
+        report.setdefault("replay", {})["cli"] = " ".join(replay_args)
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("Failed to attach replay command to report")
 
     _dispatch_alerts(report, alert_webhooks, alert_metadata)
 

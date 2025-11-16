@@ -57,3 +57,4 @@ Evaluation Gate: Candidate accepted
 - Always link artifacts in PRs and tickets
 - Prefer immutable links (build artifact URLs)
 - Redact sensitive content when sharing externally
+

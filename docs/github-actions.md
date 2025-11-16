@@ -6,7 +6,7 @@ Metamorphic Guard can be integrated into your CI/CD pipeline using GitHub Action
 
 Copy the template workflow from `.github/workflows/metamorphic-guard-template.yml` to your repository's `.github/workflows/` directory and customize it for your needs.
 
-## Basic Workflow
+## Basic Workflow (Test-gated)
 
 Here's a minimal example:
 
@@ -18,14 +18,30 @@ on:
     branches: ["main"]
 
 jobs:
-  evaluate:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[dev]"
+      - name: Run tests
+        run: pytest -q
+      - name: Type check
+        run: mypy metamorphic_guard
+
+  evaluate:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
       - name: Install and run
         run: |
           pip install metamorphic-guard
@@ -35,7 +51,6 @@ jobs:
             --candidate candidate.py \
             --html-report report.html \
             --junit-report junit.xml
-      
       - name: Upload reports
         uses: actions/upload-artifact@v4
         with:

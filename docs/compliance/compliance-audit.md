@@ -69,3 +69,4 @@ If your task/spec integrates `check_compliance()` in post-processing, results wi
 - [ ] No high-severity violations
 - [ ] Medium/low findings have mitigation or follow-up tickets
 - [ ] Artifacts stored with run metadata for auditability
+

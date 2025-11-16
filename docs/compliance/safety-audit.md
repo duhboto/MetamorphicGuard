@@ -85,3 +85,4 @@ html_report = "reports/safety_audit.html"
 - [ ] No new high-severity safety alerts
 - [ ] Violations discussed with mitigation or follow-up issue
 - [ ] Policy gate decision aligns with organizational thresholds
+
