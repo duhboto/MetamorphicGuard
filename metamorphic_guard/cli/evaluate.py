@@ -1128,11 +1128,12 @@ def evaluate_command(
             write_violation_report(export_violations, result)
 
         if html_report is not None:
-            # Get report customization options from config if available
-            report_theme = config.get("report_theme", "default") if isinstance(config, dict) else "default"
-            report_title = config.get("report_title") if isinstance(config, dict) else None
-            show_config = config.get("report_show_config", True) if isinstance(config, dict) else True
-            show_metadata = config.get("report_show_metadata", True) if isinstance(config, dict) else True
+            # Get report customization options from result config if available
+            _cfg = result.get("config", {}) if isinstance(result, dict) else {}
+            report_theme = _cfg.get("report_theme", "default") if isinstance(_cfg, dict) else "default"
+            report_title = _cfg.get("report_title") if isinstance(_cfg, dict) else None
+            show_config = _cfg.get("report_show_config", True) if isinstance(_cfg, dict) else True
+            show_metadata = _cfg.get("report_show_metadata", True) if isinstance(_cfg, dict) else True
             
             render_html_report(
                 result,
