@@ -23,7 +23,7 @@ jobs:
       - name: Type check with mypy
         run: |
           pip install mypy
-          mypy metamorphic_guard --strict --no-error-summary || true  # Allow failures for now
+          mypy metamorphic_guard --explicit-package-bases --strict --no-error-summary || true  # Allow failures for now
       - name: Run all tests with coverage
         run: |
           pytest --maxfail=1 --disable-warnings -v --timeout=300 \

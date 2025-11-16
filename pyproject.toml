@@ -134,6 +134,7 @@ strict_optional = true
 strict_equality = true
 # Include type stubs directory
 mypy_path = "stubs"
+explicit_package_bases = true
 # Note: Full strict checking will be enabled once all Any types are replaced
 exclude = [
     "build",
