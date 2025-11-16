@@ -9,9 +9,8 @@ description = "A Python library for comparing program versions using metamorphic
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Spencer Duh" }]
-license = { file = "LICENSE" }
+license = "MIT"
 classifiers = [
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -23,6 +22,26 @@ classifiers = [
 dependencies = [
     "click>=8.1",
     "pydantic>=2.0",
+]
+
+[tool.setuptools]
+license-files = ["LICENSE"]
+
+[tool.setuptools.packages.find]
+include = ["metamorphic_guard*", "pytest_metamorphic*"]
+exclude = [
+    "docs*",
+    "deploy*",
+    "dist*",
+    "examples*",
+    "demo_project*",
+    "ranking_guard_project*",
+    "fairness_guard_project*",
+    "reports*",
+    "schemas*",
+    "jenkins*",
+    "templates*",
+    "tools*",
 ]
 
 [project.scripts]
