@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.1.1] - 2025-11-16
+
+### Build/Packaging
+- Fix editable install on CI by constraining package discovery to `metamorphic_guard*` and `pytest_metamorphic*`.
+- Switch `project.license` to SPDX string (`MIT`) and configure `license-files` to address setuptools deprecations.
+
 ## [3.1.0] - 2025-11-16
 
 ### Enhancements
