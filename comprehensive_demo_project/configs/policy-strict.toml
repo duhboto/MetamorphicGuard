@@ -1,0 +1,13 @@
+# Strict policy configuration
+# High bar for adoption (5% improvement required)
+
+name = "policy-strict"
+description = "Strict adoption policy requiring 5% improvement"
+
+[gating]
+min_delta = 0.05  # Require 5% improvement
+min_pass_rate = 0.90  # High pass rate requirement
+alpha = 0.01  # Stricter significance level
+power_target = 0.90  # Higher power requirement
+violation_cap = 10  # Lower violation tolerance
+

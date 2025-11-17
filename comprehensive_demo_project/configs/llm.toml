@@ -1,0 +1,40 @@
+# LLM evaluation configuration
+# Demonstrates LLM executor integration and cost estimation
+
+task = "recommendation"
+baseline = "implementations/baseline_recommender.py"
+candidate = "implementations/candidate_llm.py"
+
+# Evaluation parameters
+n = 100  # Smaller n for LLM (cost considerations)
+seed = 42
+timeout_s = 30.0  # Longer timeout for LLM calls
+mem_mb = 1024
+
+# LLM executor configuration
+executor = "openai"
+executor_config = { model = "gpt-3.5-turbo", temperature = 0.0 }
+
+# Statistical parameters
+bootstrap_samples = 1000
+ci_method = "bootstrap"
+alpha = 0.05
+
+# Gating parameters (more lenient for LLM variability)
+min_delta = 0.01  # Lower threshold for LLM
+min_pass_rate = 0.70
+
+# Execution
+parallel = 2  # Lower parallelism for API rate limits
+
+# Reporting
+violation_cap = 25
+report_dir = "reports"
+
+# Monitors
+monitors = ["latency", "llm_cost"]
+
+# Cost estimation
+# The system will estimate costs before running
+# Set budget limits if desired
+

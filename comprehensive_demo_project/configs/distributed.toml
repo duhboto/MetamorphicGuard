@@ -1,0 +1,44 @@
+# Distributed evaluation configuration
+# Demonstrates queue-based execution with Redis
+
+task = "recommendation"
+baseline = "implementations/baseline_recommender.py"
+candidate = "implementations/candidate_improved.py"
+
+# Evaluation parameters
+n = 1000  # Larger n for distributed execution
+seed = 42
+timeout_s = 2.0
+mem_mb = 512
+
+# Statistical parameters
+bootstrap_samples = 1000
+ci_method = "bootstrap-cluster"
+alpha = 0.05
+
+# Gating parameters
+min_delta = 0.02
+min_pass_rate = 0.80
+
+# Distributed execution
+dispatcher = "queue"
+queue_config = { backend = "redis", url = "redis://localhost:6379/0" }
+
+# Execution
+executor = "local"
+parallel = 1  # Coordinator doesn't run tests directly
+
+# Reporting
+violation_cap = 25
+report_dir = "reports"
+
+# Monitors
+monitors = ["latency", "fairness", "resource"]
+
+# Observability
+[observability]
+logging_enabled = true
+log_path = "logs/distributed.jsonl"
+metrics_enabled = true
+metrics_port = 9090
+

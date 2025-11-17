@@ -1,0 +1,34 @@
+# Basic evaluation configuration
+# Demonstrates core features: properties, MRs, statistical analysis
+
+task = "recommendation"
+baseline = "implementations/baseline_recommender.py"
+candidate = "implementations/candidate_improved.py"
+
+# Evaluation parameters
+n = 400
+seed = 42
+timeout_s = 2.0
+mem_mb = 512
+
+# Statistical parameters
+bootstrap_samples = 1000
+ci_method = "bootstrap-cluster"  # Use cluster bootstrap since we have cluster_key
+alpha = 0.05
+power_target = 0.8
+
+# Gating parameters
+min_delta = 0.02  # Require 2% improvement
+min_pass_rate = 0.80
+
+# Execution
+parallel = 4
+executor = "local"
+
+# Reporting
+violation_cap = 25
+report_dir = "reports"
+
+# Monitors
+monitors = ["latency", "fairness"]
+

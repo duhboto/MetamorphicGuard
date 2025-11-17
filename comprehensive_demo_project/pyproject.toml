@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "comprehensive-demo"
+version = "1.0.0"
+description = "Comprehensive Metamorphic Guard demo project"
+requires-python = ">=3.10"
+dependencies = [
+    "metamorphic-guard>=3.3.0",
+]
+
+[project.optional-dependencies]
+all = [
+    "metamorphic-guard[all]>=3.3.0",
+]
+
