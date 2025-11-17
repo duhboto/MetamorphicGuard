@@ -1,5 +1,46 @@
 # Changelog
 
+## [3.2.0] - 2025-01-16
+
+### Production Readiness Enhancements
+
+#### Security
+- Added Dependabot configuration for automated dependency updates
+- Added security scanning CI job with `pip-audit` for vulnerability detection
+- Updated SECURITY.md with comprehensive vulnerability response process
+- Automated security scanning for both base and optional dependencies
+
+#### Queue Dispatcher Stabilization
+- Removed "experimental" labels from queue dispatcher in README
+- Added comprehensive queue backend tests (SQS, RabbitMQ, Kafka)
+- Created queue dispatcher production readiness audit document
+- Updated queue dispatch documentation with production guidance
+
+#### Operational Documentation
+- Added comprehensive operational runbook (`docs/operations/runbook.md`)
+- Added production deployment guide with Kubernetes configurations
+- Added Prometheus alerting rules (`docs/grafana/alerting-rules.yml`)
+- Enhanced Prometheus documentation with alerting setup instructions
+
+#### Cost Estimation
+- Fixed budget action logic (ALLOW action now properly handles exceeded budgets)
+- Enhanced cost estimation API with better error handling
+- Added comprehensive edge case tests for cost estimation
+
+#### Testing
+- Added queue backend test suite (skipped when optional dependencies unavailable)
+- Added cost estimation edge case tests
+- All tests passing (472 passed, 15 skipped)
+
+### Documentation
+- Updated API reference with cost estimation functions
+- Enhanced LLM evaluation guide with cost estimation examples
+- Removed roadmap and development phase planning documents from release
+
+### Notes
+- No breaking API changes. Safe minor update.
+- Production-ready with comprehensive operational guides and monitoring
+
 ## [3.1.2] - 2025-11-16
 
 ### CI/CD Fixes
