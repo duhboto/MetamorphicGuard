@@ -583,7 +583,7 @@ watchfiles==1.1.1
     #   vllm
 websockets==15.0.1
     # via uvicorn
-xgrammar==0.1.25
+xgrammar==0.1.27
     # via vllm
 xxhash==3.6.0
     # via datasets
