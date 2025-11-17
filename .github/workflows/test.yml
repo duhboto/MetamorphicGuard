@@ -78,33 +78,55 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install pip-audit
-      - name: Install base dependencies
-        run: |
-          pip install -e .
       - name: Run pip-audit (base dependencies)
         run: |
-          pip-audit --desc --format=json --output=vulnerabilities-base.json || true
-          pip-audit --desc || pip-audit --desc --exit-code=0
+          pip-audit --requirement=requirements-base.txt --desc --format=json --output=vulnerabilities-base.json || true
+          pip-audit --requirement=requirements-base.txt --desc || pip-audit --requirement=requirements-base.txt --desc --exit-code=0
         continue-on-error: true
-      - name: Check for critical vulnerabilities
+      - name: Check for critical vulnerabilities (base)
         run: |
           if [ -f vulnerabilities-base.json ]; then
             python scripts/check_vulnerabilities.py vulnerabilities-base.json
           else
             echo "No vulnerability report generated"
           fi
-      - name: Install optional dependencies
+      - name: Run pip-audit (queue dependencies)
         run: |
-          pip install -e ".[all]"
-      - name: Run pip-audit (all dependencies)
-        run: |
-          pip-audit --desc --format=json --output=vulnerabilities-all.json || true
-          pip-audit --desc || pip-audit --desc --exit-code=0
+          pip-audit --requirement=requirements-queue.txt --desc --format=json --output=vulnerabilities-queue.json || true
+          pip-audit --requirement=requirements-queue.txt --desc || pip-audit --requirement=requirements-queue.txt --desc --exit-code=0
         continue-on-error: true
-      - name: Check for critical vulnerabilities (all)
+      - name: Check for critical vulnerabilities (queue)
         run: |
-          if [ -f vulnerabilities-all.json ]; then
-            python scripts/check_vulnerabilities.py vulnerabilities-all.json
+          if [ -f vulnerabilities-queue.json ]; then
+            python scripts/check_vulnerabilities.py vulnerabilities-queue.json
+          else
+            echo "No vulnerability report generated"
+          fi
+      - name: Run pip-audit (otel dependencies)
+        run: |
+          pip-audit --requirement=requirements-otel.txt --desc --format=json --output=vulnerabilities-otel.json || true
+          pip-audit --requirement=requirements-otel.txt --desc || pip-audit --requirement=requirements-otel.txt --desc --exit-code=0
+        continue-on-error: true
+      - name: Check for critical vulnerabilities (otel)
+        run: |
+          if [ -f vulnerabilities-otel.json ]; then
+            python scripts/check_vulnerabilities.py vulnerabilities-otel.json
+          else
+            echo "No vulnerability report generated"
+          fi
+      - name: Run pip-audit (LLM dependencies - excluding vLLM)
+        run: |
+          # Scan LLM dependencies but exclude vLLM to avoid disk space issues
+          # vLLM has massive PyTorch/CUDA dependencies that cause CI failures
+          pip-audit --requirement=requirements-llm.txt --desc --format=json --output=vulnerabilities-llm.json --skip-editable || true
+          pip-audit --requirement=requirements-llm.txt --desc --skip-editable || pip-audit --requirement=requirements-llm.txt --desc --exit-code=0 --skip-editable
+        continue-on-error: true
+      - name: Check for critical vulnerabilities (LLM)
+        run: |
+          if [ -f vulnerabilities-llm.json ]; then
+            python scripts/check_vulnerabilities.py vulnerabilities-llm.json
+          else
+            echo "No vulnerability report generated"
           fi
       - name: Upload vulnerability reports
         if: always()
@@ -114,3 +136,8 @@ jobs:
           path: |
             vulnerabilities-*.json
           retention-days: 30
+      - name: Note about vLLM
+        run: |
+          echo "Note: vLLM dependencies (PyTorch, CUDA libraries) are excluded from scanning"
+          echo "due to disk space constraints in CI. These are large ML dependencies"
+          echo "that should be scanned separately in environments with sufficient resources."
