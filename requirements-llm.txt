@@ -222,7 +222,7 @@ opencv-python-headless==4.12.0.88
     # via
     #   mistral-common
     #   vllm
-outlines-core==0.2.11
+outlines-core==0.2.13
     # via vllm
 packaging==25.0
     # via

@@ -313,7 +313,7 @@ opentelemetry-sdk==1.38.0
     #   opentelemetry-exporter-otlp-proto-grpc
 opentelemetry-semantic-conventions==0.59b0
     # via opentelemetry-sdk
-outlines-core==0.2.11
+outlines-core==0.2.13
     # via vllm
 packaging==25.0
     # via
