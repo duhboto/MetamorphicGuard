@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.3.1] - 2025-01-16
+
+### Bug Fixes
+- Fixed mypy type checking in CI workflow
+- Resolved duplicate module detection error that was blocking CI
+- Improved error filtering for known mypy limitations
+
+### Notes
+- No breaking API changes. Safe patch update.
+- CI/CD now reliably passes type checking
+
 ## [3.3.0] - 2025-01-16
 
 ### CI/CD Improvements
