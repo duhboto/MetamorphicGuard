@@ -476,21 +476,92 @@ clear_result_cache()
 
 ### Cost Estimation
 
-```python
-from metamorphic_guard.cost_estimation import estimate_and_check_budget, BudgetAction
+Estimate LLM evaluation costs before running to avoid unexpected charges.
 
-estimate = estimate_and_check_budget(
+#### `estimate_llm_cost()`
+
+Estimate cost for an LLM evaluation.
+
+```python
+from metamorphic_guard import estimate_llm_cost
+
+estimate = estimate_llm_cost(
     executor_name="openai",
-    executor_config={"model": "gpt-4"},
+    executor_config={
+        "api_key": "sk-...",
+        "model": "gpt-4",
+    },
+    n=1000,  # Number of test cases
+    system_prompt="You are a helpful assistant",
+    user_prompts=["Example prompt 1", "Example prompt 2"],
+    max_tokens=512,
+    mutants=None,  # Optional list of mutants
+    judges=None,  # Optional list of judges (may include LLM-as-judge)
+)
+
+print(f"Total cost: ${estimate['total_cost_usd']:.4f}")
+print(f"  Baseline: ${estimate['baseline_cost_usd']:.4f}")
+print(f"  Candidate: ${estimate['candidate_cost_usd']:.4f}")
+print(f"  Judge: ${estimate['judge_cost_usd']:.4f}")
+```
+
+**Returns:**
+- Dictionary with cost estimates and token counts
+
+#### `estimate_and_check_budget()`
+
+Estimate cost and check against budget limits.
+
+```python
+from metamorphic_guard import estimate_and_check_budget, BudgetAction
+
+result = estimate_and_check_budget(
+    executor_name="openai",
+    executor_config={"api_key": "sk-...", "model": "gpt-4"},
     n=1000,
-    budget_limit=50.0,
-    warning_threshold=10.0,
-    action=BudgetAction.WARN,
+    budget_limit=50.0,  # Hard limit (raises BudgetExceededError if exceeded)
+    warning_threshold=10.0,  # Warning threshold
+    action=BudgetAction.WARN,  # Action on warning: ALLOW, WARN, or ABORT
     system_prompt="...",
     user_prompts=["..."],
     max_tokens=512,
 )
+
+if result["budget_check"]["action_taken"] == "abort":
+    print("Budget exceeded! Aborting...")
 ```
+
+**Returns:**
+- Dictionary combining cost estimate and budget check results
+
+**Raises:**
+- `BudgetExceededError`: If estimated cost exceeds `budget_limit` and `action` is `ABORT`
+
+#### `check_budget()`
+
+Check estimated cost against budget limits.
+
+```python
+from metamorphic_guard import check_budget, BudgetAction
+
+check_result = check_budget(
+    estimated_cost=25.0,
+    budget_limit=50.0,
+    warning_threshold=10.0,
+    action=BudgetAction.WARN,
+)
+
+if check_result["action_taken"] == "warn":
+    print(f"⚠️  {check_result['message']}")
+```
+
+#### `BudgetAction`
+
+Enum for budget action behavior:
+
+- `ALLOW`: Allow evaluation regardless of budget
+- `WARN`: Warn if budget threshold exceeded but continue
+- `ABORT`: Abort evaluation if budget limit exceeded
 
 ### Model Registry
 

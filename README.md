@@ -157,8 +157,8 @@ metamorphic-guard --help
 - `--html-report`: Write an interactive-ready HTML summary alongside the JSON report
 - `--junit-report` / `--junit-xml`: Write JUnit XML output for CI integration (e.g., `--junit-report test-results.xml`)
 - `--policy`: Policy to apply. Provide a path to a policy file (`.toml`/`.yaml`) or use presets like `noninferiority:margin=0.00` / `superiority:margin=0.02` (see [Policy as Code](#policy-as-code))
-- `--dispatcher`: Execution dispatcher (`local` threads or experimental `queue`)
-- `--queue-config`: JSON configuration for queue-backed dispatchers (experimental)
+- `--dispatcher`: Execution dispatcher (`local` threads or `queue` for distributed execution)
+- `--queue-config`: JSON configuration for queue-backed dispatchers (see [Queue Dispatch Documentation](docs/operations/queue-dispatch.md))
 - `--monitor`: Enable built-in monitors such as `latency`
 - `--mr-fwer`: Apply Holm-Bonferroni multiple-comparison correction across metamorphic relations.
 - `--mr-fdr`: Apply Benjamini-Hochberg false-discovery-rate correction across metamorphic relations.
@@ -500,7 +500,7 @@ metamorphic-guard \
   }'
 ```
 
-### Distributed Execution (Preview)
+### Distributed Execution
 
 The queue dispatcher (`--dispatcher queue`) enables distributed execution. In-memory
 queues are available for local experimentation, while a Redis-backed adapter lets

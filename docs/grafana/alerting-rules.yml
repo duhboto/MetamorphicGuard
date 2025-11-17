@@ -1,0 +1,167 @@
+# Prometheus Alerting Rules for Metamorphic Guard
+
+groups:
+  - name: metamorphic_guard_critical
+    interval: 30s
+    rules:
+      # Alert on no active workers
+      - alert: NoActiveWorkers
+        expr: metamorphic_queue_active_workers == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: workers
+        annotations:
+          summary: "No active workers available"
+          description: "Queue has no active workers for {{ $for }}. Tasks will not be processed."
+          runbook_url: "https://github.com/your-org/metamorphic-guard/blob/main/docs/operations/runbook.md#no-active-workers"
+
+      # Alert on queue backend connection failure
+      - alert: QueueBackendDown
+        expr: |
+          (
+            rate(metamorphic_queue_cases_dispatched_total[5m]) == 0 AND
+            metamorphic_queue_pending_tasks > 0
+          ) OR
+          (
+            rate(metamorphic_queue_cases_completed_total[5m]) == 0 AND
+            metamorphic_queue_inflight_cases > 10
+          )
+        for: 5m
+        labels:
+          severity: critical
+          component: queue
+        annotations:
+          summary: "Queue backend appears to be down or unreachable"
+          description: "No tasks are being dispatched or completed despite pending/in-flight cases. Queue backend may be down."
+          runbook_url: "https://github.com/your-org/metamorphic-guard/blob/main/docs/operations/runbook.md#queue-connection-failures"
+
+  - name: metamorphic_guard_warning
+    interval: 30s
+    rules:
+      # Alert on high requeue rate
+      - alert: HighRequeueRate
+        expr: |
+          (
+            sum(rate(metamorphic_queue_cases_requeued_total[5m])) /
+            sum(rate(metamorphic_queue_cases_dispatched_total[5m]))
+          ) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          component: workers
+        annotations:
+          summary: "High requeue rate detected ({{ $value | humanizePercentage }})"
+          description: "More than 20% of tasks are being requeued, indicating worker health issues or timeout misconfiguration."
+          runbook_url: "https://github.com/your-org/metamorphic-guard/blob/main/docs/operations/runbook.md#high-requeue-rate"
+
+      # Alert on queue backlog
+      - alert: QueueBacklog
+        expr: metamorphic_queue_pending_tasks > 1000
+        for: 10m
+        labels:
+          severity: warning
+          component: queue
+        annotations:
+          summary: "Queue backlog detected ({{ $value }} pending tasks)"
+          description: "Queue has more than 1000 pending tasks. Consider scaling up workers or investigating processing rate."
+          runbook_url: "https://github.com/your-org/metamorphic-guard/blob/main/docs/operations/runbook.md#queue-backlog"
+
+      # Alert on high failure rate
+      - alert: HighCaseFailureRate
+        expr: |
+          sum(rate(metamorphic_cases_total{status="failure"}[5m])) /
+          sum(rate(metamorphic_cases_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: evaluation
+        annotations:
+          summary: "High case failure rate ({{ $value | humanizePercentage }})"
+          description: "More than 10% of evaluation cases are failing. Review error logs and implementation code."
+          runbook_url: "https://github.com/your-org/metamorphic-guard/blob/main/docs/operations/runbook.md#high-failure-rate"
+
+      # Alert on low worker utilization
+      - alert: LowWorkerUtilization
+        expr: |
+          (
+            sum(rate(metamorphic_queue_cases_completed_total[5m])) /
+            metamorphic_queue_active_workers
+          ) < 0.1
+        for: 15m
+        labels:
+          severity: warning
+          component: workers
+        annotations:
+          summary: "Low worker utilization ({{ $value }} tasks/worker/second)"
+          description: "Workers are processing less than 0.1 tasks per second on average. Consider scaling down or investigating bottlenecks."
+
+      # Alert on LLM retry spikes
+      - alert: HighLLMRetryRate
+        expr: sum(rate(metamorphic_llm_retries_total[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: llm
+        annotations:
+          summary: "High LLM retry rate ({{ $value }} retries/second)"
+          description: "LLM API calls are failing and being retried at high rate. Check API health and rate limits."
+          runbook_url: "https://github.com/your-org/metamorphic-guard/blob/main/docs/operations/runbook.md#llm-retry-spikes"
+
+      # Alert on worker resource exhaustion
+      - alert: WorkerMemoryPressure
+        expr: |
+          (
+            container_memory_usage_bytes{pod=~"metamorphic-guard-worker.*"} /
+            container_spec_memory_limit_bytes
+          ) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: workers
+        annotations:
+          summary: "Worker memory usage high ({{ $value | humanizePercentage }})"
+          description: "Worker {{ $labels.pod }} memory usage is above 90%. Consider increasing memory limits or reducing batch size."
+
+      # Alert on slow evaluation progress
+      - alert: SlowEvaluationProgress
+        expr: |
+          rate(metamorphic_queue_cases_completed_total[10m]) < 1 AND
+          metamorphic_queue_pending_tasks > 100
+        for: 15m
+        labels:
+          severity: warning
+          component: evaluation
+        annotations:
+          summary: "Evaluation progress is slow (< 1 task/second)"
+          description: "Task completion rate is below 1 task per second despite pending tasks. Investigate worker performance or task duration."
+
+  - name: metamorphic_guard_info
+    interval: 1m
+    rules:
+      # Info alert on evaluation completion
+      - alert: EvaluationStarted
+        expr: increase(metamorphic_queue_cases_dispatched_total[1m]) > 0
+        for: 0s
+        labels:
+          severity: info
+          component: evaluation
+        annotations:
+          summary: "Evaluation started"
+          description: "New evaluation run detected with {{ $value }} cases dispatched."
+
+      # Info alert on worker scale events
+      - alert: WorkerScaleEvent
+        expr: |
+          abs(
+            metamorphic_queue_active_workers -
+            (metamorphic_queue_active_workers offset 5m)
+          ) > 2
+        for: 0s
+        labels:
+          severity: info
+          component: workers
+        annotations:
+          summary: "Worker count changed significantly"
+          description: "Active worker count changed from {{ $labels.previous }} to {{ $labels.current }}."
+

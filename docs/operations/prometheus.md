@@ -411,58 +411,70 @@ sum(rate(metamorphic_queue_cases_dispatched_total[5m]))
 
 ## Alerting Rules
 
-### Example Prometheus Alert Rules
+### Pre-configured Alert Rules
+
+A comprehensive set of alerting rules is available at `docs/grafana/alerting-rules.yml`. These rules cover:
+
+**Critical Alerts:**
+- No active workers
+- Queue backend down
+
+**Warning Alerts:**
+- High requeue rate (>20%)
+- Queue backlog (>1000 tasks)
+- High failure rate (>10%)
+- Low worker utilization
+- High LLM retry rate
+- Worker memory pressure
+- Slow evaluation progress
+
+**Info Alerts:**
+- Evaluation started
+- Worker scale events
+
+### Installation
+
+Copy the alert rules file to your Prometheus configuration directory:
+
+```bash
+# Copy alert rules
+cp docs/grafana/alerting-rules.yml /etc/prometheus/rules/
+
+# Update prometheus.yml to include rules
+```
+
+```yaml
+# prometheus.yml
+rule_files:
+  - "/etc/prometheus/rules/*.yml"
+
+scrape_configs:
+  # ... existing scrape configs ...
+```
+
+### Custom Alert Rules
+
+You can customize alert thresholds based on your needs:
 
 ```yaml
 groups:
-  - name: metamorphic_guard
+  - name: metamorphic_guard_custom
     interval: 30s
     rules:
-      # Alert on high failure rate
+      # Custom alert: High failure rate for your specific threshold
       - alert: HighCaseFailureRate
         expr: |
           sum(rate(metamorphic_cases_total{status="failure"}[5m])) /
-          sum(rate(metamorphic_cases_total[5m])) > 0.1
+          sum(rate(metamorphic_cases_total[5m])) > 0.05  # 5% threshold
         for: 5m
         labels:
           severity: warning
         annotations:
           summary: "High case failure rate detected"
           description: "Failure rate is {{ $value | humanizePercentage }}"
-
-      # Alert on worker unavailability
-      - alert: NoActiveWorkers
-        expr: metamorphic_queue_active_workers == 0
-        for: 2m
-        labels:
-          severity: critical
-        annotations:
-          summary: "No active workers available"
-          description: "Queue has no active workers for 2 minutes"
-
-      # Alert on high requeue rate
-      - alert: HighRequeueRate
-        expr: |
-          sum(rate(metamorphic_queue_cases_requeued_total[5m])) /
-          sum(rate(metamorphic_queue_cases_dispatched_total[5m])) > 0.2
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High requeue rate detected"
-          description: "Requeue rate is {{ $value | humanizePercentage }}"
-
-      # Alert on LLM retry spikes
-      - alert: HighLLMRetryRate
-        expr: |
-          sum(rate(metamorphic_llm_retries_total[5m])) > 10
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High LLM retry rate"
-          description: "LLM retry rate is {{ $value }} retries/second"
 ```
+
+See `docs/grafana/alerting-rules.yml` for the complete set of pre-configured rules.
 
 ### Alertmanager Configuration
 

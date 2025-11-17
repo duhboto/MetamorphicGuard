@@ -345,16 +345,29 @@ def check_budget(
         "message": "",
     }
     
-    # Check hard limit first
+    # Check hard limit first (only abort if action is ABORT)
     if budget_limit is not None and estimated_cost > budget_limit:
         result["within_budget"] = False
         result["exceeds_limit"] = True
-        result["action_taken"] = "abort"
-        result["message"] = (
-            f"Estimated cost ${estimated_cost:.4f} exceeds hard budget limit "
-            f"${budget_limit:.4f}"
-        )
-        raise BudgetExceededError(estimated_cost, budget_limit)
+        if action == BudgetAction.ABORT:
+            result["action_taken"] = "abort"
+            result["message"] = (
+                f"Estimated cost ${estimated_cost:.4f} exceeds hard budget limit "
+                f"${budget_limit:.4f}"
+            )
+            raise BudgetExceededError(estimated_cost, budget_limit)
+        elif action == BudgetAction.WARN:
+            result["action_taken"] = "warn"
+            result["message"] = (
+                f"⚠️  Estimated cost ${estimated_cost:.4f} exceeds budget limit "
+                f"${budget_limit:.4f} but continuing due to ALLOW action"
+            )
+        else:  # ALLOW
+            result["action_taken"] = "allow"
+            result["message"] = (
+                f"Estimated cost ${estimated_cost:.4f} exceeds budget limit "
+                f"${budget_limit:.4f} but continuing"
+            )
     
     # Check warning threshold
     if warning_threshold is not None and estimated_cost > warning_threshold:

@@ -43,6 +43,19 @@ from .scalability import (
     create_scalable_config,
 )
 
+# Cost estimation for LLM evaluations
+try:
+    from .cost_estimation import (
+        estimate_llm_cost,
+        estimate_and_check_budget,
+        check_budget,
+        BudgetAction,
+        BudgetExceededError,
+    )
+except ImportError:
+    # Graceful degradation if dependencies are missing
+    pass
+
 # Version management via setuptools_scm
 try:
     from importlib.metadata import version

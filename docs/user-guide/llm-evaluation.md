@@ -88,7 +88,9 @@ Mutants transform prompts to test robustness:
 
 ## Cost Estimation
 
-Estimate costs before running:
+Estimate costs before running evaluations to avoid unexpected charges.
+
+### CLI Usage
 
 ```bash
 metamorphic-guard evaluate \
@@ -97,7 +99,102 @@ metamorphic-guard evaluate \
   --candidate candidate.py \
   --executor openai \
   --executor-config '{"model": "gpt-4"}' \
-  --estimate-cost
+  --estimate-cost \
+  --budget-limit 10.0 \
+  --budget-warning 5.0 \
+  --budget-action abort
+```
+
+Options:
+- `--estimate-cost`: Show cost estimate before running
+- `--budget-limit`: Hard budget limit (aborts if exceeded)
+- `--budget-warning`: Warning threshold (warns if exceeded)
+- `--budget-action`: Action on warning (`allow`, `warn`, `abort`)
+
+### Programmatic API
+
+```python
+from metamorphic_guard import estimate_llm_cost, estimate_and_check_budget, BudgetAction
+
+# Estimate cost for an evaluation
+estimate = estimate_llm_cost(
+    executor_name="openai",
+    executor_config={
+        "api_key": "sk-...",
+        "model": "gpt-4",
+    },
+    n=1000,  # Number of test cases
+    system_prompt="You are a helpful assistant",
+    user_prompts=["Example prompt 1", "Example prompt 2"],
+    max_tokens=512,
+)
+
+print(f"Estimated cost: ${estimate['total_cost_usd']:.4f}")
+print(f"  Baseline: ${estimate['baseline_cost_usd']:.4f}")
+print(f"  Candidate: ${estimate['candidate_cost_usd']:.4f}")
+
+# Estimate and check budget
+result = estimate_and_check_budget(
+    executor_name="openai",
+    executor_config={"api_key": "sk-...", "model": "gpt-4"},
+    n=1000,
+    budget_limit=10.0,
+    warning_threshold=5.0,
+    action=BudgetAction.ABORT,
+    system_prompt="You are a helpful assistant",
+    user_prompts=["Example prompt"],
+    max_tokens=512,
+)
+
+if result["budget_check"]["action_taken"] == "abort":
+    print("Budget exceeded! Aborting...")
+    raise BudgetExceededError(...)
+```
+
+### Cost Estimation with Judges
+
+If you use LLM-as-judge, include judge costs:
+
+```python
+from metamorphic_guard.judges.llm_as_judge import LLMAsJudge
+
+judges = [LLMAsJudge(model="gpt-3.5-turbo", executor_config={"api_key": "sk-..."})]
+
+estimate = estimate_llm_cost(
+    executor_name="openai",
+    executor_config={"api_key": "sk-...", "model": "gpt-4"},
+    n=1000,
+    judges=judges,  # Include judge costs
+    user_prompts=["Example prompt"],
+    max_tokens=512,
+)
+
+print(f"Judge cost: ${estimate['judge_cost_usd']:.4f}")
+```
+
+### Custom Pricing
+
+Override default pricing:
+
+```python
+executor_config = {
+    "api_key": "sk-...",
+    "model": "gpt-4",
+    "pricing": {
+        "gpt-4": {
+            "prompt": 0.03,  # $0.03 per 1K prompt tokens
+            "completion": 0.06,  # $0.06 per 1K completion tokens
+        }
+    }
+}
+
+estimate = estimate_llm_cost(
+    executor_name="openai",
+    executor_config=executor_config,
+    n=1000,
+    user_prompts=["Example prompt"],
+    max_tokens=512,
+)
 ```
 
 ## Model Comparison

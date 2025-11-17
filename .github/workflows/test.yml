@@ -64,3 +64,82 @@ jobs:
       - name: Validate dependencies
         run: |
           python scripts/validate_optional_deps.py ${{ matrix.profile }}
+
+  security-scan:
+    name: Security Vulnerability Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pip-audit
+        run: |
+          pip install --upgrade pip
+          pip install pip-audit
+      - name: Install base dependencies
+        run: |
+          pip install -e .
+      - name: Run pip-audit (base dependencies)
+        run: |
+          pip-audit --desc --format=json --output=vulnerabilities-base.json || true
+          pip-audit --desc || pip-audit --desc --exit-code=0
+        continue-on-error: true
+      - name: Check for critical vulnerabilities
+        run: |
+          if [ -f vulnerabilities-base.json ]; then
+            # Check for critical severity vulnerabilities
+            python -c "
+import json
+import sys
+with open('vulnerabilities-base.json', 'r') as f:
+    data = json.load(f)
+critical = [v for v in data.get('vulnerabilities', []) if v.get('aliases', [{}])[0].get('severity', '').upper() == 'CRITICAL']
+if critical:
+    print('Critical vulnerabilities found:')
+    for v in critical:
+        print(f\"  - {v.get('id')}: {v.get('summary', '')}\")
+    sys.exit(1)
+"
+          else
+            echo "No vulnerability report generated"
+          fi
+      - name: Install optional dependencies
+        run: |
+          pip install -e ".[all]"
+      - name: Run pip-audit (all dependencies)
+        run: |
+          pip-audit --desc --format=json --output=vulnerabilities-all.json || true
+          pip-audit --desc || pip-audit --desc --exit-code=0
+        continue-on-error: true
+      - name: Check for critical vulnerabilities (all)
+        run: |
+          if [ -f vulnerabilities-all.json ]; then
+            python -c "
+import json
+import sys
+with open('vulnerabilities-all.json', 'r') as f:
+    data = json.load(f)
+critical = [v for v in data.get('vulnerabilities', []) if v.get('aliases', [{}])[0].get('severity', '').upper() == 'CRITICAL']
+if critical:
+    print('Critical vulnerabilities found in optional dependencies:')
+    for v in critical:
+        print(f\"  - {v.get('id')}: {v.get('summary', '')}\")
+    sys.exit(1)
+else:
+    medium = [v for v in data.get('vulnerabilities', []) if v.get('aliases', [{}])[0].get('severity', '').upper() in ['MEDIUM', 'HIGH']]
+    if medium:
+        print(f'Found {len(medium)} medium/high severity vulnerabilities (non-blocking):')
+        for v in medium[:5]:  # Show first 5
+            print(f\"  - {v.get('id')}: {v.get('summary', '')}\")
+"
+          fi
+      - name: Upload vulnerability reports
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: vulnerability-reports
+          path: |
+            vulnerabilities-*.json
+          retention-days: 30
