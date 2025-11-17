@@ -135,12 +135,14 @@ strict_equality = true
 # Include type stubs directory
 mypy_path = "stubs"
 explicit_package_bases = true
+namespace_packages = true
 # Note: Full strict checking will be enabled once all Any types are replaced
 exclude = [
     "build",
     "dist",
     "venv",
     "tools/vscode-extension",
+    "metamorphic_guard/executors/__init__.py",  # Temporary workaround for mypy duplicate module detection
 ]
 
 [[tool.mypy.overrides]]
