@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "metamorphic_guard"
-version = "3.3.1"
+version = "3.3.2"
 description = "A Python library for comparing program versions using metamorphic testing"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -37,6 +37,7 @@ exclude = [
     "demo_project*",
     "ranking_guard_project*",
     "fairness_guard_project*",
+    "testguard_alpha*",
     "reports*",
     "schemas*",
     "jenkins*",

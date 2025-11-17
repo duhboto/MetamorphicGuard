@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.3.2] - 2025-01-16
+
+### Added
+- **Text Normalizer Guard** (`testguard_alpha/text_normalizer_guard_project/`): New reference project demonstrating Metamorphic Guard's domain-agnostic capabilities. This project shows how the framework works beyond ML/LLM use cases by comparing text normalization implementations. Includes comprehensive documentation (`DEMONSTRATION.md`) with three experiments (healthy → broken → fixed) that prove automatic regression detection, principled adoption decisions, and applicability to any pure function with testable invariants.
+
+### Notes
+- No breaking API changes. Safe patch update.
+- Adds a fourth reference project to showcase framework versatility.
+
 ## [3.3.1] - 2025-01-16
 
 ### Bug Fixes
