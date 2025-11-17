@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.3.0] - 2025-01-16
+
+### CI/CD Improvements
+- Fixed security scan workflow to avoid disk space issues
+- Updated security scanning to use `pip-audit --requirement` instead of installing packages
+- Scans dependencies in separate groups (base, queue, otel, llm) for better efficiency
+- Added note about vLLM exclusion in CI due to large PyTorch/CUDA dependencies
+- Updated GitHub Actions artifact upload actions from v3 to v4 (deprecation fix)
+
+### Notes
+- No breaking API changes. Safe minor update.
+- CI/CD improvements ensure reliable automated security scanning
+
 ## [3.2.0] - 2025-01-16
 
 ### Production Readiness Enhancements
