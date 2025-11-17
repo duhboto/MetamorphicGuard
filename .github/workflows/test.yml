@@ -104,24 +104,7 @@ jobs:
       - name: Check for critical vulnerabilities (all)
         run: |
           if [ -f vulnerabilities-all.json ]; then
-            python << 'EOF'
-import json
-import sys
-with open('vulnerabilities-all.json', 'r') as f:
-    data = json.load(f)
-critical = [v for v in data.get('vulnerabilities', []) if v.get('aliases', [{}])[0].get('severity', '').upper() == 'CRITICAL']
-if critical:
-    print('Critical vulnerabilities found in optional dependencies:')
-    for v in critical:
-        print(f"  - {v.get('id')}: {v.get('summary', '')}")
-    sys.exit(1)
-else:
-    medium = [v for v in data.get('vulnerabilities', []) if v.get('aliases', [{}])[0].get('severity', '').upper() in ['MEDIUM', 'HIGH']]
-    if medium:
-        print(f'Found {len(medium)} medium/high severity vulnerabilities (non-blocking):')
-        for v in medium[:5]:
-            print(f"  - {v.get('id')}: {v.get('summary', '')}")
-EOF
+            python -c 'import json, sys; data = json.load(open("vulnerabilities-all.json")); critical = [v for v in data.get("vulnerabilities", []) if v.get("aliases", [{}])[0].get("severity", "").upper() == "CRITICAL"]; medium = [v for v in data.get("vulnerabilities", []) if v.get("aliases", [{}])[0].get("severity", "").upper() in ["MEDIUM", "HIGH"]]; [print(f"Critical vulnerabilities found in optional dependencies:\n  - {v.get(\"id\")}: {v.get(\"summary\", \"\")}") or sys.exit(1) for v in critical] if critical else (print(f"Found {len(medium)} medium/high severity vulnerabilities (non-blocking):") or [print(f"  - {v.get(\"id\")}: {v.get(\"summary\", \"\")}") for v in medium[:5]]) if medium else None'
           fi
       - name: Upload vulnerability reports
         if: always()
