@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.3.4] - 2025-01-16
+
+### Bug Fixes
+- Fixed validation script to make vllm optional for llm profile
+- Validation script now treats vllm as optional dependency (warns instead of fails when missing)
+- Allows CI to pass validation when vllm is skipped due to disk space constraints
+- Core LLM dependencies (openai, anthropic) remain required
+
+### Notes
+- No breaking API changes. Safe patch update.
+- Validation script now supports optional dependencies with warning messages.
+
 ## [3.3.3] - 2025-01-16
 
 ### Bug Fixes
