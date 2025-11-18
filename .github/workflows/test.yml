@@ -61,7 +61,13 @@ jobs:
       - name: Install optional dependencies
         run: |
           if [ "${{ matrix.profile }}" != "base" ]; then
-            pip install -e ".[${{ matrix.profile }}]"
+            if [ "${{ matrix.profile }}" == "llm" ]; then
+              # Install LLM dependencies without vllm to avoid disk space issues
+              # vllm has massive PyTorch/CUDA dependencies that cause CI failures
+              pip install "openai>=1.0.0" "anthropic>=0.18.0"
+            else
+              pip install -e ".[${{ matrix.profile }}]"
+            fi
           fi
       - name: Validate dependencies
         run: |
