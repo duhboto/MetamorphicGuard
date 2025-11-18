@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.3.3] - 2025-01-16
+
+### Bug Fixes
+- Fixed CI workflow disk space issue in `validate-optional-deps` job
+- Skip vllm installation when testing llm profile (vllm has massive PyTorch/CUDA dependencies)
+- Install openai and anthropic directly to validate core LLM dependencies without disk space constraints
+
+### Notes
+- No breaking API changes. Safe patch update.
+- CI now reliably validates optional dependencies without running out of disk space.
+
 ## [3.3.2] - 2025-01-16
 
 ### Added
