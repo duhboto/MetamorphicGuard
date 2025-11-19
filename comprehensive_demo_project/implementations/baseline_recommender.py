@@ -41,3 +41,5 @@ def solve(user_prefs, catalog, num_recommendations):
     
     return [pid for _, pid in top_k]
 
+
+

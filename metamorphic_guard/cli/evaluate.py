@@ -388,7 +388,7 @@ EVALUATE_OPTIONS = [
         type=click.Choice(["local", "queue"]),
         default="local",
         show_default=True,
-        help="Execution dispatcher (local threads or experimental queue).",
+        help="Execution dispatcher (local threads or queue for distributed execution).",
     ),
     click.option(
         "--executor",
@@ -425,7 +425,7 @@ EVALUATE_OPTIONS = [
         "--queue-config",
         type=str,
         default=None,
-        help="JSON configuration for the queue dispatcher (experimental).",
+        help="JSON configuration for the queue dispatcher. See docs/operations/queue-production-readiness.md for production guidance.",
     ),
     click.option(
         "--replay-input",

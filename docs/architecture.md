@@ -62,7 +62,7 @@ class Dispatcher(ABC):
 
 **Implementations**:
 - `LocalDispatcher`: Thread-based local execution
-- `QueueDispatcher`: Queue-backed distributed execution (experimental)
+- `QueueDispatcher`: Queue-backed distributed execution (production-ready)
 
 **Swappability**: Implement custom dispatchers or register via plugin system.
 

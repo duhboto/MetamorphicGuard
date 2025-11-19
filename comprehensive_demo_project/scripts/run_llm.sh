@@ -26,3 +26,5 @@ echo "✅ Evaluation complete!"
 echo "📊 Report: reports/llm_report.html"
 echo "💰 Check the report for cost information"
 
+
+

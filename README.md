@@ -291,6 +291,8 @@ modeling real ranking or pricing systems:
 
 **MR Library**: See the [Metamorphic Relation Library](docs/mr-library.md) for a curated catalog of MRs organized by category (permutation, monotonicity, fairness, RAG, etc.) with examples, rationale, and literature citations. Use this guide to select appropriate MRs for your domain and author new ones.
 
+**Authoring High-Quality MRs**: See [Authoring Metamorphic Relations](docs/concepts/authoring-metamorphic-relations.md) for comprehensive guidance, design patterns, common pitfalls, and quality checklists. This guide provides guardrails for creating effective MRs that catch real bugs and provide actionable insights.
+
 **Coverage Analysis**: Reports include `relation_coverage` showing per-relation and per-category pass rates. Use this to:
 - Identify gaps in MR coverage (missing categories)
 - Detect flaky MRs (inconsistent failures)
@@ -503,10 +505,9 @@ metamorphic-guard \
 
 ### Distributed Execution
 
-The queue dispatcher (`--dispatcher queue`) enables distributed execution. In-memory
-queues are available for local experimentation, while a Redis-backed adapter lets
-you scale out with remote workers:
+The queue dispatcher (`--dispatcher queue`) enables distributed execution for production-scale evaluations. The queue dispatcher is **production-ready** with support for Redis, AWS SQS, RabbitMQ, and Kafka backends. See the [Queue Production Readiness Guide](docs/operations/queue-production-readiness.md) for comprehensive production deployment guidance.
 
+**Quick Start**:
 ```bash
 metamorphic-guard --dispatcher queue \
   --queue-config '{"backend":"redis","url":"redis://localhost:6379/0"}' \
@@ -517,8 +518,12 @@ metamorphic-guard --dispatcher queue \
 metamorphic-guard-worker --backend redis --queue-config '{"url":"redis://localhost:6379/0"}'
 ```
 
-Workers fetch tasks, run sandboxed evaluations, and stream results back to the
-coordinator. Memory backend workers remain in-process and are best suited for tests.
+**Production Resources**:
+- [Queue Production Readiness Guide](docs/operations/queue-production-readiness.md) - Comprehensive production deployment guide with backend-specific recommendations
+- [Queue Dispatch Documentation](docs/operations/queue-dispatch.md) - Detailed API reference and configuration options
+- [Reliability Benchmarks](docs/operations/reliability-benchmarks.md) - Production reliability metrics (99.9%+ uptime, >99.5% task completion)
+
+Workers fetch tasks, run sandboxed evaluations, and stream results back to the coordinator. Memory backend workers remain in-process and are best suited for tests.
 
 Adaptive queue controls:
 - `adaptive_batching` (default `true`) grows/shrinks batch sizes based on observed

@@ -63,7 +63,7 @@ Options for controlling how tests are executed:
   - Choices: local, queue
 - `--executor`: Sandbox executor to use
 - `--executor-config`: JSON string with executor-specific configuration
-- `--queue-config`: JSON configuration for queue dispatcher (experimental)
+- `--queue-config`: JSON configuration for queue dispatcher (see production readiness guide)
 - `--replay-input`: Replay explicit test case inputs from JSON file
 
 ## Reporting Options

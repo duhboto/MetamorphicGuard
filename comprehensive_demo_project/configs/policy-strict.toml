@@ -11,3 +11,5 @@ alpha = 0.01  # Stricter significance level
 power_target = 0.90  # Higher power requirement
 violation_cap = 10  # Lower violation tolerance
 
+
+
