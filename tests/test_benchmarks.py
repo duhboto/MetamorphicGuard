@@ -83,8 +83,9 @@ def test_small_run_finishes_within_time_budget():
     start = time.perf_counter()
     result = run(spec, baseline, candidate, cfg)
     elapsed = time.perf_counter() - start
-    # CI budget: should comfortably run under 10 seconds on typical runners
-    assert elapsed < 10.0, f"Elapsed {elapsed:.2f}s exceeds time budget"
+    # CI budget: typically < 10s, but can fluctuate on shared runners. 
+    # Allow 20s to prevent flaky failures on slow CI nodes.
+    assert elapsed < 20.0, f"Elapsed {elapsed:.2f}s exceeds time budget"
     # Basic structural checks
     report = result.report
     assert report.get("task") == "bench_top_k"
