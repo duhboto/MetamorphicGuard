@@ -1,0 +1,28 @@
+# Ranking & Fairness evaluation configuration
+# Optimized for ranking algorithms and fairness auditing
+
+[task]
+name = "ranking_task"
+baseline = "baseline.py"
+candidate = "candidate.py"
+
+[execution]
+n = 500
+seed = 42
+timeout_s = 2.0
+mem_mb = 1024
+parallel = 1
+
+[statistics]
+alpha = 0.05
+min_delta = 0.02
+ci_method = "bootstrap"
+bootstrap_samples = 2000
+
+[monitoring]
+monitors = ["fairness", "latency"]
+
+[reporting]
+report_dir = "reports"
+html_report = "reports/ranking_report.html"
+

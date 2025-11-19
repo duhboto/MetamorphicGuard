@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict
 from ..errors import QueueSerializationError
 from ..queue_adapter import QueueAdapter, QueueResult, QueueTask
 from ..queue_serialization import decode_args
-from ..dispatch import RunCase
+from .base import RunCase
 
 
 class LocalWorker(threading.Thread):
@@ -74,6 +74,3 @@ class LocalWorker(threading.Thread):
                     result={"success": False, "error": context},
                 )
             )
-
-
-

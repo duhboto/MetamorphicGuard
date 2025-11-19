@@ -3,30 +3,9 @@ import pickle
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-from .monitoring import Monitor, MonitorRecord
-from .plugins import dispatcher_plugins
-
-RunCase = Callable[[int, Tuple[Any, ...]], Dict[str, Any]]
-
-
-class Dispatcher(ABC):
-    """Abstract base class for dispatching evaluation tasks."""
-
-    def __init__(self, workers: int = 1, *, kind: str = "local") -> None:
-        self.workers = max(1, workers)
-        self.kind = kind
-
-    @abstractmethod
-    def execute(
-        self,
-        *,
-        test_inputs: Sequence[Tuple[Any, ...]],
-        run_case: RunCase,
-        role: str,
-        monitors: Sequence[Monitor] | None = None,
-        call_spec: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
-        """Execute the provided run_case function against all inputs."""
+from ..monitoring import Monitor, MonitorRecord
+from ..plugins import dispatcher_plugins
+from .base import Dispatcher, RunCase
 
 
 class LocalDispatcher(Dispatcher):
@@ -51,11 +30,19 @@ class LocalDispatcher(Dispatcher):
         role: str,
         monitors: Sequence[Monitor] | None = None,
         call_spec: Optional[Dict[str, Any]] = None,
+        seed: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         monitors = list(monitors or [])
         # Pre-allocate results list for memory efficiency
         # Use None initially to reduce memory footprint for large test suites
         results: List[Dict[str, Any]] = [None] * len(test_inputs)  # type: ignore[list-item]
+
+        # Initialize RNG if seed provided
+        if seed is not None:
+            import random
+            # We can't easily seed the pool workers directly without initializer
+            # But we can seed the main process if needed, or pass seed to _invoke
+            pass
 
         def _invoke(index: int, args: Tuple[Any, ...]) -> Dict[str, Any]:
             result = run_case(index, args)
@@ -75,7 +62,7 @@ class LocalDispatcher(Dispatcher):
             trace_test_case = None
             is_telemetry_enabled = None
             try:
-                from .telemetry import (
+                from ..telemetry import (
                     trace_test_case as _trace_test_case,
                     is_telemetry_enabled as _is_telemetry_enabled,
                 )
@@ -151,22 +138,11 @@ class LocalDispatcher(Dispatcher):
                     }
                     for future in as_completed(future_map):
                         idx = future_map[future]
-                        results[idx] = future.result()
+                        result = future.result()
+                    results[idx] = future.result()
             else:
                 raise
         return results
-
-
-# The queue-based dispatcher is defined in dispatch/queue_dispatcher.py to avoid circular imports.
-# Import it lazily using absolute import to avoid circular dependency issues.
-def _lazy_import_queue_dispatcher():
-    """Lazy import of QueueDispatcher to avoid circular imports."""
-    from .dispatch.queue_dispatcher import QueueDispatcher  # noqa: E402  # isort:skip
-    return QueueDispatcher
-
-# Store the function but don't call it yet - actual imports happen at runtime
-# QueueDispatcher will be imported when needed via ensure_dispatcher
-QueueDispatcher = None  # type: ignore[assignment,misc]  # Set lazily to avoid circular import
 
 
 def ensure_dispatcher(
@@ -198,8 +174,23 @@ def ensure_dispatcher(
         # Explicit process pool dispatcher
         return LocalDispatcher(workers, use_process_pool=True, auto_workers=auto_workers)
     if name in {"queue", "distributed"}:
-        QueueDispatcher = _lazy_import_queue_dispatcher()  # Lazy import to avoid circular dependency
+        from .queue_dispatcher import QueueDispatcher
         return QueueDispatcher(workers, queue_config)
+
+    if name == "shadow":
+        from .shadow import ShadowDispatcher
+        # Default to local delegate for simple shadow setup
+        delegate = LocalDispatcher(workers, use_process_pool=use_process_pool, auto_workers=auto_workers)
+        
+        sample_rate = 1.0
+        safe_mode = True
+        
+        # If queue_config is provided, try to read shadow settings from it
+        if queue_config:
+            sample_rate = float(queue_config.get("sample_rate", 1.0))
+            safe_mode = bool(queue_config.get("safe_mode", True))
+            
+        return ShadowDispatcher(delegate, sample_rate=sample_rate, safe_mode=safe_mode)
 
     plugin_registry = dispatcher_plugins()
     definition = plugin_registry.get(name)

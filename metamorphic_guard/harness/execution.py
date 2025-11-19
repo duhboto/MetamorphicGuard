@@ -27,6 +27,7 @@ class ExecutionPlan:
     monitors: List[Monitor]
     worker_count: int
     run_id: str
+    seed: int = 42
 
     @property
     def total_cases(self) -> int:
@@ -86,6 +87,7 @@ def prepare_execution_plan(
         monitors=monitor_objs,
         worker_count=worker_count,
         run_id=run_id,
+        seed=seed,
     )
 
 
@@ -153,6 +155,7 @@ def execute_implementations(
             executor=baseline_effective_executor,
             executor_config=baseline_effective_config,
         ),
+        seed=plan.seed,
     )
     candidate_results = dispatcher_obj.execute(
         test_inputs=test_inputs,
@@ -170,6 +173,7 @@ def execute_implementations(
             executor=candidate_effective_executor,
             executor_config=candidate_effective_config,
         ),
+        seed=plan.seed,
     )
     return baseline_results, candidate_results
 

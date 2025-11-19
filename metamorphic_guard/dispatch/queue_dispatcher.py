@@ -8,22 +8,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-# Import Dispatcher and RunCase from parent dispatch.py module (file, not package)
-# Need to import from the file, not the package - use importlib to break circular dependency
-import importlib.util
-from pathlib import Path
-
-# Load dispatch.py file directly to avoid package/namespace conflict
-_dispatch_file_path = Path(__file__).parent.parent / 'dispatch.py'
-_spec = importlib.util.spec_from_file_location('metamorphic_guard._dispatch_file', _dispatch_file_path)
-if _spec and _spec.loader:
-    _dispatch_file = importlib.util.module_from_spec(_spec)
-    _spec.loader.exec_module(_dispatch_file)
-    Dispatcher = _dispatch_file.Dispatcher  # type: ignore[attr-defined]
-    RunCase = _dispatch_file.RunCase  # type: ignore[attr-defined]
-else:
-    # Fallback: This shouldn't happen, but if it does, raise an error
-    raise ImportError("Could not load dispatch.py file")
+from .base import Dispatcher, RunCase
 from ..errors import QueueSerializationError
 from ..monitoring import Monitor, MonitorRecord
 from ..observability import (
@@ -102,6 +87,7 @@ class QueueDispatcher(Dispatcher):
         role: str,
         monitors: Sequence[Monitor] | None = None,
         call_spec: Optional[JSONDict] = None,
+        seed: Optional[int] = None,
     ) -> List[JSONDict]:
         """Execute test cases using queue-based distribution."""
         monitors = list(monitors or [])
@@ -242,4 +228,3 @@ class QueueDispatcher(Dispatcher):
 # Backward compatibility exports
 _Task = QueueResult
 _Result = QueueResult
-

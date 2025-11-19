@@ -15,9 +15,11 @@ import click
 TEMPLATES = {
     "minimal": "Minimal configuration - only core options",
     "standard": "Standard evaluation with common defaults",
+    "generic": "Generic Classification/Regression configuration",
+    "ranking": "Ranking & Fairness evaluation configuration",
+    "llm": "LLM evaluation configuration",
     "sequential": "Sequential testing for iterative PR workflows",
     "adaptive": "Adaptive testing with automatic sample size determination",
-    "llm": "LLM evaluation configuration",
     "distributed": "Distributed evaluation with queue-based execution",
 }
 
@@ -78,36 +80,60 @@ def init_command(
 ) -> None:
     """Create a starter TOML configuration file or scaffold a full project."""
     
+    # Interactive wizard logic
+    if interactive:
+        click.echo("Welcome to the Metamorphic Guard Initialization Wizard!")
+        click.echo("We'll help you set up your evaluation project.\n")
+        
+        # If template is not pre-selected, ask for project type
+        if not template:
+            project_type = click.prompt(
+                "What kind of evaluation are you running?",
+                type=click.Choice(["generic", "llm", "ranking", "custom"], case_sensitive=False),
+                default="generic",
+            )
+            
+            if project_type == "custom":
+                template_choice = click.prompt(
+                    "Select a base template",
+                    type=click.Choice(list(TEMPLATES.keys()) + ["none"], case_sensitive=False),
+                    default="standard",
+                )
+                if template_choice.lower() != "none":
+                    template = template_choice.lower()
+            else:
+                template = project_type
+        
+        # Ask for task details
+        task = click.prompt("Task name (e.g. fraud_detection, qa_bot)", default=task)
+        
+        if not project_dir and click.confirm("Do you want to scaffold a full project structure?", default=True):
+            default_dir = task.replace(" ", "_").lower()
+            project_dir_input = click.prompt("Project directory", default=default_dir)
+            project_dir = Path(project_dir_input)
+        
+        if not project_dir:
+            baseline = click.prompt("Baseline path", default=baseline)
+            candidate = click.prompt("Candidate path", default=candidate)
+            
+            # Only ask advanced options if custom or generic
+            if template in ["minimal", "standard", "generic", None]:
+                distributed = click.confirm("Enable distributed execution?", default=distributed)
+                monitor_default = ",".join(list(monitor_names))
+                monitor_input = click.prompt(
+                    "Monitors (comma separated, blank for none)",
+                    default=monitor_default,
+                    show_default=bool(monitor_default),
+                )
+                monitor_names = [m.strip() for m in monitor_input.split(",") if m.strip()] if monitor_input else []
+
     # If project_dir is specified, scaffold a full project
     if project_dir:
-        _scaffold_project(project_dir, template, task, baseline, candidate, interactive)
+        _scaffold_project(project_dir, template, task, baseline, candidate, interactive=False) # Interactive handled above
         return
     
     # Otherwise, just create a config file
     monitors = list(monitor_names)
-
-    if interactive:
-        if not template:
-            template_choice = click.prompt(
-                "Template (minimal, standard, sequential, adaptive, llm, distributed, or 'none' for custom)",
-                default="standard",
-            )
-            if template_choice.lower() != "none":
-                template = template_choice.lower()
-        
-        if not template:
-            task = click.prompt("Task name", default=task)
-            baseline = click.prompt("Baseline path", default=baseline)
-            candidate = click.prompt("Candidate path", default=candidate)
-            distributed = click.confirm("Enable distributed execution?", default=distributed)
-            monitor_default = ",".join(monitors)
-            monitor_input = click.prompt(
-                "Monitors (comma separated, blank for none)",
-                default=monitor_default,
-                show_default=bool(monitor_default),
-            )
-            monitors = [m.strip() for m in monitor_input.split(",") if m.strip()] if monitor_input else []
-
     path.parent.mkdir(parents=True, exist_ok=True)
     
     # Use template if specified
@@ -118,15 +144,20 @@ def init_command(
             content = template_path.read_text(encoding="utf-8")
             
             # Replace placeholders if user provided values
-            if task != "top_k":
-                content = content.replace("your_task_name", task)
-                content = content.replace('name = "your_task_name"', f'name = "{task}"')
+            content = content.replace("your_task_name", task)
+            content = content.replace("your_llm_task_name", task)
+            content = content.replace("ranking_task", task)
+            content = content.replace("classification_task", task)
+            content = content.replace('name = "your_task_name"', f'name = "{task}"')
+            
             if baseline != "baseline.py":
                 content = content.replace("path/to/baseline.py", baseline)
                 content = content.replace('baseline = "path/to/baseline.py"', f'baseline = "{baseline}"')
+                content = content.replace('baseline = "baseline.py"', f'baseline = "{baseline}"')
             if candidate != "candidate.py":
                 content = content.replace("path/to/candidate.py", candidate)
                 content = content.replace('candidate = "path/to/candidate.py"', f'candidate = "{candidate}"')
+                content = content.replace('candidate = "candidate.py"', f'candidate = "{candidate}"')
             
             path.write_text(content, encoding="utf-8")
             click.echo(f"Created configuration from '{template}' template: {path}")
@@ -160,6 +191,7 @@ def _write_basic_config(
     lines.append("seed = 42")
     lines.append("timeout_s = 2.0")
     lines.append("mem_mb = 512")
+    lines.append("parallel = 1")
     
     lines.append("")
     lines.append("[statistics]")
@@ -203,28 +235,40 @@ def _scaffold_project(
     project_dir.mkdir(parents=True, exist_ok=True)
     
     if interactive:
+        # This logic is now largely handled in init_command for better flow
+        # but keeping fallback here just in case
         task = click.prompt("Task name", default=task)
         baseline_name = click.prompt("Baseline filename", default=baseline)
         candidate_name = click.prompt("Candidate filename", default=candidate)
-        template_choice = click.prompt(
-            "Template (minimal, standard, sequential, adaptive, llm, distributed, or 'none' for custom)",
-            default=template or "standard",
-        )
-        if template_choice.lower() != "none":
-            template = template_choice.lower()
+        if not template:
+             template_choice = click.prompt(
+                "Template (minimal, standard, sequential, adaptive, llm, distributed, or 'none' for custom)",
+                default="standard",
+            )
+             if template_choice.lower() != "none":
+                template = template_choice.lower()
     else:
         baseline_name = baseline
         candidate_name = candidate
     
     # Create config file
     config_path = project_dir / "metamorphic.toml"
+    
+    # Use init_command logic to write config (reusing the file writing logic is better but trickier with click context)
+    # We'll replicate the template writing logic here for simplicity
     if template:
         template_path = _get_template_path(template)
         if template_path.exists():
             content = template_path.read_text(encoding="utf-8")
             content = content.replace("your_task_name", task)
+            content = content.replace("your_llm_task_name", task)
+            content = content.replace("ranking_task", task)
+            content = content.replace("classification_task", task)
             content = content.replace("path/to/baseline.py", baseline_name)
             content = content.replace("path/to/candidate.py", candidate_name)
+            content = content.replace('baseline = "baseline.py"', f'baseline = "{baseline_name}"')
+            content = content.replace('candidate = "candidate.py"', f'candidate = "{candidate_name}"')
+            
             config_path.write_text(content, encoding="utf-8")
         else:
             _write_basic_config(config_path, task, baseline_name, candidate_name, False, [])
@@ -359,4 +403,3 @@ jobs:
     click.echo(f"  Candidate: {candidate_path}")
     click.echo(f"  README: {readme_path}")
     click.echo(f"  CI workflow: {workflow_path}")
-

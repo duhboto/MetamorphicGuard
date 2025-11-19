@@ -95,6 +95,7 @@ def render_html_report(
     policy_block = _render_policy_block(payload.get("policy"), decision)
     coverage_chart = _build_coverage_chart(payload.get("relation_coverage"))
     llm_metrics_block = _render_llm_metrics(payload.get("llm_metrics"))
+    metrics_block = _render_metrics_table(payload.get("metrics"))
 
     fairness_block = (
         """
@@ -190,6 +191,7 @@ def render_html_report(
     </table>
   </section>
   
+  {metrics_block}
   {llm_metrics_block}
 
   <section class="charts-section">
@@ -428,6 +430,41 @@ def _render_llm_metrics(metrics: Dict[str, Any] | None) -> str:
         "<table>"
         "<tr><th>Metric</th><th>Baseline</th><th>Candidate</th><th>Δ</th><th>Ratio</th></tr>"
         + "".join(body)
+        + "</table>"
+    )
+
+
+def _render_metrics_table(metrics_payload: Dict[str, Any] | None) -> str:
+    """Render generic metrics table."""
+    if not metrics_payload:
+        return ""
+    
+    rows = []
+    for name, data in metrics_payload.items():
+        baseline = data.get("baseline", {}) or {}
+        candidate = data.get("candidate", {}) or {}
+        delta = data.get("delta", {}) or {}
+        
+        baseline_val = baseline.get("value")
+        candidate_val = candidate.get("value")
+        diff = delta.get("difference")
+        ratio = delta.get("ratio")
+        
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(name)}</td>"
+            f"<td>{_format_optional_float(baseline_val)}</td>"
+            f"<td>{_format_optional_float(candidate_val)}</td>"
+            f"<td>{_format_optional_float(diff)}</td>"
+            f"<td>{_format_optional_float(ratio)}</td>"
+            "</tr>"
+        )
+        
+    return (
+        "<h2>Custom Metrics</h2>"
+        "<table>"
+        "<tr><th>Metric</th><th>Baseline</th><th>Candidate</th><th>Δ</th><th>Ratio</th></tr>"
+        + "".join(rows)
         + "</table>"
     )
 
@@ -788,6 +825,89 @@ def _extract_performance_chart(monitors: Dict[str, Any] | Sequence[Any]) -> Dict
             },
         }
     return None
+
+
+def _build_coverage_chart(coverage: Dict[str, Any] | None) -> Dict[str, Any] | None:
+    """Build coverage chart data from coverage statistics."""
+    if not coverage:
+        return None
+        
+    categories = coverage.get("categories", {})
+    if not categories:
+        return None
+        
+    labels = sorted(categories.keys())
+    if not labels:
+        return None
+        
+    # Extract data for each category
+    total_counts = []
+    pass_rates = []
+    
+    for label in labels:
+        stats = categories[label]
+        total_counts.append(stats.get("candidate_total", 0))
+        pass_rate = float(stats.get("candidate_pass_rate", 0.0) or 0.0) * 100.0
+        pass_rates.append(round(pass_rate, 1))
+        
+    return {
+        "type": "bar",
+        "data": {
+            "labels": labels,
+            "datasets": [
+                {
+                    "label": "Pass Rate (%)",
+                    "data": pass_rates,
+                    "backgroundColor": "rgba(75, 192, 192, 0.6)",
+                    "borderColor": "rgba(75, 192, 192, 1)",
+                    "borderWidth": 1,
+                    "yAxisID": "y",
+                },
+                {
+                    "label": "Total Cases",
+                    "data": total_counts,
+                    "backgroundColor": "rgba(54, 162, 235, 0.3)",
+                    "borderColor": "rgba(54, 162, 235, 1)",
+                    "borderWidth": 1,
+                    "type": "line",
+                    "yAxisID": "y1",
+                }
+            ]
+        },
+        "options": {
+            "responsive": True,
+            "plugins": {
+                "title": {
+                    "display": True,
+                    "text": "MR Coverage & Pass Rate by Category"
+                },
+                "legend": {
+                    "position": "bottom"
+                }
+            },
+            "scales": {
+                "y": {
+                    "beginAtZero": True,
+                    "max": 100,
+                    "title": {
+                        "display": True,
+                        "text": "Pass Rate (%)"
+                    }
+                },
+                "y1": {
+                    "beginAtZero": True,
+                    "position": "right",
+                    "grid": {
+                        "drawOnChartArea": False
+                    },
+                    "title": {
+                        "display": True,
+                        "text": "Count"
+                    }
+                }
+            }
+        }
+    }
 
 
 def _build_chart_script(
@@ -1152,60 +1272,3 @@ def _get_theme_css(theme: str) -> str:
 """
     else:  # default
         return base_css
-
-
-def _build_coverage_chart(coverage: Dict[str, Any] | None) -> Dict[str, Any] | None:
-    """Build chart configuration for MR coverage by category."""
-    if not coverage:
-        return None
-    
-    categories = coverage.get("categories") or {}
-    if not categories:
-        return None
-    
-    labels = []
-    baseline_rates = []
-    candidate_rates = []
-    
-    for category, stats in categories.items():
-        labels.append(category)
-        baseline_pr = stats.get("baseline_pass_rate")
-        candidate_pr = stats.get("candidate_pass_rate")
-        baseline_rates.append(round(float(baseline_pr * 100), 1) if baseline_pr is not None else 0)
-        candidate_rates.append(round(float(candidate_pr * 100), 1) if candidate_pr is not None else 0)
-    
-    return {
-        "type": "bar",
-        "data": {
-            "labels": labels,
-            "datasets": [
-                {
-                    "label": "Baseline Pass Rate (%)",
-                    "backgroundColor": "#4caf50",
-                    "data": baseline_rates,
-                },
-                {
-                    "label": "Candidate Pass Rate (%)",
-                    "backgroundColor": "#2196f3",
-                    "data": candidate_rates,
-                },
-            ],
-        },
-        "options": {
-            "responsive": True,
-            "plugins": {
-                "title": {
-                    "display": True,
-                    "text": "MR Coverage by Category",
-                },
-                "legend": {"display": True},
-            },
-            "scales": {
-                "y": {
-                    "beginAtZero": True,
-                    "suggestedMax": 100,
-                },
-            },
-        },
-    }
-

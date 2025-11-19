@@ -611,9 +611,11 @@ def test_cli_init_interactive(tmp_path):
     runner = CliRunner()
     config_path = tmp_path / "metaguard.toml"
 
-    # New interactive flow: template choice first, then custom inputs if "none"
-    user_input = """none
+    # New interactive flow: project type -> template -> task -> scaffold? -> details
+    user_input = """custom
+none
 custom_task
+n
 baseline.py
 candidate.py
 y

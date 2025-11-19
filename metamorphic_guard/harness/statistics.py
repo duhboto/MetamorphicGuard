@@ -9,6 +9,7 @@ import random
 from statistics import NormalDist
 from typing import Any, Dict, Hashable, List, Optional, Sequence, Tuple, TypedDict
 
+import numpy as np
 from ..power import calculate_power, calculate_sample_size
 from ..types import JSONDict, JSONValue
 
@@ -197,7 +198,7 @@ def compute_bootstrap_ci(
     if n == 0 or len(candidate_indicators) != n:
         return [0.0, 0.0]
 
-    rng = random.Random(seed)
+    rng = np.random.default_rng(seed)
     deltas = generate_bootstrap_deltas(
         baseline_indicators,
         candidate_indicators,
@@ -232,7 +233,7 @@ def generate_bootstrap_deltas(
     baseline_indicators: Sequence[int],
     candidate_indicators: Sequence[int],
     *,
-    rng: random.Random,
+    rng: np.random.Generator,
     samples: int,
     clusters: Optional[Sequence[Hashable]] = None,
 ) -> List[float]:
@@ -241,42 +242,72 @@ def generate_bootstrap_deltas(
     if n == 0 or len(candidate_indicators) != n:
         return []
 
-    deltas: List[float] = []
+    baseline_arr = np.array(baseline_indicators, dtype=np.float64)
+    candidate_arr = np.array(candidate_indicators, dtype=np.float64)
 
     if clusters:
-        cluster_indices: Dict[Hashable, List[int]] = {}
+        # Cluster bootstrap
+        # Map each unique cluster to its list of indices
+        cluster_map: Dict[Hashable, List[int]] = {}
         for idx, cluster_id in enumerate(clusters):
-            cluster_indices.setdefault(cluster_id, []).append(idx)
-        unique_clusters = list(cluster_indices.keys())
-        if unique_clusters:
-            cluster_count = len(unique_clusters)
-            for _ in range(max(1, samples)):
-                sampled_clusters = [
-                    unique_clusters[rng.randrange(cluster_count)]
-                    for _ in range(cluster_count)
-                ]
-                baseline_sample: List[int] = []
-                candidate_sample: List[int] = []
-                for cluster_id in sampled_clusters:
-                    indices = cluster_indices[cluster_id]
-                    baseline_sample.extend(baseline_indicators[i] for i in indices)
-                    candidate_sample.extend(candidate_indicators[i] for i in indices)
-                if not baseline_sample or len(baseline_sample) != len(candidate_sample):
-                    continue
-                p_baseline = sum(baseline_sample) / len(baseline_sample)
-                p_candidate = sum(candidate_sample) / len(candidate_sample)
-                deltas.append(p_candidate - p_baseline)
-            if deltas:
-                return deltas
-        # fallback to iid if clusters missing/empty
+            cluster_map.setdefault(cluster_id, []).append(idx)
+        
+        unique_clusters = list(cluster_map.keys())
+        if not unique_clusters:
+            # Fallback to iid if clusters missing/empty
+            pass
+        else:
+            n_clusters = len(unique_clusters)
+            # Pre-compute sums for each cluster
+            cluster_sums_base = np.array([np.sum(baseline_arr[cluster_map[c]]) for c in unique_clusters])
+            cluster_sums_cand = np.array([np.sum(candidate_arr[cluster_map[c]]) for c in unique_clusters])
+            cluster_counts = np.array([len(cluster_map[c]) for c in unique_clusters])
 
-    for _ in range(max(1, samples)):
-        indices = [rng.randrange(n) for _ in range(n)]
-        baseline_sum = sum(baseline_indicators[i] for i in indices)
-        candidate_sum = sum(candidate_indicators[i] for i in indices)
-        deltas.append((candidate_sum - baseline_sum) / n)
+            # Resample clusters with replacement
+            # Shape: (samples, n_clusters)
+            indices = rng.integers(0, n_clusters, size=(max(1, samples), n_clusters))
+            
+            # Sum up the chosen clusters
+            # We use take along axis or simple indexing
+            # sampled_sums_base shape: (samples, n_clusters)
+            sampled_sums_base = cluster_sums_base[indices]
+            sampled_sums_cand = cluster_sums_cand[indices]
+            sampled_counts = cluster_counts[indices]
 
-    return deltas
+            # Sum across the n_clusters dimension to get totals for each bootstrap sample
+            # total_base shape: (samples,)
+            total_base = np.sum(sampled_sums_base, axis=1)
+            total_cand = np.sum(sampled_sums_cand, axis=1)
+            total_counts = np.sum(sampled_counts, axis=1)
+
+            # Avoid division by zero
+            mask = total_counts > 0
+            if not np.any(mask):
+                 return []
+            
+            p_baseline = np.zeros_like(total_base)
+            p_candidate = np.zeros_like(total_cand)
+            
+            p_baseline[mask] = total_base[mask] / total_counts[mask]
+            p_candidate[mask] = total_cand[mask] / total_counts[mask]
+            
+            deltas = p_candidate - p_baseline
+            return deltas.tolist()
+
+    # IID bootstrap (vectorized)
+    # Generate random indices: (samples, n)
+    indices = rng.integers(0, n, size=(max(1, samples), n))
+    
+    # Resample
+    sampled_base = baseline_arr[indices]
+    sampled_cand = candidate_arr[indices]
+    
+    # Compute means
+    means_base = np.mean(sampled_base, axis=1)
+    means_cand = np.mean(sampled_cand, axis=1)
+    
+    deltas = means_cand - means_base
+    return deltas.tolist()
 
 
 def compute_bca_interval(
@@ -292,10 +323,11 @@ def compute_bca_interval(
     if not deltas:
         return [0.0, 0.0]
 
-    sorted_deltas = sorted(deltas)
-    num_samples = len(sorted_deltas)
+    deltas_arr = np.array(deltas)
+    num_samples = len(deltas_arr)
+    
     # Bias correction
-    proportion = sum(delta < observed_delta for delta in sorted_deltas) / num_samples
+    proportion = np.sum(deltas_arr < observed_delta) / num_samples
     if proportion <= 0.0:
         z0 = float("-inf")
     elif proportion >= 1.0:
@@ -305,48 +337,59 @@ def compute_bca_interval(
 
     # Acceleration via jackknife
     n = len(baseline_indicators)
-    total_baseline = sum(baseline_indicators)
-    total_candidate = sum(candidate_indicators)
+    baseline_arr = np.array(baseline_indicators, dtype=np.float64)
+    candidate_arr = np.array(candidate_indicators, dtype=np.float64)
+    total_baseline = np.sum(baseline_arr)
+    total_candidate = np.sum(candidate_arr)
 
     jackknife: List[float] = []
 
-    cluster_map: Dict[Hashable, List[int]] | None = None
     if clusters:
-        cluster_map = {}
+        cluster_map: Dict[Hashable, List[int]] = {}
         for idx, cluster_id in enumerate(clusters):
             cluster_map.setdefault(cluster_id, []).append(idx)
         # Only keep clusters that have valid indices
         cluster_groups = [indices for indices in cluster_map.values() if indices]
+        
+        # Vectorize jackknife for clusters?
+        # Since clusters can vary in size, it's slightly tricky to fully vectorize without padding
+        # But number of clusters is usually << n, so a loop is acceptable or partial vectorization
+        # Let's stick to the logic but optimize where possible
         for indices in cluster_groups:
             denom = n - len(indices)
             if denom <= 0:
                 continue
-            baseline_loo_total = total_baseline - sum(baseline_indicators[i] for i in indices)
-            candidate_loo_total = total_candidate - sum(candidate_indicators[i] for i in indices)
-            p_b = baseline_loo_total / denom if denom else 0.0
-            p_c = candidate_loo_total / denom if denom else 0.0
+            # Subtract cluster contribution
+            cluster_base = np.sum(baseline_arr[indices])
+            cluster_cand = np.sum(candidate_arr[indices])
+            
+            baseline_loo_total = total_baseline - cluster_base
+            candidate_loo_total = total_candidate - cluster_cand
+            
+            p_b = baseline_loo_total / denom
+            p_c = candidate_loo_total / denom
             jackknife.append(p_c - p_b)
-
-    if not jackknife:
+            
+    else:
         if n <= 1:
             acceleration = 0.0
         else:
-            for i in range(n):
-                denom = n - 1
-                if denom <= 0:
-                    continue
-                baseline_loo_total = total_baseline - baseline_indicators[i]
-                candidate_loo_total = total_candidate - candidate_indicators[i]
-                p_b = baseline_loo_total / denom if denom else 0.0
-                p_c = candidate_loo_total / denom if denom else 0.0
-                jackknife.append(p_c - p_b)
+            # Vectorized jackknife for IID
+            # LOO means: (sum - x_i) / (n-1)
+            denom = n - 1
+            baseline_loo_means = (total_baseline - baseline_arr) / denom
+            candidate_loo_means = (total_candidate - candidate_arr) / denom
+            jackknife_arr = candidate_loo_means - baseline_loo_means
+            jackknife = jackknife_arr.tolist()
 
-    if len(jackknife) < 2:
+    if not jackknife or len(jackknife) < 2:
         acceleration = 0.0
     else:
-        mean_jackknife = sum(jackknife) / len(jackknife)
-        num = sum((mean_jackknife - jk) ** 3 for jk in jackknife)
-        denom_sq = sum((mean_jackknife - jk) ** 2 for jk in jackknife)
+        jk_arr = np.array(jackknife)
+        mean_jackknife = np.mean(jk_arr)
+        diffs = mean_jackknife - jk_arr
+        num = np.sum(diffs ** 3)
+        denom_sq = np.sum(diffs ** 2)
         denom_pow = denom_sq ** 1.5 if denom_sq > 0 else 0.0
         if denom_pow == 0:
             acceleration = 0.0
@@ -371,8 +414,8 @@ def compute_bca_interval(
     lower_prob = _adjusted_quantile(alpha / 2)
     upper_prob = _adjusted_quantile(1 - alpha / 2)
 
-    lower = percentile(sorted_deltas, lower_prob)
-    upper = percentile(sorted_deltas, upper_prob)
+    lower = percentile(deltas, lower_prob)
+    upper = percentile(deltas, upper_prob)
     return [float(lower), float(upper)]
 
 
@@ -490,6 +533,10 @@ def percentile(values: Sequence[float], q: float) -> float:
     if q >= 1:
         return float(max(values))
 
+    # Use numpy for faster percentile calculation if available
+    if isinstance(values, np.ndarray):
+        return float(np.percentile(values, q * 100))
+        
     sorted_vals = sorted(values)
     n = len(sorted_vals)
     index = q * (n - 1)
@@ -627,7 +674,7 @@ def compute_bayesian_ci(
             rng.betavariate(candidate_alpha_post, candidate_beta_post)
             for _ in range(n_samples)
         ]
-        delta_samples = candidate_samples - baseline_samples
+        delta_samples = [c - b for b, c in zip(baseline_samples, candidate_samples)]
         delta_samples.sort()
         
         # Compute credible interval
@@ -821,4 +868,3 @@ def compute_cohens_d(
         "candidate_mean": float(candidate_mean),
         "interpretation": interpretation,
     }
-
