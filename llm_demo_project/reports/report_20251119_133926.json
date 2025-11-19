@@ -1,0 +1,586 @@
+{
+  "task": "llm_demo",
+  "n": 20,
+  "seed": 42,
+  "config": {
+    "timeout_s": 2.0,
+    "mem_mb": 512,
+    "alpha": 0.05,
+    "effective_alpha": 0.05,
+    "sequential_method": "none",
+    "max_looks": 1,
+    "look_number": 1,
+    "min_delta": 0.0,
+    "improve_delta": 0.0,
+    "min_pass_rate": 0.8,
+    "violation_cap": 25,
+    "parallel": 12,
+    "bootstrap_samples": 1000,
+    "ci_method": "bootstrap",
+    "rr_ci_method": "log",
+    "bayesian_hierarchical": false,
+    "bayesian_posterior_predictive": false,
+    "bayesian_samples": 5000,
+    "executor": "mock_executor:MockLLMExecutor",
+    "executor_config": {
+      "model": "mock-gpt-4",
+      "latency_ms": 50
+    },
+    "baseline_executor": "mock_executor:MockLLMExecutor",
+    "candidate_executor": "mock_executor:MockLLMExecutor",
+    "baseline_executor_config": {
+      "model": "mock-gpt-4",
+      "latency_ms": 50
+    },
+    "candidate_executor_config": {
+      "model": "mock-gpt-4",
+      "latency_ms": 50
+    },
+    "dispatcher": "local",
+    "queue_config": null,
+    "relation_correction": null,
+    "monitors": [
+      "LatencyMonitor",
+      "LLMCostMonitor"
+    ]
+  },
+  "hashes": {
+    "baseline": "53c3e42478c04b343c83c0f5de667e77d7f07db3a921c9575efd0be2700d945e",
+    "candidate": "dca4a86ac4cf613329fbabc3b813bf87eb75b121b0baa948aae9092d5b0052e9"
+  },
+  "spec_fingerprint": {
+    "gen_inputs": "56c6cc3abee84daa26a3e9d00ca2851086254ac4471eea7d72784080c65856dd",
+    "properties": [
+      {
+        "description": "Judge: Max Length 200",
+        "mode": "hard",
+        "hash": "d5b2e8ab54c826dc46de8e5179e3b2d26f483ad0af7ba1af1ff7e9caeebcae84"
+      },
+      {
+        "description": "Judge: No PII",
+        "mode": "hard",
+        "hash": "d5b2e8ab54c826dc46de8e5179e3b2d26f483ad0af7ba1af1ff7e9caeebcae84"
+      }
+    ],
+    "relations": [
+      {
+        "name": "paraphrase_invariance",
+        "expect": "equal",
+        "hash": "0d29cd94da80348ede966c9182512b6810ff32e0ec0209a4987f9c1279ded652"
+      }
+    ],
+    "equivalence": "62782522c4dc8e28f215cb5064d62c39bd8b276cb03a410abd972b2a8446d02b",
+    "formatters": {
+      "fmt_in": "77e3abe5d4bcb5afd4e757a7fdd253005093508916b2ae9d0480cabc33c4d8e3",
+      "fmt_out": "54a8ee4ccca20d354ff2632621a5c3239e8593427f20bcd85a2c003d7adaa601"
+    }
+  },
+  "baseline": {
+    "passes": 16,
+    "total": 20,
+    "pass_rate": 0.8,
+    "prop_violations": [
+      {
+        "test_case": 0,
+        "property": "Judge: Max Length 200",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. "
+      },
+      {
+        "test_case": 5,
+        "property": "Judge: Max Length 200",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. "
+      },
+      {
+        "test_case": 10,
+        "property": "Judge: Max Length 200",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. "
+      },
+      {
+        "test_case": 15,
+        "property": "Judge: Max Length 200",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. "
+      }
+    ],
+    "mr_violations": []
+  },
+  "candidate": {
+    "passes": 20,
+    "total": 20,
+    "pass_rate": 1.0,
+    "prop_violations": [],
+    "mr_violations": []
+  },
+  "delta_pass_rate": 0.19999999999999996,
+  "delta_ci": [
+    0.05,
+    0.4
+  ],
+  "relative_risk": 1.25,
+  "relative_risk_ci": [
+    1.0040209786993024,
+    1.5562423825288998
+  ],
+  "environment": {
+    "python_version": "3.11.8",
+    "implementation": "CPython",
+    "platform": "macOS-15.6-arm64-arm-64bit",
+    "executable": "/opt/anaconda3/bin/python"
+  },
+  "job_metadata": {
+    "hostname": "Spencers-Mac-Studio.local",
+    "executable": "/opt/anaconda3/bin/python",
+    "python_version": "3.11.8",
+    "git_commit": "82bc0a7b8de3fd3e51ef30d279e60fa6054ed4f2",
+    "git_dirty": true,
+    "run_id": "eval-e9a77babe751494fa9992680c899b6a8"
+  },
+  "cases": [
+    {
+      "index": 0,
+      "input": [
+        "Summarize this article about AI safety."
+      ],
+      "formatted": "('Summarize this article about AI safety.',)",
+      "cluster": 0
+    },
+    {
+      "index": 1,
+      "input": [
+        "What is the sentiment of 'I love this product'?"
+      ],
+      "formatted": "(\"What is the sentiment of 'I love this product'?\",)",
+      "cluster": 1
+    },
+    {
+      "index": 2,
+      "input": [
+        "Explain quantum computing in simple terms."
+      ],
+      "formatted": "('Explain quantum computing in simple terms.',)",
+      "cluster": 2
+    },
+    {
+      "index": 3,
+      "input": [
+        "Write a poem about coding."
+      ],
+      "formatted": "('Write a poem about coding.',)",
+      "cluster": 3
+    },
+    {
+      "index": 4,
+      "input": [
+        "Translate 'Hello world' to French."
+      ],
+      "formatted": "(\"Translate 'Hello world' to French.\",)",
+      "cluster": 4
+    },
+    {
+      "index": 5,
+      "input": [
+        "Summarize this article about AI safety."
+      ],
+      "formatted": "('Summarize this article about AI safety.',)",
+      "cluster": 5
+    },
+    {
+      "index": 6,
+      "input": [
+        "What is the sentiment of 'I love this product'?"
+      ],
+      "formatted": "(\"What is the sentiment of 'I love this product'?\",)",
+      "cluster": 6
+    },
+    {
+      "index": 7,
+      "input": [
+        "Explain quantum computing in simple terms."
+      ],
+      "formatted": "('Explain quantum computing in simple terms.',)",
+      "cluster": 7
+    },
+    {
+      "index": 8,
+      "input": [
+        "Write a poem about coding."
+      ],
+      "formatted": "('Write a poem about coding.',)",
+      "cluster": 8
+    },
+    {
+      "index": 9,
+      "input": [
+        "Translate 'Hello world' to French."
+      ],
+      "formatted": "(\"Translate 'Hello world' to French.\",)",
+      "cluster": 9
+    },
+    {
+      "index": 10,
+      "input": [
+        "Summarize this article about AI safety."
+      ],
+      "formatted": "('Summarize this article about AI safety.',)",
+      "cluster": 10
+    },
+    {
+      "index": 11,
+      "input": [
+        "What is the sentiment of 'I love this product'?"
+      ],
+      "formatted": "(\"What is the sentiment of 'I love this product'?\",)",
+      "cluster": 11
+    },
+    {
+      "index": 12,
+      "input": [
+        "Explain quantum computing in simple terms."
+      ],
+      "formatted": "('Explain quantum computing in simple terms.',)",
+      "cluster": 12
+    },
+    {
+      "index": 13,
+      "input": [
+        "Write a poem about coding."
+      ],
+      "formatted": "('Write a poem about coding.',)",
+      "cluster": 13
+    },
+    {
+      "index": 14,
+      "input": [
+        "Translate 'Hello world' to French."
+      ],
+      "formatted": "(\"Translate 'Hello world' to French.\",)",
+      "cluster": 14
+    },
+    {
+      "index": 15,
+      "input": [
+        "Summarize this article about AI safety."
+      ],
+      "formatted": "('Summarize this article about AI safety.',)",
+      "cluster": 15
+    },
+    {
+      "index": 16,
+      "input": [
+        "What is the sentiment of 'I love this product'?"
+      ],
+      "formatted": "(\"What is the sentiment of 'I love this product'?\",)",
+      "cluster": 16
+    },
+    {
+      "index": 17,
+      "input": [
+        "Explain quantum computing in simple terms."
+      ],
+      "formatted": "('Explain quantum computing in simple terms.',)",
+      "cluster": 17
+    },
+    {
+      "index": 18,
+      "input": [
+        "Write a poem about coding."
+      ],
+      "formatted": "('Write a poem about coding.',)",
+      "cluster": 18
+    },
+    {
+      "index": 19,
+      "input": [
+        "Translate 'Hello world' to French."
+      ],
+      "formatted": "(\"Translate 'Hello world' to French.\",)",
+      "cluster": 19
+    }
+  ],
+  "decision": {
+    "adopt": true,
+    "reason": "meets_gate"
+  },
+  "replay": {
+    "seed": 42,
+    "cases": 20,
+    "explicit_inputs": false,
+    "baseline_path": "llm_demo_project/baseline_system_prompt.txt",
+    "candidate_path": "llm_demo_project/candidate_system_prompt.txt",
+    "task": "llm_demo"
+  },
+  "statistics": {
+    "power_estimate": 0.7228115956892016,
+    "power_target": 0.8,
+    "recommended_n": null,
+    "min_delta": 0.0,
+    "alpha": 0.05,
+    "paired": {
+      "total": 20,
+      "both_pass": 16,
+      "both_fail": 0,
+      "baseline_only": 0,
+      "candidate_only": 4,
+      "discordant": 4,
+      "delta": 0.2,
+      "mcnemar_chi2": 2.25,
+      "mcnemar_p": 0.13361440253771617,
+      "method": "mcnemar_cc"
+    },
+    "relation_categories": {
+      "uncategorized": {
+        "relations": 1,
+        "baseline_total": 16,
+        "baseline_failures": 0,
+        "candidate_total": 20,
+        "candidate_failures": 0,
+        "baseline_pass_rate": 1.0,
+        "candidate_pass_rate": 1.0
+      }
+    }
+  },
+  "relation_coverage": {
+    "relations": [
+      {
+        "name": "paraphrase_invariance",
+        "category": "uncategorized",
+        "description": "Paraphrased input should yield consistent output structure",
+        "baseline": {
+          "total": 16,
+          "failures": 0,
+          "pass_rate": 1.0
+        },
+        "candidate": {
+          "total": 20,
+          "failures": 0,
+          "pass_rate": 1.0
+        },
+        "p_value": 1.0,
+        "impact_score": 0.0,
+        "coverage": 1.0
+      }
+    ],
+    "categories": {
+      "uncategorized": {
+        "relations": 1,
+        "baseline_total": 16,
+        "baseline_failures": 0,
+        "candidate_total": 20,
+        "candidate_failures": 0,
+        "baseline_pass_rate": 1.0,
+        "candidate_pass_rate": 1.0
+      }
+    }
+  },
+  "provenance": {
+    "library_version": "3.1.0",
+    "git_sha": "82bc0a7b8de3fd3e51ef30d279e60fa6054ed4f2",
+    "git_dirty": true,
+    "hostname": "Spencers-Mac-Studio.local",
+    "python_version": "3.11.8",
+    "executable": "/opt/anaconda3/bin/python",
+    "platform": "macOS-15.6-arm64-arm-64bit",
+    "environment": {
+      "python_version": "3.11.8",
+      "implementation": "CPython",
+      "platform": "macOS-15.6-arm64-arm-64bit",
+      "executable": "/opt/anaconda3/bin/python"
+    },
+    "mr_ids": [
+      "paraphrase_invariance"
+    ],
+    "spec_fingerprint": {
+      "gen_inputs": "56c6cc3abee84daa26a3e9d00ca2851086254ac4471eea7d72784080c65856dd",
+      "properties": [
+        {
+          "description": "Judge: Max Length 200",
+          "mode": "hard",
+          "hash": "d5b2e8ab54c826dc46de8e5179e3b2d26f483ad0af7ba1af1ff7e9caeebcae84"
+        },
+        {
+          "description": "Judge: No PII",
+          "mode": "hard",
+          "hash": "d5b2e8ab54c826dc46de8e5179e3b2d26f483ad0af7ba1af1ff7e9caeebcae84"
+        }
+      ],
+      "relations": [
+        {
+          "name": "paraphrase_invariance",
+          "expect": "equal",
+          "hash": "0d29cd94da80348ede966c9182512b6810ff32e0ec0209a4987f9c1279ded652"
+        }
+      ],
+      "equivalence": "62782522c4dc8e28f215cb5064d62c39bd8b276cb03a410abd972b2a8446d02b",
+      "formatters": {
+        "fmt_in": "77e3abe5d4bcb5afd4e757a7fdd253005093508916b2ae9d0480cabc33c4d8e3",
+        "fmt_out": "54a8ee4ccca20d354ff2632621a5c3239e8593427f20bcd85a2c003d7adaa601"
+      }
+    },
+    "sandbox": {
+      "executor": "mock_executor:MockLLMExecutor",
+      "baseline_executor": "mock_executor:MockLLMExecutor",
+      "candidate_executor": "mock_executor:MockLLMExecutor",
+      "timeout_s": 2.0,
+      "mem_mb": 512,
+      "call_spec": {
+        "baseline": {
+          "file_path": "llm_demo_project/baseline_system_prompt.txt",
+          "func_name": "solve",
+          "timeout_s": 2.0,
+          "mem_mb": 512,
+          "executor": "mock_executor:MockLLMExecutor",
+          "executor_config": {
+            "model": "mock-gpt-4",
+            "latency_ms": 50
+          }
+        },
+        "candidate": {
+          "file_path": "llm_demo_project/candidate_system_prompt.txt",
+          "func_name": "solve",
+          "timeout_s": 2.0,
+          "mem_mb": 512,
+          "executor": "mock_executor:MockLLMExecutor",
+          "executor_config": {
+            "model": "mock-gpt-4",
+            "latency_ms": 50
+          }
+        }
+      },
+      "call_spec_fingerprint": {
+        "baseline": "c6ba00b8398711f416557a57d4fb222996d5a0340dc5b48fc78200220ebceaa8",
+        "candidate": "ba93746adabef40b8605a72a7c1459a239ae305ddea9c6912eb19efa0bf5a88b"
+      },
+      "executor_config": {
+        "model": "mock-gpt-4",
+        "latency_ms": 50
+      },
+      "executor_config_fingerprint": "c1501ba82e386365941a7668addf20764cb070399276fdbc8219b19b58700000",
+      "baseline_executor_config": {
+        "model": "mock-gpt-4",
+        "latency_ms": 50
+      },
+      "baseline_executor_config_fingerprint": "c1501ba82e386365941a7668addf20764cb070399276fdbc8219b19b58700000",
+      "candidate_executor_config": {
+        "model": "mock-gpt-4",
+        "latency_ms": 50
+      },
+      "candidate_executor_config_fingerprint": "c1501ba82e386365941a7668addf20764cb070399276fdbc8219b19b58700000"
+    }
+  },
+  "monitors": {
+    "LatencyMonitor": {
+      "id": "LatencyMonitor",
+      "type": "latency",
+      "percentile": 0.95,
+      "summary": {
+        "baseline": {
+          "count": 20,
+          "mean_ms": 100.0,
+          "p95_ms": 100.0
+        },
+        "candidate": {
+          "count": 20,
+          "mean_ms": 100.0,
+          "p95_ms": 100.0
+        }
+      },
+      "alerts": []
+    },
+    "LLMCostMonitor": {
+      "id": "LLMCostMonitor",
+      "type": "llm_cost",
+      "summary": {
+        "baseline": {
+          "tokens_prompt": {
+            "count": 20,
+            "total": 264.0,
+            "mean": 13.2
+          },
+          "tokens_completion": {
+            "count": 20,
+            "total": 284.0,
+            "mean": 14.2
+          },
+          "tokens_total": {
+            "count": 20,
+            "total": 548.0,
+            "mean": 27.4
+          },
+          "cost_usd": {
+            "count": 20,
+            "total": 0.011159999999999995,
+            "mean": 0.0005579999999999997
+          }
+        },
+        "candidate": {
+          "tokens_prompt": {
+            "count": 20,
+            "total": 264.0,
+            "mean": 13.2
+          },
+          "tokens_completion": {
+            "count": 20,
+            "total": 172.0,
+            "mean": 8.6
+          },
+          "tokens_total": {
+            "count": 20,
+            "total": 436.0,
+            "mean": 21.8
+          },
+          "cost_usd": {
+            "count": 20,
+            "total": 0.007800000000000001,
+            "mean": 0.00039000000000000005
+          }
+        }
+      },
+      "alerts": []
+    }
+  },
+  "llm_metrics": {
+    "baseline": {
+      "count": 20,
+      "successes": 20,
+      "failures": 0,
+      "total_cost_usd": 0.011159999999999996,
+      "total_tokens": 548,
+      "prompt_tokens": 264,
+      "completion_tokens": 284,
+      "total_latency_ms": 2000.0,
+      "avg_latency_ms": 100.0,
+      "avg_cost_usd": 0.0005579999999999998,
+      "avg_tokens": 27.4,
+      "retry_total": 0,
+      "avg_retries": 0.0,
+      "max_retries": 0,
+      "success_rate": 1.0
+    },
+    "candidate": {
+      "count": 20,
+      "successes": 20,
+      "failures": 0,
+      "total_cost_usd": 0.007800000000000001,
+      "total_tokens": 436,
+      "prompt_tokens": 264,
+      "completion_tokens": 172,
+      "total_latency_ms": 2000.0,
+      "avg_latency_ms": 100.0,
+      "avg_cost_usd": 0.00039000000000000005,
+      "avg_tokens": 21.8,
+      "retry_total": 0,
+      "avg_retries": 0.0,
+      "max_retries": 0,
+      "success_rate": 1.0
+    },
+    "cost_delta_usd": -0.003359999999999995,
+    "cost_ratio": 0.6989247311827961,
+    "tokens_delta": -112,
+    "token_ratio": 0.7956204379562044,
+    "retry_delta": 0,
+    "retry_ratio": null
+  }
+}

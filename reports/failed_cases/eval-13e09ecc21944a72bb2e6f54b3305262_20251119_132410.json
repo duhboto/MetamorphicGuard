@@ -1,0 +1,347 @@
+{
+  "task": "llm_demo",
+  "baseline": {
+    "passes": 0,
+    "total": 20,
+    "pass_rate": 0.0,
+    "prop_violations": [
+      {
+        "test_case": 0,
+        "property": "Judge: Max Length 200",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. "
+      },
+      {
+        "test_case": 5,
+        "property": "Judge: Max Length 200",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. "
+      },
+      {
+        "test_case": 10,
+        "property": "Judge: Max Length 200",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. "
+      },
+      {
+        "test_case": 15,
+        "property": "Judge: Max Length 200",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. "
+      }
+    ],
+    "mr_violations": [
+      {
+        "test_case": 1,
+        "relation": "paraphrase_invariance",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "Negative",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 2,
+        "relation": "paraphrase_invariance",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "Mock response to: Explain quantum computing in simple terms.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 3,
+        "relation": "paraphrase_invariance",
+        "input": "('Write a poem about coding.',)",
+        "output": "Mock response to: Write a poem about coding.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 4,
+        "relation": "paraphrase_invariance",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "Mock response to: Translate 'Hello world' to French.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 6,
+        "relation": "paraphrase_invariance",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "Negative",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 7,
+        "relation": "paraphrase_invariance",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "Mock response to: Explain quantum computing in simple terms.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 8,
+        "relation": "paraphrase_invariance",
+        "input": "('Write a poem about coding.',)",
+        "output": "Mock response to: Write a poem about coding.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 9,
+        "relation": "paraphrase_invariance",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "Mock response to: Translate 'Hello world' to French.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 11,
+        "relation": "paraphrase_invariance",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "Negative",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 12,
+        "relation": "paraphrase_invariance",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "Mock response to: Explain quantum computing in simple terms.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 13,
+        "relation": "paraphrase_invariance",
+        "input": "('Write a poem about coding.',)",
+        "output": "Mock response to: Write a poem about coding.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 14,
+        "relation": "paraphrase_invariance",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "Mock response to: Translate 'Hello world' to French.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 16,
+        "relation": "paraphrase_invariance",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "Negative",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 17,
+        "relation": "paraphrase_invariance",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "Mock response to: Explain quantum computing in simple terms.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 18,
+        "relation": "paraphrase_invariance",
+        "input": "('Write a poem about coding.',)",
+        "output": "Mock response to: Write a poem about coding.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 19,
+        "relation": "paraphrase_invariance",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "Mock response to: Translate 'Hello world' to French.",
+        "error": "'ParaphraseMutant' object is not callable"
+      }
+    ]
+  },
+  "candidate": {
+    "passes": 0,
+    "total": 20,
+    "pass_rate": 0.0,
+    "prop_violations": [],
+    "mr_violations": [
+      {
+        "test_case": 0,
+        "relation": "paraphrase_invariance",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a concise and accurate summary of the provided text. It captures the key points effectively.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 1,
+        "relation": "paraphrase_invariance",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "Negative",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 2,
+        "relation": "paraphrase_invariance",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "Mock response to: Explain quantum computing in simple terms.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 3,
+        "relation": "paraphrase_invariance",
+        "input": "('Write a poem about coding.',)",
+        "output": "Mock response to: Write a poem about coding.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 4,
+        "relation": "paraphrase_invariance",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "Mock response to: Translate 'Hello world' to French.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 5,
+        "relation": "paraphrase_invariance",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a concise and accurate summary of the provided text. It captures the key points effectively.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 6,
+        "relation": "paraphrase_invariance",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "Negative",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 7,
+        "relation": "paraphrase_invariance",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "Mock response to: Explain quantum computing in simple terms.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 8,
+        "relation": "paraphrase_invariance",
+        "input": "('Write a poem about coding.',)",
+        "output": "Mock response to: Write a poem about coding.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 9,
+        "relation": "paraphrase_invariance",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "Mock response to: Translate 'Hello world' to French.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 10,
+        "relation": "paraphrase_invariance",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a concise and accurate summary of the provided text. It captures the key points effectively.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 11,
+        "relation": "paraphrase_invariance",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "Negative",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 12,
+        "relation": "paraphrase_invariance",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "Mock response to: Explain quantum computing in simple terms.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 13,
+        "relation": "paraphrase_invariance",
+        "input": "('Write a poem about coding.',)",
+        "output": "Mock response to: Write a poem about coding.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 14,
+        "relation": "paraphrase_invariance",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "Mock response to: Translate 'Hello world' to French.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 15,
+        "relation": "paraphrase_invariance",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a concise and accurate summary of the provided text. It captures the key points effectively.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 16,
+        "relation": "paraphrase_invariance",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "Negative",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 17,
+        "relation": "paraphrase_invariance",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "Mock response to: Explain quantum computing in simple terms.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 18,
+        "relation": "paraphrase_invariance",
+        "input": "('Write a poem about coding.',)",
+        "output": "Mock response to: Write a poem about coding.",
+        "error": "'ParaphraseMutant' object is not callable"
+      },
+      {
+        "test_case": 19,
+        "relation": "paraphrase_invariance",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "Mock response to: Translate 'Hello world' to French.",
+        "error": "'ParaphraseMutant' object is not callable"
+      }
+    ]
+  },
+  "config": {
+    "timeout_s": 2.0,
+    "mem_mb": 512,
+    "alpha": 0.05,
+    "effective_alpha": 0.05,
+    "sequential_method": "none",
+    "max_looks": 1,
+    "look_number": 1,
+    "min_delta": 0.0,
+    "improve_delta": 0.0,
+    "min_pass_rate": 0.8,
+    "violation_cap": 25,
+    "parallel": 12,
+    "bootstrap_samples": 1000,
+    "ci_method": "bootstrap",
+    "rr_ci_method": "log",
+    "bayesian_hierarchical": false,
+    "bayesian_posterior_predictive": false,
+    "bayesian_samples": 5000,
+    "executor": "mock_executor:MockLLMExecutor",
+    "executor_config": {
+      "model": "mock-gpt-4",
+      "latency_ms": 50
+    },
+    "baseline_executor": "mock_executor:MockLLMExecutor",
+    "candidate_executor": "mock_executor:MockLLMExecutor",
+    "baseline_executor_config": {
+      "model": "mock-gpt-4",
+      "latency_ms": 50
+    },
+    "candidate_executor_config": {
+      "model": "mock-gpt-4",
+      "latency_ms": 50
+    },
+    "dispatcher": "local",
+    "queue_config": null,
+    "relation_correction": null,
+    "monitors": [
+      "LatencyMonitor",
+      "LLMCostMonitor"
+    ]
+  },
+  "job_metadata": {
+    "hostname": "Spencers-Mac-Studio.local",
+    "executable": "/opt/anaconda3/bin/python",
+    "python_version": "3.11.8",
+    "git_commit": "e8446210a09ea2d5f68bd3dde423c0303dd441c8",
+    "git_dirty": true,
+    "run_id": "eval-13e09ecc21944a72bb2e6f54b3305262"
+  },
+  "run_id": "eval-13e09ecc21944a72bb2e6f54b3305262"
+}

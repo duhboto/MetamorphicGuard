@@ -1,0 +1,56 @@
+{
+  "task": "top_k",
+  "baseline": {
+    "passes": 20,
+    "total": 20,
+    "pass_rate": 1.0,
+    "prop_violations": [],
+    "mr_violations": []
+  },
+  "candidate": {
+    "passes": 20,
+    "total": 20,
+    "pass_rate": 1.0,
+    "prop_violations": [],
+    "mr_violations": []
+  },
+  "config": {
+    "timeout_s": 2.0,
+    "mem_mb": 512,
+    "alpha": 0.05,
+    "effective_alpha": 0.05,
+    "sequential_method": "none",
+    "max_looks": 1,
+    "look_number": 1,
+    "min_delta": 0.02,
+    "improve_delta": 0.02,
+    "min_pass_rate": 0.8,
+    "violation_cap": 25,
+    "parallel": 1,
+    "bootstrap_samples": 1000,
+    "ci_method": "bootstrap",
+    "rr_ci_method": "log",
+    "executor": null,
+    "executor_config": null,
+    "baseline_executor": null,
+    "candidate_executor": null,
+    "baseline_executor_config": null,
+    "candidate_executor_config": null,
+    "dispatcher": "queue",
+    "queue_config": {
+      "backend": "memory",
+      "adaptive_compress": true,
+      "compress_threshold_bytes": 100
+    },
+    "relation_correction": null
+  },
+  "job_metadata": {
+    "hostname": "Spencers-Mac-Studio.local",
+    "executable": "/opt/anaconda3/bin/python",
+    "python_version": "3.11.8",
+    "git_commit": "05c82b26db84bfe89fb831ef9a58b96f83fb6f70",
+    "git_dirty": true,
+    "run_id": "eval-fd329c28023f4d8199b5d0de6185c413"
+  },
+  "run_id": "eval-fd329c28023f4d8199b5d0de6185c413"
+}

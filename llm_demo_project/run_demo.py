@@ -31,6 +31,21 @@ def main():
     baseline_path.write_text("You are a helpful assistant. Be verbose.", encoding="utf-8")
     candidate_path.write_text("You are a helpful assistant. Be concise.", encoding="utf-8")
 
+    # Determine executor based on API keys
+    executor = "mock_executor:MockLLMExecutor"
+    executor_config = {"model": "mock-gpt-4", "latency_ms": 50}
+    
+    if os.environ.get("OPENAI_API_KEY"):
+        print("🔑 Found OPENAI_API_KEY, using real OpenAI executor...")
+        executor = "openai"
+        executor_config = {"model": "gpt-3.5-turbo", "max_tokens": 250}
+    elif os.environ.get("ANTHROPIC_API_KEY"):
+        print("🔑 Found ANTHROPIC_API_KEY, using real Anthropic executor...")
+        executor = "anthropic"
+        executor_config = {"model": "claude-3-haiku-20240307", "max_tokens": 250}
+    else:
+        print("ℹ️  No API keys found, using Mock executor (simulated)...")
+
     try:
         # Resolve monitors
         monitors = resolve_monitors(["latency", "llm_cost"])
@@ -41,8 +56,8 @@ def main():
             candidate_path=str(candidate_path),
             n=20,
             seed=42,
-            executor="mock_executor:MockLLMExecutor",
-            executor_config={"model": "mock-gpt-4", "latency_ms": 50},
+            executor=executor,
+            executor_config=executor_config,
             min_delta=0.0, # We just want to see it run
             monitors=monitors
         )

@@ -1,0 +1,334 @@
+{
+  "task": "llm_demo",
+  "baseline": {
+    "passes": 0,
+    "total": 20,
+    "pass_rate": 0.0,
+    "prop_violations": [
+      {
+        "test_case": 0,
+        "property": "Executor call succeeded",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. "
+      },
+      {
+        "test_case": 0,
+        "property": "Judge: Max Length 200",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. "
+      },
+      {
+        "test_case": 1,
+        "property": "Executor call succeeded",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "Negative"
+      },
+      {
+        "test_case": 2,
+        "property": "Executor call succeeded",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "Mock response to: Explain quantum computing in simple terms."
+      },
+      {
+        "test_case": 3,
+        "property": "Executor call succeeded",
+        "input": "('Write a poem about coding.',)",
+        "output": "Mock response to: Write a poem about coding."
+      },
+      {
+        "test_case": 4,
+        "property": "Executor call succeeded",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "Mock response to: Translate 'Hello world' to French."
+      },
+      {
+        "test_case": 5,
+        "property": "Executor call succeeded",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. "
+      },
+      {
+        "test_case": 5,
+        "property": "Judge: Max Length 200",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. "
+      },
+      {
+        "test_case": 6,
+        "property": "Executor call succeeded",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "Negative"
+      },
+      {
+        "test_case": 7,
+        "property": "Executor call succeeded",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "Mock response to: Explain quantum computing in simple terms."
+      },
+      {
+        "test_case": 8,
+        "property": "Executor call succeeded",
+        "input": "('Write a poem about coding.',)",
+        "output": "Mock response to: Write a poem about coding."
+      },
+      {
+        "test_case": 9,
+        "property": "Executor call succeeded",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "Mock response to: Translate 'Hello world' to French."
+      },
+      {
+        "test_case": 10,
+        "property": "Executor call succeeded",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. "
+      },
+      {
+        "test_case": 10,
+        "property": "Judge: Max Length 200",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. "
+      },
+      {
+        "test_case": 11,
+        "property": "Executor call succeeded",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "Negative"
+      },
+      {
+        "test_case": 12,
+        "property": "Executor call succeeded",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "Mock response to: Explain quantum computing in simple terms."
+      },
+      {
+        "test_case": 13,
+        "property": "Executor call succeeded",
+        "input": "('Write a poem about coding.',)",
+        "output": "Mock response to: Write a poem about coding."
+      },
+      {
+        "test_case": 14,
+        "property": "Executor call succeeded",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "Mock response to: Translate 'Hello world' to French."
+      },
+      {
+        "test_case": 15,
+        "property": "Executor call succeeded",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. "
+      },
+      {
+        "test_case": 15,
+        "property": "Judge: Max Length 200",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. This is a summary. It is kinda long and maybe misses the point a bit. "
+      },
+      {
+        "test_case": 16,
+        "property": "Executor call succeeded",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "Negative"
+      },
+      {
+        "test_case": 17,
+        "property": "Executor call succeeded",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "Mock response to: Explain quantum computing in simple terms."
+      },
+      {
+        "test_case": 18,
+        "property": "Executor call succeeded",
+        "input": "('Write a poem about coding.',)",
+        "output": "Mock response to: Write a poem about coding."
+      },
+      {
+        "test_case": 19,
+        "property": "Executor call succeeded",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "Mock response to: Translate 'Hello world' to French."
+      }
+    ],
+    "mr_violations": []
+  },
+  "candidate": {
+    "passes": 0,
+    "total": 20,
+    "pass_rate": 0.0,
+    "prop_violations": [
+      {
+        "test_case": 0,
+        "property": "Executor call succeeded",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a concise and accurate summary of the provided text. It captures the key points effectively."
+      },
+      {
+        "test_case": 1,
+        "property": "Executor call succeeded",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "Negative"
+      },
+      {
+        "test_case": 2,
+        "property": "Executor call succeeded",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "Mock response to: Explain quantum computing in simple terms."
+      },
+      {
+        "test_case": 3,
+        "property": "Executor call succeeded",
+        "input": "('Write a poem about coding.',)",
+        "output": "Mock response to: Write a poem about coding."
+      },
+      {
+        "test_case": 4,
+        "property": "Executor call succeeded",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "Mock response to: Translate 'Hello world' to French."
+      },
+      {
+        "test_case": 5,
+        "property": "Executor call succeeded",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a concise and accurate summary of the provided text. It captures the key points effectively."
+      },
+      {
+        "test_case": 6,
+        "property": "Executor call succeeded",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "Negative"
+      },
+      {
+        "test_case": 7,
+        "property": "Executor call succeeded",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "Mock response to: Explain quantum computing in simple terms."
+      },
+      {
+        "test_case": 8,
+        "property": "Executor call succeeded",
+        "input": "('Write a poem about coding.',)",
+        "output": "Mock response to: Write a poem about coding."
+      },
+      {
+        "test_case": 9,
+        "property": "Executor call succeeded",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "Mock response to: Translate 'Hello world' to French."
+      },
+      {
+        "test_case": 10,
+        "property": "Executor call succeeded",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a concise and accurate summary of the provided text. It captures the key points effectively."
+      },
+      {
+        "test_case": 11,
+        "property": "Executor call succeeded",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "Negative"
+      },
+      {
+        "test_case": 12,
+        "property": "Executor call succeeded",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "Mock response to: Explain quantum computing in simple terms."
+      },
+      {
+        "test_case": 13,
+        "property": "Executor call succeeded",
+        "input": "('Write a poem about coding.',)",
+        "output": "Mock response to: Write a poem about coding."
+      },
+      {
+        "test_case": 14,
+        "property": "Executor call succeeded",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "Mock response to: Translate 'Hello world' to French."
+      },
+      {
+        "test_case": 15,
+        "property": "Executor call succeeded",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "This is a concise and accurate summary of the provided text. It captures the key points effectively."
+      },
+      {
+        "test_case": 16,
+        "property": "Executor call succeeded",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "Negative"
+      },
+      {
+        "test_case": 17,
+        "property": "Executor call succeeded",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "Mock response to: Explain quantum computing in simple terms."
+      },
+      {
+        "test_case": 18,
+        "property": "Executor call succeeded",
+        "input": "('Write a poem about coding.',)",
+        "output": "Mock response to: Write a poem about coding."
+      },
+      {
+        "test_case": 19,
+        "property": "Executor call succeeded",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "Mock response to: Translate 'Hello world' to French."
+      }
+    ],
+    "mr_violations": []
+  },
+  "config": {
+    "timeout_s": 2.0,
+    "mem_mb": 512,
+    "alpha": 0.05,
+    "effective_alpha": 0.05,
+    "sequential_method": "none",
+    "max_looks": 1,
+    "look_number": 1,
+    "min_delta": 0.0,
+    "improve_delta": 0.0,
+    "min_pass_rate": 0.8,
+    "violation_cap": 25,
+    "parallel": 12,
+    "bootstrap_samples": 1000,
+    "ci_method": "bootstrap",
+    "rr_ci_method": "log",
+    "bayesian_hierarchical": false,
+    "bayesian_posterior_predictive": false,
+    "bayesian_samples": 5000,
+    "executor": "mock_executor:MockLLMExecutor",
+    "executor_config": {
+      "model": "mock-gpt-4",
+      "latency_ms": 50
+    },
+    "baseline_executor": "mock_executor:MockLLMExecutor",
+    "candidate_executor": "mock_executor:MockLLMExecutor",
+    "baseline_executor_config": {
+      "model": "mock-gpt-4",
+      "latency_ms": 50
+    },
+    "candidate_executor_config": {
+      "model": "mock-gpt-4",
+      "latency_ms": 50
+    },
+    "dispatcher": "local",
+    "queue_config": null,
+    "relation_correction": null,
+    "monitors": [
+      "LatencyMonitor",
+      "LLMCostMonitor"
+    ]
+  },
+  "job_metadata": {
+    "hostname": "Spencers-Mac-Studio.local",
+    "executable": "/opt/anaconda3/bin/python",
+    "python_version": "3.11.8",
+    "git_commit": "e8446210a09ea2d5f68bd3dde423c0303dd441c8",
+    "git_dirty": true,
+    "run_id": "eval-c22d2f0d0cf24a9c894d2f4568e07dcd"
+  },
+  "run_id": "eval-c22d2f0d0cf24a9c894d2f4568e07dcd"
+}

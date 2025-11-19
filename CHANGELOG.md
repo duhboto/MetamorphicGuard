@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.5.0] - 2025-11-19
+
+### Added
+- **Interactive Demo Launcher** (`metamorphic-guard demo`): New CLI command to interactively browse and launch demo projects and tutorials.
+- **LLM Guard Demo** (`llm_demo_project/`): New self-contained tutorial for evaluating AI models (LLM-as-a-Judge) with a built-in mock executor (free, no API keys required) and support for real OpenAI/Anthropic keys.
+- **Comprehensive Demo Runner**: Enhanced `comprehensive_demo_project` scripts to run out-of-the-box without requiring package installation (falls back to source).
+
+### Changed
+- **CLI**: Added `demo` command to the main CLI group.
+- **Docs**: Updated README to feature the new LLM Guard project and improved demo instructions.
+
+### Notes
+- No breaking API changes.
+- Significant improvements to onboarding and demonstration capabilities.
+
 ## [3.3.5] - 2025-01-16
 
 ### Added

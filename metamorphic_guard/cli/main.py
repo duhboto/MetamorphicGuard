@@ -27,7 +27,7 @@ from .policy import policy_group
 from .audit import audit_group
 from .mr import mr_group
 from .debug import debug_group
-
+from .demo import demo_command
 
 class DefaultCommandGroup(click.Group):
     """Group that falls back to a default command when none is supplied."""
@@ -72,4 +72,5 @@ main.add_command(mr_group, "mr")
 main.add_command(audit_group, "audit")
 main.add_command(debug_group, "debug")
 main.add_command(risk_group, "risk")
+main.add_command(demo_command, "demo")
 

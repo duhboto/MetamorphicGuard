@@ -1,0 +1,64 @@
+{
+  "task": "api_test_task",
+  "baseline": {
+    "passes": 5,
+    "total": 5,
+    "pass_rate": 1.0,
+    "prop_violations": [],
+    "mr_violations": []
+  },
+  "candidate": {
+    "passes": 5,
+    "total": 5,
+    "pass_rate": 1.0,
+    "prop_violations": [],
+    "mr_violations": []
+  },
+  "config": {
+    "timeout_s": 2.0,
+    "mem_mb": 512,
+    "alpha": 0.05,
+    "effective_alpha": 0.05,
+    "sequential_method": "none",
+    "max_looks": 1,
+    "look_number": 1,
+    "min_delta": 0.05,
+    "improve_delta": 0.05,
+    "min_pass_rate": 0.8,
+    "violation_cap": 25,
+    "parallel": 1,
+    "bootstrap_samples": 1000,
+    "ci_method": "bootstrap",
+    "rr_ci_method": "log",
+    "bayesian_hierarchical": false,
+    "bayesian_posterior_predictive": false,
+    "bayesian_samples": 5000,
+    "executor": null,
+    "executor_config": null,
+    "baseline_executor": null,
+    "candidate_executor": null,
+    "baseline_executor_config": null,
+    "candidate_executor_config": null,
+    "dispatcher": "local",
+    "queue_config": null,
+    "relation_correction": null,
+    "policy_rule": {
+      "type": "preset",
+      "name": "superiority",
+      "parameters": {
+        "margin": 0.05
+      },
+      "label": "superiority(margin=0.05)"
+    },
+    "policy_version": "superiority"
+  },
+  "job_metadata": {
+    "hostname": "Spencers-Mac-Studio.local",
+    "executable": "/opt/anaconda3/bin/python",
+    "python_version": "3.11.8",
+    "git_commit": "38d8b457ff92cd57b3ebdf6c2b234165d6b2ed10",
+    "git_dirty": true,
+    "run_id": "eval-7cb7bf98efb94ab3bc895877604b7131"
+  },
+  "run_id": "eval-7cb7bf98efb94ab3bc895877604b7131"
+}

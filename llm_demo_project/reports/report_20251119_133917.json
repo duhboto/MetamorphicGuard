@@ -1,0 +1,843 @@
+{
+  "task": "llm_demo",
+  "n": 20,
+  "seed": 42,
+  "config": {
+    "timeout_s": 2.0,
+    "mem_mb": 512,
+    "alpha": 0.05,
+    "effective_alpha": 0.05,
+    "sequential_method": "none",
+    "max_looks": 1,
+    "look_number": 1,
+    "min_delta": 0.0,
+    "improve_delta": 0.0,
+    "min_pass_rate": 0.8,
+    "violation_cap": 25,
+    "parallel": 12,
+    "bootstrap_samples": 1000,
+    "ci_method": "bootstrap",
+    "rr_ci_method": "log",
+    "bayesian_hierarchical": false,
+    "bayesian_posterior_predictive": false,
+    "bayesian_samples": 5000,
+    "executor": "openai",
+    "executor_config": {
+      "model": "gpt-3.5-turbo",
+      "max_tokens": 250
+    },
+    "baseline_executor": "openai",
+    "candidate_executor": "openai",
+    "baseline_executor_config": {
+      "model": "gpt-3.5-turbo",
+      "max_tokens": 250
+    },
+    "candidate_executor_config": {
+      "model": "gpt-3.5-turbo",
+      "max_tokens": 250
+    },
+    "dispatcher": "local",
+    "queue_config": null,
+    "relation_correction": null,
+    "monitors": [
+      "LatencyMonitor",
+      "LLMCostMonitor"
+    ]
+  },
+  "hashes": {
+    "baseline": "53c3e42478c04b343c83c0f5de667e77d7f07db3a921c9575efd0be2700d945e",
+    "candidate": "dca4a86ac4cf613329fbabc3b813bf87eb75b121b0baa948aae9092d5b0052e9"
+  },
+  "spec_fingerprint": {
+    "gen_inputs": "56c6cc3abee84daa26a3e9d00ca2851086254ac4471eea7d72784080c65856dd",
+    "properties": [
+      {
+        "description": "Judge: Max Length 200",
+        "mode": "hard",
+        "hash": "d5b2e8ab54c826dc46de8e5179e3b2d26f483ad0af7ba1af1ff7e9caeebcae84"
+      },
+      {
+        "description": "Judge: No PII",
+        "mode": "hard",
+        "hash": "d5b2e8ab54c826dc46de8e5179e3b2d26f483ad0af7ba1af1ff7e9caeebcae84"
+      }
+    ],
+    "relations": [
+      {
+        "name": "paraphrase_invariance",
+        "expect": "equal",
+        "hash": "0d29cd94da80348ede966c9182512b6810ff32e0ec0209a4987f9c1279ded652"
+      }
+    ],
+    "equivalence": "62782522c4dc8e28f215cb5064d62c39bd8b276cb03a410abd972b2a8446d02b",
+    "formatters": {
+      "fmt_in": "77e3abe5d4bcb5afd4e757a7fdd253005093508916b2ae9d0480cabc33c4d8e3",
+      "fmt_out": "54a8ee4ccca20d354ff2632621a5c3239e8593427f20bcd85a2c003d7adaa601"
+    }
+  },
+  "baseline": {
+    "passes": 0,
+    "total": 20,
+    "pass_rate": 0.0,
+    "prop_violations": [
+      {
+        "test_case": 0,
+        "property": "execution",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 1,
+        "property": "execution",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 2,
+        "property": "execution",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 3,
+        "property": "execution",
+        "input": "('Write a poem about coding.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 4,
+        "property": "execution",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 5,
+        "property": "execution",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 6,
+        "property": "execution",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 7,
+        "property": "execution",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 8,
+        "property": "execution",
+        "input": "('Write a poem about coding.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 9,
+        "property": "execution",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 10,
+        "property": "execution",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 11,
+        "property": "execution",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 12,
+        "property": "execution",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 13,
+        "property": "execution",
+        "input": "('Write a poem about coding.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 14,
+        "property": "execution",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 15,
+        "property": "execution",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 16,
+        "property": "execution",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 17,
+        "property": "execution",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 18,
+        "property": "execution",
+        "input": "('Write a poem about coding.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 19,
+        "property": "execution",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      }
+    ],
+    "mr_violations": []
+  },
+  "candidate": {
+    "passes": 0,
+    "total": 20,
+    "pass_rate": 0.0,
+    "prop_violations": [
+      {
+        "test_case": 0,
+        "property": "execution",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 1,
+        "property": "execution",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 2,
+        "property": "execution",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 3,
+        "property": "execution",
+        "input": "('Write a poem about coding.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 4,
+        "property": "execution",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 5,
+        "property": "execution",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 6,
+        "property": "execution",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 7,
+        "property": "execution",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 8,
+        "property": "execution",
+        "input": "('Write a poem about coding.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 9,
+        "property": "execution",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 10,
+        "property": "execution",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 11,
+        "property": "execution",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 12,
+        "property": "execution",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 13,
+        "property": "execution",
+        "input": "('Write a poem about coding.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 14,
+        "property": "execution",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 15,
+        "property": "execution",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 16,
+        "property": "execution",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 17,
+        "property": "execution",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 18,
+        "property": "execution",
+        "input": "('Write a poem about coding.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 19,
+        "property": "execution",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      }
+    ],
+    "mr_violations": []
+  },
+  "delta_pass_rate": 0.0,
+  "delta_ci": [
+    0.0,
+    0.0
+  ],
+  "relative_risk": Infinity,
+  "relative_risk_ci": [
+    Infinity,
+    Infinity
+  ],
+  "environment": {
+    "python_version": "3.11.8",
+    "implementation": "CPython",
+    "platform": "macOS-15.6-arm64-arm-64bit",
+    "executable": "/opt/anaconda3/bin/python"
+  },
+  "job_metadata": {
+    "hostname": "Spencers-Mac-Studio.local",
+    "executable": "/opt/anaconda3/bin/python",
+    "python_version": "3.11.8",
+    "git_commit": "82bc0a7b8de3fd3e51ef30d279e60fa6054ed4f2",
+    "git_dirty": true,
+    "run_id": "eval-f70d1594aa674a91a607e5650f427fc6"
+  },
+  "cases": [
+    {
+      "index": 0,
+      "input": [
+        "Summarize this article about AI safety."
+      ],
+      "formatted": "('Summarize this article about AI safety.',)",
+      "cluster": 0
+    },
+    {
+      "index": 1,
+      "input": [
+        "What is the sentiment of 'I love this product'?"
+      ],
+      "formatted": "(\"What is the sentiment of 'I love this product'?\",)",
+      "cluster": 1
+    },
+    {
+      "index": 2,
+      "input": [
+        "Explain quantum computing in simple terms."
+      ],
+      "formatted": "('Explain quantum computing in simple terms.',)",
+      "cluster": 2
+    },
+    {
+      "index": 3,
+      "input": [
+        "Write a poem about coding."
+      ],
+      "formatted": "('Write a poem about coding.',)",
+      "cluster": 3
+    },
+    {
+      "index": 4,
+      "input": [
+        "Translate 'Hello world' to French."
+      ],
+      "formatted": "(\"Translate 'Hello world' to French.\",)",
+      "cluster": 4
+    },
+    {
+      "index": 5,
+      "input": [
+        "Summarize this article about AI safety."
+      ],
+      "formatted": "('Summarize this article about AI safety.',)",
+      "cluster": 5
+    },
+    {
+      "index": 6,
+      "input": [
+        "What is the sentiment of 'I love this product'?"
+      ],
+      "formatted": "(\"What is the sentiment of 'I love this product'?\",)",
+      "cluster": 6
+    },
+    {
+      "index": 7,
+      "input": [
+        "Explain quantum computing in simple terms."
+      ],
+      "formatted": "('Explain quantum computing in simple terms.',)",
+      "cluster": 7
+    },
+    {
+      "index": 8,
+      "input": [
+        "Write a poem about coding."
+      ],
+      "formatted": "('Write a poem about coding.',)",
+      "cluster": 8
+    },
+    {
+      "index": 9,
+      "input": [
+        "Translate 'Hello world' to French."
+      ],
+      "formatted": "(\"Translate 'Hello world' to French.\",)",
+      "cluster": 9
+    },
+    {
+      "index": 10,
+      "input": [
+        "Summarize this article about AI safety."
+      ],
+      "formatted": "('Summarize this article about AI safety.',)",
+      "cluster": 10
+    },
+    {
+      "index": 11,
+      "input": [
+        "What is the sentiment of 'I love this product'?"
+      ],
+      "formatted": "(\"What is the sentiment of 'I love this product'?\",)",
+      "cluster": 11
+    },
+    {
+      "index": 12,
+      "input": [
+        "Explain quantum computing in simple terms."
+      ],
+      "formatted": "('Explain quantum computing in simple terms.',)",
+      "cluster": 12
+    },
+    {
+      "index": 13,
+      "input": [
+        "Write a poem about coding."
+      ],
+      "formatted": "('Write a poem about coding.',)",
+      "cluster": 13
+    },
+    {
+      "index": 14,
+      "input": [
+        "Translate 'Hello world' to French."
+      ],
+      "formatted": "(\"Translate 'Hello world' to French.\",)",
+      "cluster": 14
+    },
+    {
+      "index": 15,
+      "input": [
+        "Summarize this article about AI safety."
+      ],
+      "formatted": "('Summarize this article about AI safety.',)",
+      "cluster": 15
+    },
+    {
+      "index": 16,
+      "input": [
+        "What is the sentiment of 'I love this product'?"
+      ],
+      "formatted": "(\"What is the sentiment of 'I love this product'?\",)",
+      "cluster": 16
+    },
+    {
+      "index": 17,
+      "input": [
+        "Explain quantum computing in simple terms."
+      ],
+      "formatted": "('Explain quantum computing in simple terms.',)",
+      "cluster": 17
+    },
+    {
+      "index": 18,
+      "input": [
+        "Write a poem about coding."
+      ],
+      "formatted": "('Write a poem about coding.',)",
+      "cluster": 18
+    },
+    {
+      "index": 19,
+      "input": [
+        "Translate 'Hello world' to French."
+      ],
+      "formatted": "(\"Translate 'Hello world' to French.\",)",
+      "cluster": 19
+    }
+  ],
+  "decision": {
+    "adopt": false,
+    "reason": "Property violations: 20 violations found"
+  },
+  "replay": {
+    "seed": 42,
+    "cases": 20,
+    "explicit_inputs": false,
+    "baseline_path": "llm_demo_project/baseline_system_prompt.txt",
+    "candidate_path": "llm_demo_project/candidate_system_prompt.txt",
+    "task": "llm_demo"
+  },
+  "statistics": {
+    "power_estimate": 1.0,
+    "power_target": 0.8,
+    "recommended_n": null,
+    "min_delta": 0.0,
+    "alpha": 0.05,
+    "paired": {
+      "total": 20,
+      "both_pass": 0,
+      "both_fail": 20,
+      "baseline_only": 0,
+      "candidate_only": 0,
+      "discordant": 0,
+      "delta": 0.0,
+      "mcnemar_chi2": 0.0,
+      "mcnemar_p": 1.0,
+      "method": "mcnemar_cc"
+    },
+    "relation_categories": {
+      "uncategorized": {
+        "relations": 1,
+        "baseline_total": 0,
+        "baseline_failures": 0,
+        "candidate_total": 0,
+        "candidate_failures": 0,
+        "baseline_pass_rate": null,
+        "candidate_pass_rate": null
+      }
+    }
+  },
+  "relation_coverage": {
+    "relations": [
+      {
+        "name": "paraphrase_invariance",
+        "category": "uncategorized",
+        "description": "Paraphrased input should yield consistent output structure",
+        "baseline": {
+          "total": 0,
+          "failures": 0,
+          "pass_rate": null
+        },
+        "candidate": {
+          "total": 0,
+          "failures": 0,
+          "pass_rate": null
+        },
+        "p_value": 1.0,
+        "impact_score": null,
+        "coverage": 0.0
+      }
+    ],
+    "categories": {
+      "uncategorized": {
+        "relations": 1,
+        "baseline_total": 0,
+        "baseline_failures": 0,
+        "candidate_total": 0,
+        "candidate_failures": 0,
+        "baseline_pass_rate": null,
+        "candidate_pass_rate": null
+      }
+    }
+  },
+  "provenance": {
+    "library_version": "3.1.0",
+    "git_sha": "82bc0a7b8de3fd3e51ef30d279e60fa6054ed4f2",
+    "git_dirty": true,
+    "hostname": "Spencers-Mac-Studio.local",
+    "python_version": "3.11.8",
+    "executable": "/opt/anaconda3/bin/python",
+    "platform": "macOS-15.6-arm64-arm-64bit",
+    "environment": {
+      "python_version": "3.11.8",
+      "implementation": "CPython",
+      "platform": "macOS-15.6-arm64-arm-64bit",
+      "executable": "/opt/anaconda3/bin/python"
+    },
+    "mr_ids": [
+      "paraphrase_invariance"
+    ],
+    "spec_fingerprint": {
+      "gen_inputs": "56c6cc3abee84daa26a3e9d00ca2851086254ac4471eea7d72784080c65856dd",
+      "properties": [
+        {
+          "description": "Judge: Max Length 200",
+          "mode": "hard",
+          "hash": "d5b2e8ab54c826dc46de8e5179e3b2d26f483ad0af7ba1af1ff7e9caeebcae84"
+        },
+        {
+          "description": "Judge: No PII",
+          "mode": "hard",
+          "hash": "d5b2e8ab54c826dc46de8e5179e3b2d26f483ad0af7ba1af1ff7e9caeebcae84"
+        }
+      ],
+      "relations": [
+        {
+          "name": "paraphrase_invariance",
+          "expect": "equal",
+          "hash": "0d29cd94da80348ede966c9182512b6810ff32e0ec0209a4987f9c1279ded652"
+        }
+      ],
+      "equivalence": "62782522c4dc8e28f215cb5064d62c39bd8b276cb03a410abd972b2a8446d02b",
+      "formatters": {
+        "fmt_in": "77e3abe5d4bcb5afd4e757a7fdd253005093508916b2ae9d0480cabc33c4d8e3",
+        "fmt_out": "54a8ee4ccca20d354ff2632621a5c3239e8593427f20bcd85a2c003d7adaa601"
+      }
+    },
+    "sandbox": {
+      "executor": "openai",
+      "baseline_executor": "openai",
+      "candidate_executor": "openai",
+      "timeout_s": 2.0,
+      "mem_mb": 512,
+      "call_spec": {
+        "baseline": {
+          "file_path": "llm_demo_project/baseline_system_prompt.txt",
+          "func_name": "solve",
+          "timeout_s": 2.0,
+          "mem_mb": 512,
+          "executor": "openai",
+          "executor_config": {
+            "model": "gpt-3.5-turbo",
+            "max_tokens": 250
+          }
+        },
+        "candidate": {
+          "file_path": "llm_demo_project/candidate_system_prompt.txt",
+          "func_name": "solve",
+          "timeout_s": 2.0,
+          "mem_mb": 512,
+          "executor": "openai",
+          "executor_config": {
+            "model": "gpt-3.5-turbo",
+            "max_tokens": 250
+          }
+        }
+      },
+      "call_spec_fingerprint": {
+        "baseline": "21f7fcd412c13fcee9262d4ef91c355ea6c1d6ce88228c45f0ec53228ec7e62d",
+        "candidate": "8e6a3e08c5b1330587674bc69e673b217b2d43e039eb398e12578e0d3a3ce187"
+      },
+      "executor_config": {
+        "model": "gpt-3.5-turbo",
+        "max_tokens": 250
+      },
+      "executor_config_fingerprint": "9677036fa5eab30826d6bc7d8df9f8c785faf672cdb6e4c6f56d0f232ea957b4",
+      "baseline_executor_config": {
+        "model": "gpt-3.5-turbo",
+        "max_tokens": 250
+      },
+      "baseline_executor_config_fingerprint": "9677036fa5eab30826d6bc7d8df9f8c785faf672cdb6e4c6f56d0f232ea957b4",
+      "candidate_executor_config": {
+        "model": "gpt-3.5-turbo",
+        "max_tokens": 250
+      },
+      "candidate_executor_config_fingerprint": "9677036fa5eab30826d6bc7d8df9f8c785faf672cdb6e4c6f56d0f232ea957b4"
+    }
+  },
+  "monitors": {
+    "LatencyMonitor": {
+      "id": "LatencyMonitor",
+      "type": "latency",
+      "percentile": 0.95,
+      "summary": {
+        "baseline": {
+          "count": 20,
+          "mean_ms": 553.3728361129761,
+          "p95_ms": 862.2317314147949
+        },
+        "candidate": {
+          "count": 20,
+          "mean_ms": 257.1392774581909,
+          "p95_ms": 619.9109554290771
+        }
+      },
+      "alerts": []
+    },
+    "LLMCostMonitor": {
+      "id": "LLMCostMonitor",
+      "type": "llm_cost",
+      "summary": {
+        "baseline": {
+          "tokens_prompt": {
+            "count": 0,
+            "total": 0,
+            "mean": 0.0
+          },
+          "tokens_completion": {
+            "count": 0,
+            "total": 0,
+            "mean": 0.0
+          },
+          "tokens_total": {
+            "count": 0,
+            "total": 0,
+            "mean": 0.0
+          },
+          "cost_usd": {
+            "count": 0,
+            "total": 0,
+            "mean": 0.0
+          }
+        },
+        "candidate": {
+          "tokens_prompt": {
+            "count": 0,
+            "total": 0,
+            "mean": 0.0
+          },
+          "tokens_completion": {
+            "count": 0,
+            "total": 0,
+            "mean": 0.0
+          },
+          "tokens_total": {
+            "count": 0,
+            "total": 0,
+            "mean": 0.0
+          },
+          "cost_usd": {
+            "count": 0,
+            "total": 0,
+            "mean": 0.0
+          }
+        }
+      },
+      "alerts": []
+    }
+  },
+  "llm_metrics": {
+    "baseline": {
+      "count": 20,
+      "successes": 0,
+      "failures": 20,
+      "total_cost_usd": 0.0,
+      "total_tokens": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_latency_ms": 11067.456722259521,
+      "avg_latency_ms": 553.3728361129761,
+      "avg_cost_usd": 0.0,
+      "avg_tokens": 0.0,
+      "retry_total": 0,
+      "avg_retries": 0.0,
+      "max_retries": 0,
+      "success_rate": 0.0
+    },
+    "candidate": {
+      "count": 20,
+      "successes": 0,
+      "failures": 20,
+      "total_cost_usd": 0.0,
+      "total_tokens": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_latency_ms": 5142.785549163818,
+      "avg_latency_ms": 257.1392774581909,
+      "avg_cost_usd": 0.0,
+      "avg_tokens": 0.0,
+      "retry_total": 0,
+      "avg_retries": 0.0,
+      "max_retries": 0,
+      "success_rate": 0.0
+    },
+    "cost_delta_usd": 0.0,
+    "cost_ratio": null,
+    "tokens_delta": 0,
+    "token_ratio": null,
+    "retry_delta": 0,
+    "retry_ratio": null
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "task": "llm_eval_c00b7066",
+  "baseline": {
+    "passes": 5,
+    "total": 5,
+    "pass_rate": 1.0,
+    "prop_violations": [],
+    "mr_violations": []
+  },
+  "candidate": {
+    "passes": 5,
+    "total": 5,
+    "pass_rate": 1.0,
+    "prop_violations": [],
+    "mr_violations": []
+  },
+  "config": {
+    "timeout_s": 2.0,
+    "mem_mb": 512,
+    "alpha": 0.05,
+    "effective_alpha": 0.05,
+    "sequential_method": "none",
+    "max_looks": 1,
+    "look_number": 1,
+    "min_delta": 0.02,
+    "improve_delta": 0.02,
+    "min_pass_rate": 0.8,
+    "violation_cap": 25,
+    "parallel": 1,
+    "bootstrap_samples": 0,
+    "ci_method": "bootstrap",
+    "rr_ci_method": "log",
+    "bayesian_hierarchical": false,
+    "bayesian_posterior_predictive": false,
+    "bayesian_samples": 5000,
+    "executor": "openai",
+    "executor_config": {
+      "api_key": "test-key",
+      "provider": "openai",
+      "model": "gpt-4",
+      "max_tokens": 512,
+      "temperature": 0.0,
+      "seed": null
+    },
+    "baseline_executor": "openai",
+    "candidate_executor": "openai",
+    "baseline_executor_config": {
+      "api_key": "test-key",
+      "provider": "openai",
+      "model": "gpt-4",
+      "max_tokens": 512,
+      "temperature": 0.0,
+      "seed": null
+    },
+    "candidate_executor_config": {
+      "api_key": "test-key",
+      "provider": "openai",
+      "model": "gpt-4",
+      "max_tokens": 512,
+      "temperature": 0.0,
+      "seed": null
+    },
+    "dispatcher": "local",
+    "queue_config": null,
+    "relation_correction": null
+  },
+  "job_metadata": {
+    "hostname": "Spencers-Mac-Studio.local",
+    "executable": "/opt/anaconda3/bin/python",
+    "python_version": "3.11.8",
+    "git_commit": "5322fa97fbd7763fa7e9528108cb3fdf399adb36",
+    "git_dirty": true,
+    "run_id": "eval-8d240d62216b48388f22cde3044f2483"
+  },
+  "run_id": "eval-8d240d62216b48388f22cde3044f2483"
+}

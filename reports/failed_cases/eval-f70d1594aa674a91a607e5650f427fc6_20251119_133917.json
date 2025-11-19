@@ -1,0 +1,350 @@
+{
+  "task": "llm_demo",
+  "baseline": {
+    "passes": 0,
+    "total": 20,
+    "pass_rate": 0.0,
+    "prop_violations": [
+      {
+        "test_case": 0,
+        "property": "execution",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 1,
+        "property": "execution",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 2,
+        "property": "execution",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 3,
+        "property": "execution",
+        "input": "('Write a poem about coding.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 4,
+        "property": "execution",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 5,
+        "property": "execution",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 6,
+        "property": "execution",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 7,
+        "property": "execution",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 8,
+        "property": "execution",
+        "input": "('Write a poem about coding.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 9,
+        "property": "execution",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 10,
+        "property": "execution",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 11,
+        "property": "execution",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 12,
+        "property": "execution",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 13,
+        "property": "execution",
+        "input": "('Write a poem about coding.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 14,
+        "property": "execution",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 15,
+        "property": "execution",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 16,
+        "property": "execution",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 17,
+        "property": "execution",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 18,
+        "property": "execution",
+        "input": "('Write a poem about coding.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 19,
+        "property": "execution",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      }
+    ],
+    "mr_violations": []
+  },
+  "candidate": {
+    "passes": 0,
+    "total": 20,
+    "pass_rate": 0.0,
+    "prop_violations": [
+      {
+        "test_case": 0,
+        "property": "execution",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 1,
+        "property": "execution",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 2,
+        "property": "execution",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 3,
+        "property": "execution",
+        "input": "('Write a poem about coding.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 4,
+        "property": "execution",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 5,
+        "property": "execution",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 6,
+        "property": "execution",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 7,
+        "property": "execution",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 8,
+        "property": "execution",
+        "input": "('Write a poem about coding.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 9,
+        "property": "execution",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 10,
+        "property": "execution",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 11,
+        "property": "execution",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 12,
+        "property": "execution",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 13,
+        "property": "execution",
+        "input": "('Write a poem about coding.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 14,
+        "property": "execution",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 15,
+        "property": "execution",
+        "input": "('Summarize this article about AI safety.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 16,
+        "property": "execution",
+        "input": "(\"What is the sentiment of 'I love this product'?\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 17,
+        "property": "execution",
+        "input": "('Explain quantum computing in simple terms.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 18,
+        "property": "execution",
+        "input": "('Write a poem about coding.',)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      },
+      {
+        "test_case": 19,
+        "property": "execution",
+        "input": "(\"Translate 'Hello world' to French.\",)",
+        "output": "",
+        "error": "Error code: 404 - {'error': {'message': 'The model `solve` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_found'}}"
+      }
+    ],
+    "mr_violations": []
+  },
+  "config": {
+    "timeout_s": 2.0,
+    "mem_mb": 512,
+    "alpha": 0.05,
+    "effective_alpha": 0.05,
+    "sequential_method": "none",
+    "max_looks": 1,
+    "look_number": 1,
+    "min_delta": 0.0,
+    "improve_delta": 0.0,
+    "min_pass_rate": 0.8,
+    "violation_cap": 25,
+    "parallel": 12,
+    "bootstrap_samples": 1000,
+    "ci_method": "bootstrap",
+    "rr_ci_method": "log",
+    "bayesian_hierarchical": false,
+    "bayesian_posterior_predictive": false,
+    "bayesian_samples": 5000,
+    "executor": "openai",
+    "executor_config": {
+      "model": "gpt-3.5-turbo",
+      "max_tokens": 250
+    },
+    "baseline_executor": "openai",
+    "candidate_executor": "openai",
+    "baseline_executor_config": {
+      "model": "gpt-3.5-turbo",
+      "max_tokens": 250
+    },
+    "candidate_executor_config": {
+      "model": "gpt-3.5-turbo",
+      "max_tokens": 250
+    },
+    "dispatcher": "local",
+    "queue_config": null,
+    "relation_correction": null,
+    "monitors": [
+      "LatencyMonitor",
+      "LLMCostMonitor"
+    ]
+  },
+  "job_metadata": {
+    "hostname": "Spencers-Mac-Studio.local",
+    "executable": "/opt/anaconda3/bin/python",
+    "python_version": "3.11.8",
+    "git_commit": "82bc0a7b8de3fd3e51ef30d279e60fa6054ed4f2",
+    "git_dirty": true,
+    "run_id": "eval-f70d1594aa674a91a607e5650f427fc6"
+  },
+  "run_id": "eval-f70d1594aa674a91a607e5650f427fc6"
+}

@@ -1,0 +1,116 @@
+{
+  "task": "simple_task",
+  "baseline": {
+    "passes": 10,
+    "total": 10,
+    "pass_rate": 1.0,
+    "prop_violations": [],
+    "mr_violations": []
+  },
+  "candidate": {
+    "passes": 0,
+    "total": 10,
+    "pass_rate": 0.0,
+    "prop_violations": [
+      {
+        "test_case": 0,
+        "property": "Output equals input * 2",
+        "input": "(82,)",
+        "output": "165"
+      },
+      {
+        "test_case": 1,
+        "property": "Output equals input * 2",
+        "input": "(15,)",
+        "output": "31"
+      },
+      {
+        "test_case": 2,
+        "property": "Output equals input * 2",
+        "input": "(4,)",
+        "output": "9"
+      },
+      {
+        "test_case": 3,
+        "property": "Output equals input * 2",
+        "input": "(95,)",
+        "output": "191"
+      },
+      {
+        "test_case": 4,
+        "property": "Output equals input * 2",
+        "input": "(36,)",
+        "output": "73"
+      },
+      {
+        "test_case": 5,
+        "property": "Output equals input * 2",
+        "input": "(32,)",
+        "output": "65"
+      },
+      {
+        "test_case": 6,
+        "property": "Output equals input * 2",
+        "input": "(29,)",
+        "output": "59"
+      },
+      {
+        "test_case": 7,
+        "property": "Output equals input * 2",
+        "input": "(18,)",
+        "output": "37"
+      },
+      {
+        "test_case": 8,
+        "property": "Output equals input * 2",
+        "input": "(95,)",
+        "output": "191"
+      },
+      {
+        "test_case": 9,
+        "property": "Output equals input * 2",
+        "input": "(14,)",
+        "output": "29"
+      }
+    ],
+    "mr_violations": []
+  },
+  "config": {
+    "timeout_s": 1.0,
+    "mem_mb": 256,
+    "alpha": 0.05,
+    "effective_alpha": 0.05,
+    "sequential_method": "none",
+    "max_looks": 1,
+    "look_number": 1,
+    "min_delta": 0.02,
+    "improve_delta": 0.02,
+    "min_pass_rate": 0.8,
+    "violation_cap": 25,
+    "parallel": 12,
+    "bootstrap_samples": 1000,
+    "ci_method": "bootstrap",
+    "rr_ci_method": "log",
+    "bayesian_hierarchical": false,
+    "bayesian_posterior_predictive": false,
+    "bayesian_samples": 5000,
+    "executor": null,
+    "executor_config": null,
+    "baseline_executor": null,
+    "candidate_executor": null,
+    "baseline_executor_config": null,
+    "candidate_executor_config": null,
+    "dispatcher": "local",
+    "queue_config": null,
+    "relation_correction": null
+  },
+  "job_metadata": {
+    "hostname": "Spencers-Mac-Studio.local",
+    "executable": "/opt/anaconda3/bin/python",
+    "python_version": "3.11.8",
+    "git_commit": "b6033ba4001658da5a63db8b732240cdeb4f28bc",
+    "git_dirty": true,
+    "run_id": "eval-e8f9178f003a45a38f186f7eb316cef7"
+  },
+  "run_id": "eval-e8f9178f003a45a38f186f7eb316cef7"
+}

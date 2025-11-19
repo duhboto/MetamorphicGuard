@@ -1,0 +1,116 @@
+{
+  "task": "api_test_task",
+  "baseline": {
+    "passes": 10,
+    "total": 10,
+    "pass_rate": 1.0,
+    "prop_violations": [],
+    "mr_violations": []
+  },
+  "candidate": {
+    "passes": 0,
+    "total": 10,
+    "pass_rate": 0.0,
+    "prop_violations": [
+      {
+        "test_case": 0,
+        "property": "Candidate value should not drop below input",
+        "input": "(0,)",
+        "output": "{'value': -1.0}"
+      },
+      {
+        "test_case": 1,
+        "property": "Candidate value should not drop below input",
+        "input": "(1,)",
+        "output": "{'value': 0.0}"
+      },
+      {
+        "test_case": 2,
+        "property": "Candidate value should not drop below input",
+        "input": "(2,)",
+        "output": "{'value': 1.0}"
+      },
+      {
+        "test_case": 3,
+        "property": "Candidate value should not drop below input",
+        "input": "(3,)",
+        "output": "{'value': 2.0}"
+      },
+      {
+        "test_case": 4,
+        "property": "Candidate value should not drop below input",
+        "input": "(4,)",
+        "output": "{'value': 3.0}"
+      },
+      {
+        "test_case": 5,
+        "property": "Candidate value should not drop below input",
+        "input": "(5,)",
+        "output": "{'value': 4.0}"
+      },
+      {
+        "test_case": 6,
+        "property": "Candidate value should not drop below input",
+        "input": "(6,)",
+        "output": "{'value': 5.0}"
+      },
+      {
+        "test_case": 7,
+        "property": "Candidate value should not drop below input",
+        "input": "(7,)",
+        "output": "{'value': 6.0}"
+      },
+      {
+        "test_case": 8,
+        "property": "Candidate value should not drop below input",
+        "input": "(8,)",
+        "output": "{'value': 7.0}"
+      },
+      {
+        "test_case": 9,
+        "property": "Candidate value should not drop below input",
+        "input": "(9,)",
+        "output": "{'value': 8.0}"
+      }
+    ],
+    "mr_violations": []
+  },
+  "config": {
+    "timeout_s": 2.0,
+    "mem_mb": 512,
+    "alpha": 0.05,
+    "effective_alpha": 0.05,
+    "sequential_method": "none",
+    "max_looks": 1,
+    "look_number": 1,
+    "min_delta": 0.0,
+    "improve_delta": 0.0,
+    "min_pass_rate": 0.8,
+    "violation_cap": 25,
+    "parallel": 12,
+    "bootstrap_samples": 200,
+    "ci_method": "bootstrap",
+    "rr_ci_method": "log",
+    "bayesian_hierarchical": false,
+    "bayesian_posterior_predictive": false,
+    "bayesian_samples": 5000,
+    "executor": null,
+    "executor_config": null,
+    "baseline_executor": null,
+    "candidate_executor": null,
+    "baseline_executor_config": null,
+    "candidate_executor_config": null,
+    "dispatcher": "local",
+    "queue_config": null,
+    "relation_correction": null
+  },
+  "job_metadata": {
+    "hostname": "Spencers-Mac-Studio.local",
+    "executable": "/opt/anaconda3/bin/python",
+    "python_version": "3.11.8",
+    "git_commit": "679122d05446b949224029d403a2fb18181829ce",
+    "git_dirty": true,
+    "run_id": "eval-51b12738478748eabd29e1a4a8911b96"
+  },
+  "run_id": "eval-51b12738478748eabd29e1a4a8911b96"
+}

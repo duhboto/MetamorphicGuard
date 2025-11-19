@@ -188,7 +188,6 @@ def equivalence(a: List[str], b: List[str]) -> bool:
 def create_recommendation_task() -> Spec:
     """Create the recommendation system task specification."""
     return Spec(
-        name="recommendation",
         gen_inputs=gen_recommendation_inputs,
         properties=[
             Property(
