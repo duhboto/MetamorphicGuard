@@ -74,7 +74,14 @@ class AttributionJudge(LLMJudge):
         if isinstance(input_data, dict):
             sources = input_data.get("sources", [])
         elif isinstance(input_data, list):
-            sources = input_data
+            # Auto-detection for list of dicts with 'content' or 'text' keys
+            if input_data and isinstance(input_data[0], dict):
+                sources = [
+                    d.get("content") or d.get("text") or str(d) 
+                    for d in input_data
+                ]
+            else:
+                sources = input_data
         elif kwargs.get("sources"):
             sources = kwargs["sources"]
         
@@ -323,9 +330,23 @@ class CitationVerificationJudge(LLMJudge):
                 # Default: allow all sources (1-indexed for citations)
                 source_indices = set(range(1, len(sources) + 1))
         elif isinstance(input_data, list):
-            sources = input_data
-            # Default: allow all sources (1-indexed for citations)
-            source_indices = set(range(1, len(sources) + 1))
+            # Auto-detection for list of dicts with 'content' or 'text' keys
+            if input_data and isinstance(input_data[0], dict):
+                sources = [
+                    d.get("content") or d.get("text") or str(d) 
+                    for d in input_data
+                ]
+                # If dicts have 'id', try to use them as indices if they are integers
+                try:
+                    source_indices = {int(d["id"]) for d in input_data if "id" in d}
+                except (ValueError, TypeError):
+                    pass
+            else:
+                sources = input_data
+            
+            if not source_indices:
+                # Default: allow all sources (1-indexed for citations)
+                source_indices = set(range(1, len(sources) + 1))
         elif kwargs.get("sources"):
             sources = kwargs["sources"]
             provided_indices = kwargs.get("source_indices")

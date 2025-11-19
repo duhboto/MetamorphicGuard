@@ -1,0 +1,685 @@
+{
+  "task": "rag_guard_demo",
+  "baseline": {
+    "passes": 0,
+    "total": 50,
+    "pass_rate": 0.0,
+    "prop_violations": [
+      {
+        "test_case": 0,
+        "property": "Content must be attributed to sources",
+        "input": "('What is Metamorphic Guard?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}])",
+        "output": "Metamorphic Guard is a great tool for testing. It was built by Google."
+      },
+      {
+        "test_case": 3,
+        "property": "Content must be attributed to sources",
+        "input": "('How does the LLM demo work?', [{'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "Metamorphic Guard is a great tool for testing. It was built by Google."
+      },
+      {
+        "test_case": 4,
+        "property": "Content must be attributed to sources",
+        "input": "('What is Metamorphic Guard?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "Metamorphic Guard uses metamorphic testing to compare program versions."
+      },
+      {
+        "test_case": 5,
+        "property": "Content must be attributed to sources",
+        "input": "('What does Ranking Guard do?', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "Metamorphic Guard uses metamorphic testing to compare program versions."
+      },
+      {
+        "test_case": 7,
+        "property": "Content must be attributed to sources",
+        "input": "('What is Metamorphic Guard?', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "Metamorphic Guard is a great tool for testing. It was built by Google."
+      },
+      {
+        "test_case": 12,
+        "property": "Content must be attributed to sources",
+        "input": "('What is Metamorphic Guard?', [{'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}])",
+        "output": "Metamorphic Guard is a great tool for testing. It was built by Google."
+      },
+      {
+        "test_case": 16,
+        "property": "Content must be attributed to sources",
+        "input": "('What does Ranking Guard do?', [{'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}])",
+        "output": "Metamorphic Guard uses metamorphic testing to compare program versions."
+      },
+      {
+        "test_case": 18,
+        "property": "Content must be attributed to sources",
+        "input": "('How does the LLM demo work?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "Metamorphic Guard is a great tool for testing. It was built by Google."
+      },
+      {
+        "test_case": 19,
+        "property": "Content must be attributed to sources",
+        "input": "('How does the LLM demo work?', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "Metamorphic Guard is a great tool for testing. It was built by Google."
+      },
+      {
+        "test_case": 22,
+        "property": "Content must be attributed to sources",
+        "input": "('What is Metamorphic Guard?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "Metamorphic Guard uses metamorphic testing to compare program versions."
+      },
+      {
+        "test_case": 27,
+        "property": "Content must be attributed to sources",
+        "input": "('Explain Fairness Guard.', [{'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "Metamorphic Guard uses metamorphic testing to compare program versions."
+      },
+      {
+        "test_case": 28,
+        "property": "Content must be attributed to sources",
+        "input": "('What is Metamorphic Guard?', [{'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}])",
+        "output": "Metamorphic Guard uses metamorphic testing to compare program versions."
+      },
+      {
+        "test_case": 32,
+        "property": "Content must be attributed to sources",
+        "input": "('How does the LLM demo work?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "Metamorphic Guard uses metamorphic testing to compare program versions."
+      },
+      {
+        "test_case": 34,
+        "property": "Content must be attributed to sources",
+        "input": "('What is Metamorphic Guard?', [{'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}])",
+        "output": "Metamorphic Guard is a great tool for testing. It was built by Google."
+      },
+      {
+        "test_case": 35,
+        "property": "Content must be attributed to sources",
+        "input": "('Explain Fairness Guard.', [{'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "Metamorphic Guard is a great tool for testing. It was built by Google."
+      },
+      {
+        "test_case": 36,
+        "property": "Content must be attributed to sources",
+        "input": "('How does the LLM demo work?', [{'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "Metamorphic Guard is a great tool for testing. It was built by Google."
+      },
+      {
+        "test_case": 37,
+        "property": "Content must be attributed to sources",
+        "input": "('What does Ranking Guard do?', [{'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "Metamorphic Guard is a great tool for testing. It was built by Google."
+      },
+      {
+        "test_case": 41,
+        "property": "Content must be attributed to sources",
+        "input": "('What does Ranking Guard do?', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "Metamorphic Guard is a great tool for testing. It was built by Google."
+      },
+      {
+        "test_case": 44,
+        "property": "Content must be attributed to sources",
+        "input": "('How does the LLM demo work?', [{'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "Metamorphic Guard is a great tool for testing. It was built by Google."
+      },
+      {
+        "test_case": 45,
+        "property": "Content must be attributed to sources",
+        "input": "('What is Metamorphic Guard?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}])",
+        "output": "Metamorphic Guard uses metamorphic testing to compare program versions."
+      },
+      {
+        "test_case": 49,
+        "property": "Content must be attributed to sources",
+        "input": "('What does Ranking Guard do?', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "Metamorphic Guard uses metamorphic testing to compare program versions."
+      }
+    ],
+    "mr_violations": [
+      {
+        "test_case": 1,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 2,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 6,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 8,
+        "relation": "context_reorder_robustness",
+        "input": "('What does Ranking Guard do?', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 9,
+        "relation": "context_reorder_robustness",
+        "input": "('Explain Fairness Guard.', [{'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 10,
+        "relation": "context_reorder_robustness",
+        "input": "('Explain Fairness Guard.', [{'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 11,
+        "relation": "context_reorder_robustness",
+        "input": "('Explain Fairness Guard.', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 13,
+        "relation": "context_reorder_robustness",
+        "input": "('How does the LLM demo work?', [{'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 14,
+        "relation": "context_reorder_robustness",
+        "input": "('Explain Fairness Guard.', [{'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 15,
+        "relation": "context_reorder_robustness",
+        "input": "('How does the LLM demo work?', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 17,
+        "relation": "context_reorder_robustness",
+        "input": "('What does Ranking Guard do?', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 20,
+        "relation": "context_reorder_robustness",
+        "input": "('What does Ranking Guard do?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 21,
+        "relation": "context_reorder_robustness",
+        "input": "('How does the LLM demo work?', [{'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 23,
+        "relation": "context_reorder_robustness",
+        "input": "('How does the LLM demo work?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 24,
+        "relation": "context_reorder_robustness",
+        "input": "('What does Ranking Guard do?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 25,
+        "relation": "context_reorder_robustness",
+        "input": "('What does Ranking Guard do?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 26,
+        "relation": "context_reorder_robustness",
+        "input": "('Explain Fairness Guard.', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 29,
+        "relation": "context_reorder_robustness",
+        "input": "('What does Ranking Guard do?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 30,
+        "relation": "context_reorder_robustness",
+        "input": "('How does the LLM demo work?', [{'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 31,
+        "relation": "context_reorder_robustness",
+        "input": "('Explain Fairness Guard.', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 33,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 38,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 39,
+        "relation": "context_reorder_robustness",
+        "input": "('How does the LLM demo work?', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 40,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 42,
+        "relation": "context_reorder_robustness",
+        "input": "('Explain Fairness Guard.', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "According to Source [1], Metamorphic Guard compares program versions using metamorphic testing.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      }
+    ]
+  },
+  "candidate": {
+    "passes": 0,
+    "total": 50,
+    "pass_rate": 0.0,
+    "prop_violations": [
+      {
+        "test_case": 5,
+        "property": "Content must be attributed to sources",
+        "input": "('What does Ranking Guard do?', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "Ranking Guard ensures search quality does not degrade [3]."
+      },
+      {
+        "test_case": 8,
+        "property": "Content must be attributed to sources",
+        "input": "('What does Ranking Guard do?', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "Ranking Guard ensures search quality does not degrade [3]."
+      },
+      {
+        "test_case": 9,
+        "property": "Citations must be valid and present",
+        "input": "('Explain Fairness Guard.', [{'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "Fairness Guard checks for disparate impact [4]."
+      },
+      {
+        "test_case": 9,
+        "property": "Content must be attributed to sources",
+        "input": "('Explain Fairness Guard.', [{'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "Fairness Guard checks for disparate impact [4]."
+      },
+      {
+        "test_case": 10,
+        "property": "Citations must be valid and present",
+        "input": "('Explain Fairness Guard.', [{'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "Fairness Guard checks for disparate impact [4]."
+      },
+      {
+        "test_case": 10,
+        "property": "Content must be attributed to sources",
+        "input": "('Explain Fairness Guard.', [{'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "Fairness Guard checks for disparate impact [4]."
+      },
+      {
+        "test_case": 11,
+        "property": "Citations must be valid and present",
+        "input": "('Explain Fairness Guard.', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}])",
+        "output": "Fairness Guard checks for disparate impact [4]."
+      },
+      {
+        "test_case": 11,
+        "property": "Content must be attributed to sources",
+        "input": "('Explain Fairness Guard.', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}])",
+        "output": "Fairness Guard checks for disparate impact [4]."
+      },
+      {
+        "test_case": 14,
+        "property": "Citations must be valid and present",
+        "input": "('Explain Fairness Guard.', [{'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "Fairness Guard checks for disparate impact [4]."
+      },
+      {
+        "test_case": 14,
+        "property": "Content must be attributed to sources",
+        "input": "('Explain Fairness Guard.', [{'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "Fairness Guard checks for disparate impact [4]."
+      },
+      {
+        "test_case": 16,
+        "property": "Content must be attributed to sources",
+        "input": "('What does Ranking Guard do?', [{'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}])",
+        "output": "Ranking Guard ensures search quality does not degrade [3]."
+      },
+      {
+        "test_case": 17,
+        "property": "Content must be attributed to sources",
+        "input": "('What does Ranking Guard do?', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "Ranking Guard ensures search quality does not degrade [3]."
+      },
+      {
+        "test_case": 20,
+        "property": "Content must be attributed to sources",
+        "input": "('What does Ranking Guard do?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "Ranking Guard ensures search quality does not degrade [3]."
+      },
+      {
+        "test_case": 24,
+        "property": "Content must be attributed to sources",
+        "input": "('What does Ranking Guard do?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}])",
+        "output": "Ranking Guard ensures search quality does not degrade [3]."
+      },
+      {
+        "test_case": 25,
+        "property": "Content must be attributed to sources",
+        "input": "('What does Ranking Guard do?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}])",
+        "output": "Ranking Guard ensures search quality does not degrade [3]."
+      },
+      {
+        "test_case": 26,
+        "property": "Citations must be valid and present",
+        "input": "('Explain Fairness Guard.', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "Fairness Guard checks for disparate impact [4]."
+      },
+      {
+        "test_case": 26,
+        "property": "Content must be attributed to sources",
+        "input": "('Explain Fairness Guard.', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "Fairness Guard checks for disparate impact [4]."
+      },
+      {
+        "test_case": 27,
+        "property": "Citations must be valid and present",
+        "input": "('Explain Fairness Guard.', [{'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "Fairness Guard checks for disparate impact [4]."
+      },
+      {
+        "test_case": 27,
+        "property": "Content must be attributed to sources",
+        "input": "('Explain Fairness Guard.', [{'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "Fairness Guard checks for disparate impact [4]."
+      },
+      {
+        "test_case": 29,
+        "property": "Content must be attributed to sources",
+        "input": "('What does Ranking Guard do?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "Ranking Guard ensures search quality does not degrade [3]."
+      },
+      {
+        "test_case": 31,
+        "property": "Citations must be valid and present",
+        "input": "('Explain Fairness Guard.', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "Fairness Guard checks for disparate impact [4]."
+      },
+      {
+        "test_case": 31,
+        "property": "Content must be attributed to sources",
+        "input": "('Explain Fairness Guard.', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "Fairness Guard checks for disparate impact [4]."
+      },
+      {
+        "test_case": 35,
+        "property": "Citations must be valid and present",
+        "input": "('Explain Fairness Guard.', [{'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "Fairness Guard checks for disparate impact [4]."
+      },
+      {
+        "test_case": 35,
+        "property": "Content must be attributed to sources",
+        "input": "('Explain Fairness Guard.', [{'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "Fairness Guard checks for disparate impact [4]."
+      },
+      {
+        "test_case": 37,
+        "property": "Content must be attributed to sources",
+        "input": "('What does Ranking Guard do?', [{'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "Ranking Guard ensures search quality does not degrade [3]."
+      }
+    ],
+    "mr_violations": [
+      {
+        "test_case": 0,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 1,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 2,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 3,
+        "relation": "context_reorder_robustness",
+        "input": "('How does the LLM demo work?', [{'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 4,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 6,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 7,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 12,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 13,
+        "relation": "context_reorder_robustness",
+        "input": "('How does the LLM demo work?', [{'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 15,
+        "relation": "context_reorder_robustness",
+        "input": "('How does the LLM demo work?', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 18,
+        "relation": "context_reorder_robustness",
+        "input": "('How does the LLM demo work?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 19,
+        "relation": "context_reorder_robustness",
+        "input": "('How does the LLM demo work?', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 21,
+        "relation": "context_reorder_robustness",
+        "input": "('How does the LLM demo work?', [{'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 22,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 23,
+        "relation": "context_reorder_robustness",
+        "input": "('How does the LLM demo work?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 28,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 30,
+        "relation": "context_reorder_robustness",
+        "input": "('How does the LLM demo work?', [{'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 32,
+        "relation": "context_reorder_robustness",
+        "input": "('How does the LLM demo work?', [{'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 33,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 34,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 36,
+        "relation": "context_reorder_robustness",
+        "input": "('How does the LLM demo work?', [{'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 38,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 39,
+        "relation": "context_reorder_robustness",
+        "input": "('How does the LLM demo work?', [{'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 40,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '4', 'content': 'Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      },
+      {
+        "test_case": 43,
+        "relation": "context_reorder_robustness",
+        "input": "('What is Metamorphic Guard?', [{'id': '2', 'content': 'The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences.'}, {'id': '3', 'content': 'Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade.'}, {'id': '5', 'content': 'The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor.'}, {'id': '1', 'content': 'Metamorphic Guard is a Python library for comparing program versions using metamorphic testing.'}])",
+        "output": "I cannot answer this question based on the provided context.",
+        "error": "apply_context_reorder() takes 1 positional argument but 2 were given"
+      }
+    ]
+  },
+  "config": {
+    "timeout_s": 2.0,
+    "mem_mb": 512,
+    "alpha": 0.05,
+    "effective_alpha": 0.05,
+    "sequential_method": "none",
+    "max_looks": 1,
+    "look_number": 1,
+    "min_delta": 0.1,
+    "improve_delta": 0.1,
+    "min_pass_rate": 0.8,
+    "violation_cap": 25,
+    "parallel": 12,
+    "bootstrap_samples": 1000,
+    "ci_method": "bootstrap",
+    "rr_ci_method": "log",
+    "bayesian_hierarchical": false,
+    "bayesian_posterior_predictive": false,
+    "bayesian_samples": 5000,
+    "executor": null,
+    "executor_config": null,
+    "baseline_executor": null,
+    "candidate_executor": null,
+    "baseline_executor_config": null,
+    "candidate_executor_config": null,
+    "dispatcher": "local",
+    "queue_config": null,
+    "relation_correction": null
+  },
+  "job_metadata": {
+    "hostname": "Spencers-Mac-Studio.local",
+    "executable": "/opt/anaconda3/bin/python",
+    "python_version": "3.11.8",
+    "git_commit": "d3e4a7a2bd47a022a8bdc82240f057b3be68efe3",
+    "git_dirty": true,
+    "run_id": "eval-57be301cb26241bbb5e984d5f06ae1cd"
+  },
+  "run_id": "eval-57be301cb26241bbb5e984d5f06ae1cd"
+}

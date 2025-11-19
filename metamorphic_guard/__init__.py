@@ -2,6 +2,15 @@
 Metamorphic Guard: A Python library for comparing program versions using metamorphic testing.
 """
 
+# Core exports (from .api)
+from .api import (
+    run,
+    TaskSpec,
+    Implementation,
+    EvaluationConfig,
+    EvaluationResult,
+)
+
 from .specs import task, Spec, Property, MetamorphicRelation, Metric
 from .generators import gen_top_k_inputs
 from .relations import permute_input, add_noise_below_min

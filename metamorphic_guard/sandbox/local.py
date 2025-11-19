@@ -74,6 +74,12 @@ def _run_local_sandbox(
         env["PYTHONIOENCODING"] = "utf-8"
         env["NO_NETWORK"] = "1"
         env["PYTHONNOUSERSITE"] = "1"
+        
+        # Auto-propagate current working directory to PYTHONPATH for convenience
+        cwd_path = os.getcwd()
+        if cwd_path not in sys.path:
+            current_pythonpath = env.get("PYTHONPATH", "")
+            env["PYTHONPATH"] = f"{cwd_path}{os.pathsep}{current_pythonpath}" if current_pythonpath else cwd_path
 
         try:
             preexec_fn = make_preexec_fn(timeout_s, mem_mb)

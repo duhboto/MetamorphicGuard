@@ -315,6 +315,19 @@ def evaluate_results(
             relation_output = relation_result["result"]
             if relation.expect == "equal":
                 equivalent = spec.equivalence(output, relation_output)
+            elif relation.expect == "properties_hold":
+                # Verify that relation_output passes all hard properties
+                equivalent = True
+                for prop in spec.properties:
+                    if prop.mode != "hard":
+                        continue
+                    try:
+                        if not prop.check(relation_output, *transformed_args):
+                            equivalent = False
+                            break
+                    except Exception:
+                        equivalent = False
+                        break
             else:
                 raise ValueError(f"Unsupported relation expectation: {relation.expect}")
 

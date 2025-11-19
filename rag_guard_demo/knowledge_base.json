@@ -1,0 +1,23 @@
+[
+  {
+    "id": "1",
+    "content": "Metamorphic Guard is a Python library for comparing program versions using metamorphic testing."
+  },
+  {
+    "id": "2",
+    "content": "The library supports statistical analysis using bootstrap confidence intervals on pass-rate differences."
+  },
+  {
+    "id": "3",
+    "content": "Ranking Guard is a reference project for search ranking algorithms that ensures search quality does not degrade."
+  },
+  {
+    "id": "4",
+    "content": "Fairness Guard focuses on credit approval models and checks for disparate impact across demographic groups."
+  },
+  {
+    "id": "5",
+    "content": "The LLM Guard demo shows how to evaluate chatbots without live API keys using a mock executor."
+  }
+]
+
