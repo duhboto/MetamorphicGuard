@@ -38,7 +38,7 @@ def test_llm_harness_passes_role_specific_configs(monkeypatch):
             "statistics": {},
         }
 
-    monkeypatch.setattr("metamorphic_guard.llm_harness.run_eval", fake_run_eval)
+    monkeypatch.setattr("metamorphic_guard.api.run_eval", fake_run_eval)
 
     harness = LLMHarness(model="gpt-4", provider="openai", executor_config={"api_key": "test-key"})
     result = harness.run(
@@ -84,7 +84,7 @@ def test_llm_harness_retains_llm_metrics(monkeypatch):
             "llm_metrics": metrics_payload,
         }
 
-    monkeypatch.setattr("metamorphic_guard.llm_harness.run_eval", fake_run_eval)
+    monkeypatch.setattr("metamorphic_guard.api.run_eval", fake_run_eval)
 
     harness = LLMHarness(model="gpt-4", provider="openai", executor_config={"api_key": "test-key"})
     result = harness.run(case="hello", bootstrap=False)

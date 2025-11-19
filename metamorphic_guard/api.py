@@ -38,7 +38,7 @@ from .notifications import collect_alerts, send_webhook_alerts
 from .observability import configure_logging, configure_metrics, close_logging
 from .types import JSONDict, JSONValue
 
-from .harness import run_eval
+from .harness.evaluation import run_eval
 from .dispatch import Dispatcher
 from .monitoring import Monitor, resolve_monitors
 from .specs import MetamorphicRelation, Metric, Property, Spec, register_spec, unregister_spec
@@ -151,10 +151,12 @@ class Implementation:
 
     path: Optional[str] = None
     func: Optional[CallableImplementation] = None
+    content: Optional[str] = None
 
     def __post_init__(self) -> None:
-        if (self.path is None) == (self.func is None):
-            raise ValueError("Provide exactly one of 'path' or 'func' for Implementation.")
+        provided = sum(1 for x in (self.path, self.func, self.content) if x is not None)
+        if provided != 1:
+            raise ValueError("Provide exactly one of 'path', 'func', or 'content' for Implementation.")
         if self.path is not None:
             # Normalize to string path
             object.__setattr__(self, "path", str(self.path))
@@ -165,6 +167,11 @@ class Implementation:
     def from_callable(cls, func: CallableImplementation) -> "Implementation":
         """Create an Implementation backed by a Python callable."""
         return cls(path=None, func=func)
+
+    @classmethod
+    def from_content(cls, content: str) -> "Implementation":
+        """Create a virtual Implementation from a string (e.g. system prompt)."""
+        return cls(content=content)
 
     @classmethod
     def from_dotted(cls, dotted: str) -> "Implementation":
@@ -238,6 +245,9 @@ class Implementation:
     @contextmanager
     def materialize(self):
         """Yield a file path that exposes a `solve` function."""
+        if self.content is not None:
+            yield self.content
+            return
         if self.path is not None:
             yield self.path
             return

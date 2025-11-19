@@ -70,6 +70,7 @@ New to Metamorphic Guard? Check out our [First PR Gate Tutorial](docs/first-pr-g
 - **[Quick Start Guide](docs/getting-started/quickstart.md)** - Step-by-step walkthrough
 - **[Onboarding Checklist](docs/getting-started/checklist.md)** - Ensure you have everything set up
 - **[Installation Guide](docs/getting-started/installation.md)** - Installation options and profiles
+- **[Plugin Contracts](docs/development/plugin-contracts.md)** - Guide for implementing custom Executors and Monitors
 
 **Architecture**: See [Architecture Documentation](docs/architecture.md) for details on component interfaces, execution system, worker liveness, and signal handling.
 

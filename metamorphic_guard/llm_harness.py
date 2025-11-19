@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence, Union, TypedDict
 
-from .harness import run_eval
+from .harness.evaluation import run_eval
 from .judges import Judge, LLMJudge
 from .mutants import Mutant, PromptMutant
 from .types import JSONDict, JSONValue
@@ -169,29 +169,10 @@ class LLMHarness:
     ) -> EvaluationReport:
         """
         Run evaluation of LLM on test cases.
-
-        Args:
-            case: Can be:
-                - Dict with:
-                  - "system" and "user" keys (single turn)
-                  - "conversation" key (list of message dicts for multi-turn)
-                  - "conversation" and "user" keys (multi-turn with new user message)
-                - List of user prompts (strings) - single turn
-                - Single user prompt (string) - single turn
-            props: List of judges to evaluate outputs
-            mrs: List of mutants to apply to inputs
-            n: Number of test cases
-            seed: Random seed
-            bootstrap: Whether to compute bootstrap confidence intervals
-            baseline_model: Optional model name for baseline (defaults to candidate model)
-            baseline_system: Optional system prompt for baseline (defaults to candidate system)
-            **kwargs: Additional arguments passed to run_eval
-
-        Returns:
-            Evaluation report dictionary
         """
         from .llm_specs import create_llm_spec, simple_llm_inputs, multi_turn_llm_inputs
         from .specs import Spec
+        from .api import run, TaskSpec, Implementation, EvaluationConfig
 
         # Parse case input - support multi-turn conversations
         is_multi_turn = False
@@ -250,73 +231,69 @@ class LLMHarness:
             mutants=list(mrs) if mrs else None,
         )
 
-        # Register task temporarily with unique name
+        # Create unique task name
         import uuid
         task_name = f"llm_eval_{uuid.uuid4().hex[:8]}"
-        from .specs import _TASK_REGISTRY
+        
+        task_spec = TaskSpec(
+            name=task_name,
+            gen_inputs=spec.gen_inputs,
+            properties=spec.properties,
+            relations=spec.relations,
+            equivalence=spec.equivalence,
+            fmt_in=spec.fmt_in,
+            fmt_out=spec.fmt_out,
+            cluster_key=spec.cluster_key,
+            metrics=spec.metrics
+        )
 
-        def get_spec() -> Spec:
-            return spec
+        # Create executor configs
+        baseline_config = dict(self.baseline_executor_config)
+        if baseline_model:
+            baseline_config["model"] = baseline_model
+        if baseline_system_prompt is not None:
+            baseline_config["system_prompt"] = baseline_system_prompt
 
-        _TASK_REGISTRY[task_name] = get_spec
+        candidate_config = dict(self.executor_config)
+        candidate_config["model"] = self.model
+        if candidate_system_prompt is not None:
+            candidate_config["system_prompt"] = candidate_system_prompt
 
-        # For LLM evaluation, we need to create temporary "baseline" and "candidate" files
-        # that represent the system prompts. The executor will use file_path as system prompt
-        # and func_name as model name.
-        import tempfile
-        from pathlib import Path
+        baseline_executor_name = self.baseline_executor
+        candidate_executor_name = self.executor
+        primary_executor_name = candidate_executor_name or baseline_executor_name
+        
+        eval_config = EvaluationConfig(
+            n=n,
+            seed=seed,
+            bootstrap_samples=1000 if bootstrap else 0,
+            extra_options={
+                "executor": primary_executor_name,
+                "baseline_executor": baseline_executor_name,
+                "candidate_executor": candidate_executor_name,
+                "baseline_executor_config": baseline_config,
+                "candidate_executor_config": candidate_config,
+                **kwargs
+            }
+        )
 
-        try:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                tmp_path = Path(tmpdir)
-                
-                # Create baseline and candidate "files" (just system prompts)
-                baseline_file = tmp_path / "baseline.txt"
-                candidate_file = tmp_path / "candidate.txt"
-                
-                baseline_file.write_text(baseline_system_prompt or "", encoding="utf-8")
-                candidate_file.write_text(candidate_system_prompt or "", encoding="utf-8")
+        # Use in-memory implementations (just system prompts as content)
+        baseline_impl = Implementation.from_content(baseline_system_prompt or "")
+        candidate_impl = Implementation.from_content(candidate_system_prompt or "")
 
-                # Create separate executor configs for baseline and candidate
-                baseline_config = dict(self.baseline_executor_config)
-                if baseline_model:
-                    baseline_config["model"] = baseline_model
-                if baseline_system_prompt is not None:
-                    baseline_config["system_prompt"] = baseline_system_prompt
-
-                candidate_config = dict(self.executor_config)
-                candidate_config["model"] = self.model
-                if candidate_system_prompt is not None:
-                    candidate_config["system_prompt"] = candidate_system_prompt
-
-                baseline_executor_name = self.baseline_executor
-                candidate_executor_name = self.executor
-                primary_executor_name = candidate_executor_name or baseline_executor_name
-
-                # Run evaluation
-                result = run_eval(
-                    task_name=task_name,
-                    baseline_path=str(baseline_file),
-                    candidate_path=str(candidate_file),
-                    n=n,
-                    seed=seed,
-                    executor=primary_executor_name,
-                    baseline_executor=baseline_executor_name,
-                    candidate_executor=candidate_executor_name,
-                    baseline_executor_config=baseline_config,
-                    candidate_executor_config=candidate_config,
-                    bootstrap_samples=1000 if bootstrap else 0,
-                    **kwargs,
-                )
-                
-                # Aggregate cost and latency metrics from results
-                # Cast result to EvaluationReport since run_eval returns Dict[str, Any]
-                result_dict: JSONDict = result  # type: ignore[assignment]
-                result = self._aggregate_llm_metrics(result_dict)  # type: ignore[arg-type]
-        finally:
-            # Clean up temporary task
-            if task_name in _TASK_REGISTRY:
-                del _TASK_REGISTRY[task_name]
+        result_wrapper = run(
+            task=task_spec,
+            baseline=baseline_impl,
+            candidate=candidate_impl,
+            config=eval_config,
+        )
+        
+        result = result_wrapper.report
+        
+        # Aggregate cost and latency metrics from results
+        # Cast result to EvaluationReport since run_eval returns Dict[str, Any]
+        result_dict: JSONDict = result  # type: ignore[assignment]
+        result = self._aggregate_llm_metrics(result_dict)  # type: ignore[arg-type]
 
         return result  # type: ignore[return-value]
     

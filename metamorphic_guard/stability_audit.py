@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List
 
-from .harness import run_eval
+from .harness.evaluation import run_eval
 
 
 def run_stability_audit(

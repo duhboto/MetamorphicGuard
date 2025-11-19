@@ -13,14 +13,13 @@ from typing import Any, Optional
 from .sandbox_cache import clone_snapshot_dir, clone_snapshot_file, snapshot_source
 
 
-def write_bootstrap(
-    temp_path: Path,
+def generate_bootstrap_code(
     workspace_dir: Path,
     sandbox_target: Path,
     func_name: str,
     args: tuple,
-) -> Path:
-    """Emit the bootstrap script used to execute the target safely."""
+) -> str:
+    """Generate the python code for the bootstrap script."""
     from textwrap import dedent
 
     workspace_repr = repr(str(workspace_dir))
@@ -28,7 +27,7 @@ def write_bootstrap(
     args_repr = repr(args)
     func_name_repr = repr(func_name)
 
-    bootstrap_code = dedent(
+    return dedent(
         f"""
         import builtins
         import importlib.util
@@ -194,8 +193,23 @@ def write_bootstrap(
         """
     )
 
+
+def write_bootstrap(
+    temp_path: Path,
+    workspace_dir: Path,
+    sandbox_target: Path,
+    func_name: str,
+    args: tuple,
+) -> Path:
+    """Emit the bootstrap script used to execute the target safely."""
+    bootstrap_code = generate_bootstrap_code(
+        workspace_dir,
+        sandbox_target,
+        func_name,
+        args,
+    )
     bootstrap_file = temp_path / "bootstrap.py"
-    bootstrap_file.write_text(bootstrap_code)
+    bootstrap_file.write_text(bootstrap_code, encoding="utf-8")
     return bootstrap_file
 
 

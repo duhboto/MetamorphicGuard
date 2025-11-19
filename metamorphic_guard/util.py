@@ -16,14 +16,36 @@ _SHA_CACHE: Dict[tuple[str, int], str] = {}
 
 
 def sha256_file(path: str) -> str:
-    """Compute a deterministic SHA256 hash for a file or directory tree."""
+    """
+    Compute a deterministic SHA256 hash for a file or directory tree.
+    
+    If path does not exist or is too long to be a valid path, it is treated
+    as raw content and hashed directly.
+    """
     hash_sha256 = hashlib.sha256()
+    
+    # specific check for max path length to avoid OSError on some platforms
+    # or check if it looks like a path
+    try:
+        target = Path(path)
+        exists = target.exists()
+    except (OSError, ValueError):
+        exists = False
+
+    if not exists:
+        # Treat as content
+        normalized = path.encode("utf-8")
+        return hashlib.sha256(normalized).hexdigest()
+
     target = Path(path)
 
     try:
         mtime = target.stat().st_mtime_ns
     except FileNotFoundError:
-        mtime = 0
+        # Should be caught by exists check, but race condition possible
+        normalized = path.encode("utf-8")
+        return hashlib.sha256(normalized).hexdigest()
+
     cache_key = (str(target.resolve()), mtime)
     cached = _SHA_CACHE.get(cache_key)
     if cached is not None:

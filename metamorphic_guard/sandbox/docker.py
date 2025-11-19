@@ -15,7 +15,29 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 from .utils import _result, _sanitize_config_payload
-from ..sandbox_workspace import parse_success, prepare_workspace, write_bootstrap
+from ..sandbox_workspace import parse_success, prepare_workspace, write_bootstrap, generate_bootstrap_code
+from ..util import sha256_file
+
+import atexit
+import shutil
+import threading
+
+_CONTAINER_CACHE: Dict[str, tuple[str, str, Path]] = {}  # Key -> (container_name, workspace_dir, sandbox_target_rel)
+_CACHE_LOCK = threading.Lock()
+
+def _cleanup_containers() -> None:
+    """Cleanup any reused containers and their temporary workspaces."""
+    with _CACHE_LOCK:
+        for container_name, workspace_dir, _ in _CONTAINER_CACHE.values():
+            _force_remove_container(container_name)
+            if workspace_dir and os.path.exists(workspace_dir):
+                try:
+                    shutil.rmtree(workspace_dir)
+                except Exception:
+                    pass
+        _CONTAINER_CACHE.clear()
+
+atexit.register(_cleanup_containers)
 
 
 def _force_remove_container(name: str) -> None:
@@ -128,6 +150,175 @@ def _run_docker_sandbox(
     banned_modules = os.environ.get("METAMORPHIC_GUARD_BANNED")
 
     sanitized_config = _sanitize_config_payload(docker_config)
+    reuse_container = docker_config.get("reuse_container", False)
+
+    if reuse_container:
+        # Compute cache key for container reuse
+        file_hash = sha256_file(file_path)
+        cache_key_parts = [
+            image,
+            str(network_mode),
+            str(cpus),
+            str(memory_limit_mb),
+            str(pids_limit),
+            str(sorted(env_overrides.items())),
+            str(extra_flags),
+            str(sorted(str(o) for o in (docker_config.get("security_opt") or []))),
+            str(banned_modules),
+            file_hash,
+            str(Path(file_path).resolve()),
+        ]
+        cache_key = hashlib.sha256(json.dumps(cache_key_parts).encode("utf-8")).hexdigest()
+        
+        container_name: str | None = None
+        workspace_dir_path: str | None = None
+        sandbox_target_rel: Path | None = None
+        
+        with _CACHE_LOCK:
+            cached = _CONTAINER_CACHE.get(cache_key)
+            if cached:
+                container_name, workspace_dir_path, sandbox_target_rel = cached
+            else:
+                # Initialize new container
+                workspace_dir_path = tempfile.mkdtemp(prefix="metaguard_reuse_")
+                workspace_path = Path(workspace_dir_path) / "workspace"
+                workspace_path.mkdir(parents=True, exist_ok=True)
+                
+                try:
+                    sandbox_target = prepare_workspace(Path(file_path), workspace_path)
+                    sandbox_target_rel = sandbox_target.relative_to(workspace_path)
+                except Exception:
+                    shutil.rmtree(workspace_dir_path)
+                    raise
+
+                container_name = f"metaguard-reuse-{uuid.uuid4().hex[:12]}"
+                volume_spec = f"{workspace_dir_path}:{workdir}:ro"
+                
+                env_vars = {
+                    "NO_NETWORK": "1",
+                    "PYTHONNOUSERSITE": "1",
+                }
+                if banned_modules:
+                    env_vars["METAMORPHIC_GUARD_BANNED"] = banned_modules
+                if isinstance(env_overrides, dict):
+                    for key, value in env_overrides.items():
+                        if value is None: continue
+                        env_vars[str(key)] = str(value)
+
+                start_cmd = [
+                    "docker", "run", "-d", "--rm",
+                    "--name", container_name,
+                    "--network", str(network_mode),
+                    "--memory", f"{memory_limit_mb}m",
+                    "--pids-limit", str(pids_limit),
+                    "-v", volume_spec,
+                ]
+                if cpus:
+                    start_cmd.extend(["--cpus", str(cpus)])
+                
+                security_opts = docker_config.get("security_opt")
+                if isinstance(security_opts, (list, tuple)):
+                    for opt in security_opts:
+                        start_cmd.extend(["--security-opt", str(opt)])
+
+                for key, value in env_vars.items():
+                    start_cmd.extend(["-e", f"{key}={value}"])
+                
+                start_cmd.extend(extra_flags)
+                start_cmd.extend([str(image), "sleep", "infinity"])
+                
+                try:
+                    subprocess.run(
+                        start_cmd,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.PIPE,
+                        check=True,
+                        text=True
+                    )
+                except subprocess.CalledProcessError as e:
+                    shutil.rmtree(workspace_dir_path)
+                    raise RuntimeError(f"Failed to start container: {e.stderr}")
+
+                _CONTAINER_CACHE[cache_key] = (container_name, workspace_dir_path, sandbox_target_rel)
+
+        # Execute in existing container
+        assert container_name and sandbox_target_rel
+        
+        # Generate bootstrap code to pipe via stdin
+        # Note: inside container, workspace is at `workdir`
+        # sandbox_target is at workdir / sandbox_target_rel
+        container_workspace = Path(workdir)
+        container_target = container_workspace / sandbox_target_rel
+        
+        bootstrap_code = generate_bootstrap_code(
+            container_workspace,
+            container_target,
+            func_name,
+            args,
+        )
+        
+        exec_cmd = ["docker", "exec", "-i", container_name, "python"]
+        
+        try:
+            completed = subprocess.run(
+                exec_cmd,
+                input=bootstrap_code,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=timeout_s,
+            )
+        except subprocess.TimeoutExpired:
+             # We don't kill the reused container on timeout of a single case, just the exec
+             # But 'docker exec' doesn't stop easily on timeout from python side?
+             # Actually subprocess.run timeout kills the docker client process.
+             # The process inside might keep running.
+             # Ideally we should 'docker kill' the exec pid, but we don't have it easily.
+             # For now, we accept that it might leak a process inside the container.
+             duration_ms = (time.time() - start_time) * 1000
+             return _result(
+                success=False,
+                duration_ms=duration_ms,
+                stdout="",
+                stderr="",
+                error=f"Process timed out after {timeout_s}s",
+                error_type="timeout",
+                error_code="SANDBOX_TIMEOUT",
+            )
+        
+        duration_ms = (time.time() - start_time) * 1000
+        
+        if completed.returncode != 0:
+            return _result(
+                success=False,
+                duration_ms=duration_ms,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+                error=f"Process exited with code {completed.returncode}",
+                error_type="process_exit",
+                error_code="SANDBOX_EXIT_CODE",
+                diagnostics={"returncode": completed.returncode},
+            )
+
+        parsed = parse_success(completed.stdout)
+        if parsed is None:
+            return _result(
+                success=False,
+                duration_ms=duration_ms,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+                error="No success marker found in output",
+                error_type="output_parse",
+                error_code="SANDBOX_PARSE_ERROR",
+            )
+
+        return _result(
+            success=True,
+            duration_ms=duration_ms,
+            stdout=completed.stdout,
+            stderr=completed.stderr,
+            result=parsed,
+        )
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
