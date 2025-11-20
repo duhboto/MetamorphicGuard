@@ -42,7 +42,6 @@ exclude = [
     "reports*",
     "schemas*",
     "jenkins*",
-    "templates*",
     "tools*",
 ]
 

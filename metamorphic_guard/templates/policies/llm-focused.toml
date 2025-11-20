@@ -1,0 +1,24 @@
+name = "llm-focused"
+description = "Policy optimized for LLM evaluations, accounting for higher variability and cost considerations."
+
+[gating]
+# Allow non-inferiority or small improvements (LLMs can be more variable)
+min_delta = 0.01
+
+# Slightly lower pass rate requirement (LLM outputs can be more variable)
+min_pass_rate = 0.75
+
+# Standard significance level
+alpha = 0.05
+
+# Standard power target
+power_target = 0.8
+
+# Allow more violations (LLM outputs can be more variable)
+violation_cap = 30
+
+# Note: For cost-aware policies, use budget_limit and budget_warning in your
+# evaluation configuration rather than policy files. Policy files focus on
+# quality gates (pass rates, deltas, violations).
+
+

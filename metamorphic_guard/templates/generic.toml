@@ -1,0 +1,28 @@
+# Generic Classification/Regression configuration
+# Standard setup for most non-LLM machine learning tasks
+
+[task]
+name = "classification_task"
+baseline = "baseline.py"
+candidate = "candidate.py"
+
+[execution]
+n = 1000
+seed = 42
+timeout_s = 5.0
+mem_mb = 1024
+parallel = 1
+
+[statistics]
+alpha = 0.05
+min_delta = 0.01
+ci_method = "bootstrap"
+bootstrap_samples = 1000
+
+[monitoring]
+monitors = ["success_rate", "latency"]
+
+[reporting]
+report_dir = "reports"
+html_report = "reports/evaluation_report.html"
+

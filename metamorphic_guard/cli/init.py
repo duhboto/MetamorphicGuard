@@ -29,13 +29,25 @@ def _get_template_path(template_name: str) -> Path:
     # Templates are in the project root templates/ directory
     # When installed, they should be in the package data
     import metamorphic_guard
+    import importlib.resources
     
-    # Try to find templates relative to package
-    package_dir = Path(metamorphic_guard.__file__).parent.parent
+    try:
+        # Try to find templates inside the package using importlib.resources
+        # This is the modern way to access package data
+        # Assuming templates are in metamorphic_guard.templates package
+        ref = importlib.resources.files("metamorphic_guard") / "templates" / f"{template_name}.toml"
+        with importlib.resources.as_file(ref) as path:
+            if path.exists():
+                return path
+    except (ImportError, AttributeError, FileNotFoundError):
+        pass
+    
+    # Fallback: try to find templates relative to package __file__ (works for non-zipped installs)
+    package_dir = Path(metamorphic_guard.__file__).parent
     template_path = package_dir / "templates" / f"{template_name}.toml"
     
     if not template_path.exists():
-        # Fallback: try current directory
+        # Fallback: try current directory (useful for development)
         template_path = Path("templates") / f"{template_name}.toml"
     
     return template_path
