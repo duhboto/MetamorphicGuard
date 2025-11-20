@@ -45,6 +45,9 @@ exclude = [
     "tools*",
 ]
 
+[tool.setuptools.package-data]
+metamorphic_guard = ["templates/*.toml", "templates/policies/*.toml"]
+
 [project.scripts]
 metamorphic-guard = "metamorphic_guard.cli:main"
 metaguard = "metamorphic_guard.cli:main"
