@@ -1,6 +1,6 @@
-# Release Notes v3.6.0
+# Release Notes v3.7.0
 
-Metamorphic Guard v3.6.0 is a major feature release introducing comprehensive support for LLM and RAG evaluation, distributed execution, and enhanced governance.
+Metamorphic Guard v3.7.0 is a major feature release introducing comprehensive support for LLM and RAG evaluation, distributed execution, and enhanced governance.
 
 ## Key Highlights
 
