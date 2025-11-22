@@ -31,12 +31,23 @@ class Monitor(ABC):
 
     def __init__(self) -> None:
         self._context: MonitorContext | None = None
+        self._last_export_time: float = 0.0
+        self._export_interval_s: float = 1.0  # Default rate limit
 
     def identifier(self) -> str:
         return self.__class__.__name__
 
     def start(self, context: MonitorContext) -> None:
         self._context = context
+
+    def should_export(self) -> bool:
+        """Check if it's time to export telemetry (rate limiting)."""
+        import time
+        now = time.monotonic()
+        if now - self._last_export_time >= self._export_interval_s:
+            self._last_export_time = now
+            return True
+        return False
 
     @abstractmethod
     def record(self, record: MonitorRecord) -> None:

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from .harness.evaluation import run_eval
+from .stability import detect_flakiness
 
 
 def run_stability_audit(
@@ -21,6 +22,7 @@ def run_stability_audit(
     n: int = 400,
     seed_start: int = 42,
     num_seeds: int = 10,
+    check_metric_stability: bool = False,
     **kwargs: Any,
 ) -> Dict[str, Any]:
     """
@@ -33,6 +35,7 @@ def run_stability_audit(
         n: Number of test cases per run
         seed_start: Starting seed value
         num_seeds: Number of different seeds to test
+        check_metric_stability: Whether to analyze metric value stability
         **kwargs: Additional arguments passed to run_eval
         
     Returns:
@@ -45,12 +48,16 @@ def run_stability_audit(
         - adopt_count: Number of runs that adopted
         - reject_count: Number of runs that rejected
         - flaky: Whether decisions were inconsistent
+        - metric_stability: Optional dict with metric stability analysis
     """
     seeds = list(range(seed_start, seed_start + num_seeds))
     decisions: List[bool] = []
     delta_pass_rates: List[float] = []
     delta_cis: List[List[float]] = []
     reasons: List[str] = []
+    
+    # Collect full results for deeper analysis if requested
+    full_results: List[Dict[str, Any]] = []
     
     for seed in seeds:
         result = run_eval(
@@ -67,13 +74,14 @@ def run_stability_audit(
         delta_pass_rates.append(result.get("delta_pass_rate", 0.0))
         delta_cis.append(result.get("delta_ci", [0.0, 0.0]))
         reasons.append(decision.get("reason", "unknown"))
+        full_results.append(result)
     
     adopt_count = sum(decisions)
     reject_count = len(decisions) - adopt_count
     consensus = adopt_count == len(decisions) or reject_count == len(decisions)
     flaky = not consensus
     
-    return {
+    audit_data = {
         "seeds": seeds,
         "decisions": decisions,
         "delta_pass_rates": delta_pass_rates,
@@ -85,6 +93,19 @@ def run_stability_audit(
         "flaky": flaky,
         "num_runs": len(seeds),
     }
+    
+    if check_metric_stability:
+        # Analyze if delta_pass_rate fluctuates significantly
+        # Wrap in dict for detect_flakiness interface
+        metric_wrappers = [{"val": d} for d in delta_pass_rates]
+        # Use tolerance of 0.05 (5% difference is significant)
+        metric_analysis = detect_flakiness(metric_wrappers, key_selector="val", tolerance=0.05)
+        audit_data["metric_stability"] = metric_analysis
+        
+        if metric_analysis["is_flaky"]:
+            audit_data["flaky_metrics"] = True
+            
+    return audit_data
 
 
 def audit_to_report(audit_result: Dict[str, Any]) -> str:

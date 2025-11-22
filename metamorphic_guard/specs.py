@@ -20,7 +20,7 @@ class MetamorphicRelation:
     """A metamorphic relation for testing."""
     name: str
     transform: Callable[..., Tuple[Any, ...]]
-    expect: str = "equal"  # For v1, only "equal" is supported
+    expect: str = "equal"  # "equal", "not_equal", "properties_hold"
     accepts_rng: bool = False
     category: Optional[str] = None
     description: Optional[str] = None

@@ -1,0 +1,38 @@
+[dashboard]
+title = "Metamorphic Guard - System Health"
+description = "Health and performance of the evaluation pipeline"
+
+[panels]
+
+[[panels.row]]
+title = "Queue Health"
+type = "timeseries"
+query = """
+  metamorphic_queue_pending_tasks
+  metamorphic_queue_inflight_cases
+  metamorphic_queue_active_workers
+"""
+
+[[panels.row]]
+title = "Throughput"
+type = "rate"
+query = """
+  rate(metamorphic_queue_cases_completed_total[1m])
+  rate(metamorphic_queue_cases_dispatched_total[1m])
+"""
+
+[[panels.row]]
+title = "Bootstrap Performance"
+type = "heatmap"
+query = """
+  metamorphic_bootstrap_duration_ms
+"""
+
+[[panels.row]]
+title = "Decision Outcomes"
+type = "pie"
+query = """
+  sum(metamorphic_cases_total) by (role, status)
+"""
+
+

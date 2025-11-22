@@ -1,0 +1,24 @@
+stages:
+  - evaluate
+
+evaluate_guard:
+  stage: evaluate
+  image: python:3.11
+  variables:
+    METAMORPHIC_GUARD_LOG_JSON: "1"
+  script:
+    - pip install metamorphic-guard
+    - mg evaluate --task rag_qa --baseline src/baseline.py --candidate src/candidate.py --n 100 --report report.json
+    - mg report report.json --output report.html
+    - python -c "import json; import sys; r=json.load(open('report.json')); sys.exit(0 if r.get('decision', {}).get('adopt') else 1)"
+  artifacts:
+    when: always
+    paths:
+      - report.json
+      - report.html
+    reports:
+      junit: report.xml  # Use JUnit output for Gitlab integration (need to implement junit export in CLI)
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+

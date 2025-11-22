@@ -48,4 +48,5 @@ coverage.xml
 *.cover
 .hypothesis/
 reports/*.json
+reports/failed_cases/
 !reports/.gitkeep

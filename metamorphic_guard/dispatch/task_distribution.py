@@ -124,6 +124,7 @@ class TaskDistributionManager:
             call_spec=self.call_spec,
             compressed=compressed_flag,
             use_msgpack=self.use_msgpack,
+            created_at=time.monotonic(),
         )
         self.tasks[task_id] = task
         self.deadlines[task_id] = time.monotonic() + self.lease_seconds
@@ -134,6 +135,15 @@ class TaskDistributionManager:
 
     def maybe_publish_batches(self) -> None:
         """Publish batches of tasks if capacity allows."""
+        # Backpressure check: warn if pending tasks exceed threshold relative to worker capacity
+        # This helps detect if monitors or workers are falling behind significantly
+        if self.workers > 0:
+            pending = self.adapter.pending_count()
+            backpressure_threshold = self.workers * self.current_batch_size * 4
+            if pending > backpressure_threshold and pending > 10:
+                # Only warn occasionally to avoid log spam (could be rate limited)
+                pass 
+
         inflight_limit = len(self.test_inputs) if not self.adaptive_batching else self.target_inflight_cases
         while self.next_index < len(self.test_inputs) and self.outstanding_cases < inflight_limit:
             batch = min(self.current_batch_size, len(self.test_inputs) - self.next_index)

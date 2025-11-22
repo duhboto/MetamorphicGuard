@@ -164,11 +164,6 @@ def trace_evaluation(
                 span.set_status(trace.Status(trace.StatusCode.OK))
             else:
                 span.set_status(trace.Status(trace.StatusCode.ERROR, decision.get("reason", "rejected")))
-    except Exception:
-        # Silently fail if telemetry export fails
-        pass
-
-
 def trace_test_case(
     case_index: int,
     role: str,
@@ -209,5 +204,53 @@ def trace_test_case(
                 span.set_status(trace.Status(trace.StatusCode.ERROR))
     except Exception:
         # Silently fail if telemetry export fails
+        pass
+
+
+def trace_queue_health(
+    pending_tasks: int,
+    inflight_tasks: int,
+    active_workers: int,
+    lost_workers: int,
+) -> None:
+    """Export queue health metrics as a trace event."""
+    if not is_telemetry_enabled():
+        return
+    
+    try:
+        with _tracer.start_as_current_span("metamorphic_guard.queue_health") as span:
+            span.set_attribute("queue.pending", pending_tasks)
+            span.set_attribute("queue.inflight", inflight_tasks)
+            span.set_attribute("queue.workers.active", active_workers)
+            span.set_attribute("queue.workers.lost", lost_workers)
+            
+            # Alert if workers are lost
+            if lost_workers > 0:
+                span.add_event("worker_loss_detected", {"count": lost_workers})
+                span.set_status(trace.Status(trace.StatusCode.ERROR, f"{lost_workers} workers lost"))
+    except Exception:
+        pass
+
+def trace_bootstrap_performance(
+    samples: int,
+    duration_ms: float,
+    variance: float,
+    method: str,
+) -> None:
+    """Export bootstrap sampling performance metrics."""
+    if not is_telemetry_enabled():
+        return
+        
+    try:
+        with _tracer.start_as_current_span("metamorphic_guard.bootstrap_stats") as span:
+            span.set_attribute("bootstrap.samples", samples)
+            span.set_attribute("bootstrap.duration_ms", duration_ms)
+            span.set_attribute("bootstrap.variance", variance)
+            span.set_attribute("bootstrap.method", method)
+            
+            # Flag slow bootstrap operations (>500ms)
+            if duration_ms > 500:
+                span.add_event("slow_bootstrap", {"duration_ms": duration_ms})
+    except Exception:
         pass
 

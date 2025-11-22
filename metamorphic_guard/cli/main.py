@@ -19,6 +19,7 @@ from .provenance import provenance_diff_command
 from .regression import regression_guard_command
 from .replay import replay_command
 from .report import report_command
+from .catalog import catalog_command
 from .risk import risk_group
 from .scaffold import scaffold_plugin
 from .stability import stability_audit_command
@@ -63,6 +64,7 @@ main.add_command(provenance_diff_command, "provenance-diff")
 main.add_command(regression_guard_command, "regression-guard")
 main.add_command(replay_command, "replay")
 main.add_command(report_command, "report")
+main.add_command(catalog_command, "catalog")
 main.add_command(export_profile, "export-profile")
 main.add_command(scaffold_plugin, "scaffold-plugin")
 main.add_command(stability_audit_command, "stability-audit")

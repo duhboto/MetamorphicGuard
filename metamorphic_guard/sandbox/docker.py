@@ -83,6 +83,27 @@ def _extract_capabilities(flags: Sequence[str]) -> Dict[str, List[str]]:
     }
 
 
+def _resolve_image_digest(image: str) -> str:
+    """Resolve image tag to digest for reproducible execution."""
+    try:
+        completed = subprocess.run(
+            ["docker", "image", "inspect", image],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+        if completed.returncode == 0:
+            data = json.loads(completed.stdout)
+            if data:
+                digests = data[0].get("RepoDigests")
+                if digests:
+                    return digests[0]  # Return the first digest (usually repo@sha256:...)
+    except Exception:
+        pass
+    return image  # Fallback to original tag if resolution fails
+
+
 def _collect_docker_image_metadata(image: str) -> Dict[str, Any]:
     """Collect metadata about a Docker image."""
     metadata: Dict[str, Any] = {"image": image}
@@ -132,6 +153,11 @@ def _run_docker_sandbox(
         or os.environ.get("METAMORPHIC_GUARD_DOCKER_IMAGE")
         or "python:3.11-slim"
     )
+    
+    # Pin image digest if requested
+    if docker_config.get("pin_image"):
+        image = _resolve_image_digest(image)
+
     workdir = str(docker_config.get("workdir", "/sandbox"))
     raw_flags = docker_config.get("flags", [])
     if isinstance(raw_flags, (list, tuple)):
@@ -146,6 +172,8 @@ def _run_docker_sandbox(
     memory_mb = int(docker_config.get("memory_mb", mem_mb))
     memory_limit_mb = max(memory_mb, mem_mb, 32)
     env_overrides = docker_config.get("env", {})
+    
+    ulimits = docker_config.get("ulimits", [])
 
     banned_modules = os.environ.get("METAMORPHIC_GUARD_BANNED")
 
@@ -165,6 +193,7 @@ def _run_docker_sandbox(
             str(extra_flags),
             str(sorted(str(o) for o in (docker_config.get("security_opt") or []))),
             str(banned_modules),
+            str(sorted(ulimits)),
             file_hash,
             str(Path(file_path).resolve()),
         ]
@@ -216,13 +245,31 @@ def _run_docker_sandbox(
                 if cpus:
                     start_cmd.extend(["--cpus", str(cpus)])
                 
+                if ulimits:
+                    for ulimit in ulimits:
+                         start_cmd.extend(["--ulimit", str(ulimit)])
+                
                 security_opts = docker_config.get("security_opt")
                 if isinstance(security_opts, (list, tuple)):
                     for opt in security_opts:
                         start_cmd.extend(["--security-opt", str(opt)])
-
-                for key, value in env_vars.items():
-                    start_cmd.extend(["-e", f"{key}={value}"])
+                
+                # For reused containers, we use env-file only if explicitly requested or always?
+                # Environment variables passed here persist for the container lifetime.
+                # Reused containers are tricky with secrets because they might persist.
+                # But here we are just setting up the container.
+                
+                # To support --env-file with reused container, we'd need to keep the file around?
+                # No, docker reads it at start.
+                # BUT we are inside `with tempfile.TemporaryDirectory()` block? No, this is `with _CACHE_LOCK` block.
+                # The `workspace_dir_path` is persistent for the container life.
+                
+                env_file_path = Path(workspace_dir_path) / "env.list"
+                with open(env_file_path, "w") as f:
+                    for key, value in env_vars.items():
+                        f.write(f"{key}={value}\n")
+                
+                start_cmd.extend(["--env-file", str(env_file_path)])
                 
                 start_cmd.extend(extra_flags)
                 start_cmd.extend([str(image), "sleep", "infinity"])
@@ -393,12 +440,20 @@ def _run_docker_sandbox(
         else:
             command.extend(["--cpus", "1"])
 
+        if ulimits:
+            for ulimit in ulimits:
+                 command.extend(["--ulimit", str(ulimit)])
+
         if isinstance(security_opts, (list, tuple)):
             for opt in security_opts:
                 command.extend(["--security-opt", str(opt)])
 
-        for key, value in env_vars.items():
-            command.extend(["-e", f"{key}={value}"])
+        # Use env file to prevent secret leakage in CLI args
+        env_file_path = temp_path / "env.list"
+        with open(env_file_path, "w") as f:
+            for key, value in env_vars.items():
+                f.write(f"{key}={value}\n")
+        command.extend(["--env-file", str(env_file_path)])
 
         command.extend(extra_flags)
         command.extend([str(image), "python", "-I", container_bootstrap])

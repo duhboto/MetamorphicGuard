@@ -2,11 +2,10 @@
 Adoption gate logic for deciding whether to accept a candidate implementation.
 """
 
-from typing import Any, Dict, Optional, TypedDict
+from typing import Any, Dict, Optional, TypedDict, Union
 import warnings
-
+from .observability import log_event
 from .types import JSONDict, JSONValue
-
 
 class AdoptionDecision(TypedDict, total=False):
     """Type for adoption decision result."""
@@ -14,6 +13,7 @@ class AdoptionDecision(TypedDict, total=False):
     adopt: bool
     reason: str
     policy_checks: Dict[str, bool]
+    provenance: Dict[str, Any]
 
 
 def decide_adopt(
@@ -25,16 +25,24 @@ def decide_adopt(
 ) -> AdoptionDecision:
     """
     Decide whether to adopt the candidate based on evaluation results.
-
-    Args:
-        result: Full evaluation result from harness
-        min_delta: Minimum improvement threshold for CI lower bound
-        min_pass_rate: Minimum pass rate required for candidate
-        policy: Optional routing-aware policy with SLO constraints
-
-    Returns:
-        Dict with 'adopt' boolean and 'reason' string
+    Emits structured logs with full provenance.
     """
+    decision: AdoptionDecision
+    provenance: Dict[str, Any] = {
+        "task": result.get("job_metadata", {}).get("task_name", "unknown"),
+        "job_id": result.get("job_metadata", {}).get("job_id"),
+        "policy_source": "argument" if policy else "default",
+        "inputs": {
+            "min_delta": min_delta,
+            "min_pass_rate": min_pass_rate,
+            "policy": policy,
+        },
+        "metrics": {
+            "pass_rate": result["candidate"].get("pass_rate"),
+            "delta_ci": result.get("delta_ci"),
+        }
+    }
+
     if "improve_delta" in deprecated_kwargs:
         warnings.warn(
             "The 'improve_delta' argument is deprecated; use 'min_delta' instead.",
@@ -48,9 +56,31 @@ def decide_adopt(
 
     # If policy is provided, use routing-aware gate
     if policy:
-        return _decide_adopt_with_policy(result, policy)
+        decision = _decide_adopt_with_policy(result, policy)
+    else:
+        # Standard gate logic
+        decision = _decide_adopt_standard(result, min_delta, min_pass_rate)
+    
+    # Enrich decision with provenance
+    decision["provenance"] = provenance
+    
+    # Log structured event
+    log_event(
+        "gate_decision",
+        adopt=decision["adopt"],
+        reason=decision["reason"],
+        provenance=provenance,
+        metrics=provenance["metrics"]
+    )
+    
+    return decision
 
-    # Standard gate logic
+
+def _decide_adopt_standard(
+    result: JSONDict,
+    min_delta: float,
+    min_pass_rate: float
+) -> AdoptionDecision:
     candidate = result["candidate"]
     delta_ci = result.get("delta_ci", [0.0, 0.0])
 
@@ -82,7 +112,6 @@ def decide_adopt(
             "reason": f"Improvement insufficient: CI lower bound {delta_ci[0]:.3f} < {min_delta}",
         }
 
-    # All conditions met
     return {"adopt": True, "reason": "meets_gate"}
 
 

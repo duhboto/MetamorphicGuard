@@ -313,8 +313,12 @@ def evaluate_results(
                 break
 
             relation_output = relation_result["result"]
+            equivalent = False
+            
             if relation.expect == "equal":
                 equivalent = spec.equivalence(output, relation_output)
+            elif relation.expect == "not_equal":
+                equivalent = not spec.equivalence(output, relation_output)
             elif relation.expect == "properties_hold":
                 # Verify that relation_output passes all hard properties
                 equivalent = True

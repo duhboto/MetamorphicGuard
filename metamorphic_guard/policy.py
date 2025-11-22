@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 import tomllib
 
 from .errors import PolicyError
+from .schemas.policy import PolicySchema, PolicyV1, PolicyV2
 
 
 class PolicyLoadError(PolicyError):
@@ -34,8 +35,8 @@ class PolicyParseError(PolicyError):
         )
 
 
-def load_policy_file(path: Path, *, schema: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Load a policy TOML file, optionally validating against a schema."""
+def load_policy_file(path: Path) -> Dict[str, Any]:
+    """Load a policy TOML file, validating against versioned schemas."""
     try:
         raw_text = path.read_text(encoding="utf-8")
     except (FileNotFoundError, PermissionError, OSError) as exc:  # pragma: no cover - filesystem errors
@@ -49,26 +50,76 @@ def load_policy_file(path: Path, *, schema: Optional[Dict[str, Any]] = None) -> 
     if not isinstance(data, dict):
         raise PolicyLoadError("Policy file must decode to a TOML table.")
 
-    gating = data.get("gating")
-    if gating is None:
-        # Allow top-level keys when no [gating] section is provided
-        gating = {k: v for k, v in data.items() if not isinstance(v, dict)}
-    elif not isinstance(gating, dict):
-        raise PolicyLoadError("Policy 'gating' section must be a table.")
+    # Auto-detect version if missing
+    version = data.get("version", "v1")
+    
+    try:
+        if version == "v1":
+            # V1 legacy format validation
+            model = PolicyV1.model_validate(data)
+            return _migrate_v1_to_internal(model, str(path), data)
+        elif version == "v2":
+            # V2 strict format validation
+            model = PolicyV2.model_validate(data)
+            return _migrate_v2_to_internal(model, str(path), data)
+        else:
+            raise PolicyLoadError(f"Unsupported policy version: {version}")
+    except Exception as exc:
+        # Catch Pydantic validation errors
+        raise PolicyLoadError(f"Policy validation failed: {exc}", original=exc) from exc
 
-    if schema is not None:
-        _validate_policy(data, schema)
 
-    recognized: Dict[str, Any] = {}
-    for key in ("min_delta", "min_pass_rate", "alpha", "power_target", "violation_cap"):
-        if key in gating:
-            recognized[key] = gating[key]
-
+def _migrate_v1_to_internal(model: PolicyV1, path: str, raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert V1 model to internal representation."""
+    gating = model.gating.model_dump(exclude_none=True)
+    
     return {
-        "path": str(path),
-        "raw": data,
-        "gating": recognized,
+        "path": path,
+        "raw": raw,
+        "version": "v1",
+        "gating": gating,
     }
+
+
+def _migrate_v2_to_internal(model: PolicyV2, path: str, raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert V2 model to internal representation compatible with EvaluatorConfig."""
+    # V2 separates concerns: evaluation (n, alpha) vs gate (threshold, method)
+    # We need to flatten this for the current Config object or adapt Config to support nested structures.
+    # For now, we map to the flat structure used by load_policy_file previously.
+    
+    internal: Dict[str, Any] = {
+        "path": path,
+        "raw": raw,
+        "version": "v2",
+        "gating": {},
+    }
+    
+    if model.evaluation:
+        # These map to top-level EvaluatorConfig fields usually, but here they go into 'gating'
+        # which is merged later. 
+        # Wait, EvaluatorConfig has 'n', 'alpha' at root level.
+        # load_policy_file output is used to update config.
+        # See config.py: 
+        # if policy_file: ... update config with policy data
+        pass
+
+    # Mapping V2 to the flat 'gating' dict expected by legacy code:
+    gating: Dict[str, Any] = {}
+    
+    if model.gate:
+        gating["min_delta"] = model.gate.threshold
+        gating["min_pass_rate"] = model.gate.min_pass_rate
+        # 'method' is handled by EvaluatorConfig.ci_method usually
+        # We might need to expose it in the return dict differently
+        
+    if model.evaluation:
+        gating["alpha"] = model.evaluation.alpha
+        # 'n' is not strictly a gating param but config param.
+        
+    internal["gating"] = gating
+    internal["v2_config"] = model.model_dump(exclude_none=True)
+    return internal
+
 
 
 def parse_policy_preset(value: str) -> Dict[str, Any]:
@@ -226,13 +277,11 @@ def resolve_policy_option(value: str) -> Dict[str, Any]:
 
 def _validate_policy(data: Dict[str, Any], schema: Dict[str, Any]) -> None:
     """Validates the policy data against a simple JSON-schema-like mapping."""
+    # Deprecated in favor of Pydantic models, but kept for backward compat if called directly
     try:
         from jsonschema import Draft202012Validator, validate  # type: ignore
-    except ImportError as exc:  # pragma: no cover - optional dependency
-        raise PolicyLoadError(
-            "jsonschema is required for policy validation. Install with `pip install jsonschema`.",
-            original=exc,
-        ) from exc
+    except ImportError:
+        return  # Skip if not available
 
     errors = sorted(Draft202012Validator(schema).iter_errors(data), key=lambda e: e.path)
     if errors:

@@ -196,5 +196,8 @@ class HeartbeatManager:
         if self.config.event_callback:
             self.config.event_callback(event_type, event_data)
         else:
-            log_event(f"heartbeat_{event_type}", **event_data)
+            # Remove 'event' key to avoid argument collision
+            payload = event_data.copy()
+            payload.pop("event", None)
+            log_event(f"heartbeat_{event_type}", **payload)
 

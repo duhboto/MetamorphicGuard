@@ -25,6 +25,7 @@ class QueueTask:
     call_spec: Optional[JSONDict] = None
     compressed: bool = True
     use_msgpack: bool = False
+    created_at: float = 0.0  # Timestamp when task was published
 
 
 @dataclass
@@ -155,6 +156,7 @@ class InMemoryQueueAdapter(QueueAdapter):
                 payload=b"",
                 call_spec=None,
                 compressed=False,
+                created_at=0.0,
             )
         )
 
@@ -245,6 +247,7 @@ class RedisQueueAdapter(QueueAdapter):
             "call_spec": task.call_spec,
             "compressed": task.compressed,
             "use_msgpack": task.use_msgpack,
+            "created_at": task.created_at,
         }
         self.redis.rpush(self.task_key, json.dumps(payload))
 
@@ -268,6 +271,7 @@ class RedisQueueAdapter(QueueAdapter):
             call_spec=payload.get("call_spec"),
             compressed=payload.get("compressed", True),
             use_msgpack=payload.get("use_msgpack", False),
+            created_at=payload.get("created_at", 0.0),
         )
         if task.job_id != "__shutdown__":
             self.worker_assign(worker_id, task.task_id)

@@ -150,7 +150,15 @@ def log_event(event: str, **payload: Any) -> None:
         }
         if _LOG_CONTEXT:
             record.update(_LOG_CONTEXT)
-        record.update(payload)
+        
+        # Avoid collision if payload contains 'event' or 'timestamp'
+        # Payload keys take precedence for specificity, but we should be careful
+        # The fix in HeartbeatManager handled this caller-side, but let's be robust
+        for k, v in payload.items():
+            if k not in ("event", "timestamp"):
+                record[k] = v
+            else:
+                record[f"payload_{k}"] = v
 
     try:
         _LOG_STREAM.write(json.dumps(record, default=_serialize) + "\n")

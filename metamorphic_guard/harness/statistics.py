@@ -229,6 +229,9 @@ def compute_bootstrap_ci(
     return [float(ci_lower), float(ci_upper)]
 
 
+import time
+from ..observability import log_event
+
 def generate_bootstrap_deltas(
     baseline_indicators: Sequence[int],
     candidate_indicators: Sequence[int],
@@ -238,6 +241,7 @@ def generate_bootstrap_deltas(
     clusters: Optional[Sequence[Hashable]] = None,
 ) -> List[float]:
     """Generate bootstrap deltas (candidate - baseline pass rate)."""
+    start_time = time.time()
     n = len(baseline_indicators)
     if n == 0 or len(candidate_indicators) != n:
         return []
@@ -292,6 +296,8 @@ def generate_bootstrap_deltas(
             p_candidate[mask] = total_cand[mask] / total_counts[mask]
             
             deltas = p_candidate - p_baseline
+            duration_ms = (time.time() - start_time) * 1000
+            log_event("bootstrap_performance", duration_ms=duration_ms, samples=samples, method="cluster")
             return deltas.tolist()
 
     # IID bootstrap (vectorized)
@@ -307,6 +313,8 @@ def generate_bootstrap_deltas(
     means_cand = np.mean(sampled_cand, axis=1)
     
     deltas = means_cand - means_base
+    duration_ms = (time.time() - start_time) * 1000
+    log_event("bootstrap_performance", duration_ms=duration_ms, samples=samples, method="iid")
     return deltas.tolist()
 
 

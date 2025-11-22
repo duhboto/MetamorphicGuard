@@ -1,0 +1,57 @@
+name: Metamorphic Guard Evaluation
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # For commenting results
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install metamorphic-guard
+
+    - name: Run Evaluation
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      run: |
+        mg evaluate --task rag_qa \
+          --baseline src/baseline.py \
+          --candidate src/candidate.py \
+          --n 100 \
+          --report report.json
+
+    - name: Generate HTML Report
+      if: always()
+      run: |
+        mg report report.json --output report.html
+
+    - name: Upload Artifacts
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: evaluation-report
+        path: |
+          report.json
+          report.html
+
+    - name: Check Adoption Decision
+      run: |
+        # Fail build if candidate is rejected
+        python -c "import json; import sys; r=json.load(open('report.json')); sys.exit(0 if r.get('decision', {}).get('adopt') else 1)"
+
