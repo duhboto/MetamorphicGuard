@@ -72,7 +72,7 @@ try:
     __version__ = version("metamorphic_guard")
 except Exception:
     # Fallback for development or if package not installed
-    __version__ = "3.7.0"  # type: ignore
+    __version__ = "3.7.1"  # type: ignore
 
 
 @task("top_k")

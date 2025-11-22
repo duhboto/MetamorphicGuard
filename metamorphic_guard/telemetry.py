@@ -164,6 +164,10 @@ def trace_evaluation(
                 span.set_status(trace.Status(trace.StatusCode.OK))
             else:
                 span.set_status(trace.Status(trace.StatusCode.ERROR, decision.get("reason", "rejected")))
+    except Exception:
+        # Silently fail if telemetry export fails
+        pass
+
 def trace_test_case(
     case_index: int,
     role: str,
